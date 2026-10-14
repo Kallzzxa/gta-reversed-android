@@ -631,7 +631,7 @@ public class WarMedia extends WarGamepad {
     }
 
     @Override
-    protected void onDestroy() {
+    public void onDestroy() {
         if (DoLog) {
             Log.d(TAG, "Listener - onDestroy isFinishing " + isFinishing());
         }

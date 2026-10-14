@@ -68,7 +68,7 @@ public class WarBase extends NvEventQueueActivity {
     }
 
     @Override
-    protected void onDestroy() {
+    public void onDestroy() {
         DestroyUSBReceiver();
         super.onDestroy();
     }

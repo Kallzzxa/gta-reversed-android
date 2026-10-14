@@ -214,7 +214,7 @@ public class WarGamepad extends WarBilling implements ControllerListener {
     }
 
     @Override
-    protected void onDestroy() {
+    public void onDestroy() {
         if (mogaController != null) {
             mogaController.exit();
         }
