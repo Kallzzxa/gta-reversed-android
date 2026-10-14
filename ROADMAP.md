@@ -8,7 +8,7 @@ Setiap fitur: implementasi → compile/test → commit (English) → push.
 - [x] Sistem dialog ala SA-MP (DIALOG_STYLE_MSGBOX/LIST/INPUT/PASSWORD) via Lua + NUI — DONE 2026-10-14 (romp.showDialog/hideDialog, event onDialogResponse, dialog.html)
 - [x] Textdraw global & per-pemain (teks 2D di layar) via Lua API — DONE 2026-10-14 (server/textdraw.lua auto-load: create/show/hide/setString/setStyle/destroy ala TextDraw* & PlayerTextDraw*, resync saat join; textdraw.html; demo /td /tdstr /tdhide /ptd; test 21/21)
 - [x] Checkpoint & race checkpoint (masuk/keluar event Lua) — DONE 2026-10-14 (server/checkpoint.lua auto-load: create/destroy/show/hide/getPlayerCheckpoint/setCheckpointPos/setRaceCheckpointNext/getCheckpointPos/isPlayerInCheckpoint ala SetPlayerCheckpoint/SetPlayerRaceCheckpoint + event onPlayerEnter/LeaveCheckpoint & onPlayerEnter/LeaveRaceCheckpoint via onTick 1 dtk; posisi pemain di-track server-side (paket 0x10) + romp.getPlayerPos; NUI checkpoint.html; test 16/16)
-- [ ] Pickup (senjata, health, custom) dengan event onPlayerPickup
+- [x] Pickup (senjata, health, custom) dengan event onPlayerPickup — DONE 2026-10-14 (server/pickup.lua auto-load: create/destroy/show/hide/isVisible/getPos/setPos/getModel/setRespawnTime ala AddStaticPickup + tipe RESPAWN/ONCE/ALWAYS + event onPlayerPickup via onTick 1 dtk radius 1.5 memakai romp.getPlayerPos; state per-pemain; NUI pickup.html; PROTOCOL.md dokumentasi; test 20/20)
 - [ ] Map icon / radar blip per pemain via Lua
 - [ ] Sinkronisasi kendaraan: spawn, posisi, penumpang, damage
 - [ ] Sinkronisasi senjata & tembakan (combat dasar)

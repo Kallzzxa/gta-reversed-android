@@ -263,6 +263,21 @@ Checkpoint bersifat per-pemain, jadi tidak ada resync saat join;
 state dibersihkan saat pemain leave.
 Halaman UI referensi: `android/app/src/main/assets/romp/nui/checkpoint.html`.
 
+### Pickup (NUI_MESSAGE `0x40`)
+
+```json
+{"action":"showPickup","id":"p1","model":1242,"ptype":0,
+ "x":100.0,"y":200.0,"z":3.0}
+{"action":"hidePickup","id":"p1"}
+```
+
+`ptype`: 0=respawn setelah diambil, 1=hilang setelah diambil (once),
+2=tetap tampil, event tiap masuk radius. Event Lua `onPlayerPickup(pid,
+pickupid)` dipicu server-side (deteksi tiap detik via `onTick`,
+radius 1.5). State pickup bersifat per-pemain (show/hide/respawn
+untuk tiap pemain), dibersihkan saat pemain leave.
+Halaman UI referensi: `android/app/src/main/assets/romp/nui/pickup.html`.
+
 ## Server Browser — UDP Query
 
 Server menjawab query UDP di **port yang sama** dengan TCP (bisa dimatikan

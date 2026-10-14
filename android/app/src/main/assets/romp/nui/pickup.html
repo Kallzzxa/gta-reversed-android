@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>RO-MP Pickup</title>
+<style>
+  /* Marker pickup ala SA-MP versi UI.
+     Ini jembatan NUI: client game sesungguhnya merender pickup 3D di
+     dunia dari pesan yang sama, halaman ini hanya indikator 2D fallback. */
+  * { box-sizing: border-box; margin: 0; padding: 0;
+      -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden;
+      background: transparent; }
+  #pu-layer { position: absolute; inset: 0; pointer-events: none; }
+  .pu { position: absolute; left: 50%; bottom: 12%; transform: translateX(-50%);
+      text-align: center; pointer-events: none;
+      color: #fff; font-family: Arial, sans-serif; font-weight: bold; }
+  .pu .glyph {
+      width: 48px; height: 48px; margin: 0 auto 4px;
+      line-height: 44px; font-size: 24px;
+      border: 3px solid rgba(80, 220, 120, .95);
+      border-radius: 50%;
+      background: rgba(10, 40, 20, .45);
+      box-shadow: 0 0 12px rgba(80, 220, 120, .7), inset 0 0 8px rgba(80,220,120,.35);
+      animation: float 1.8s ease-in-out infinite; }
+  .pu .lbl { font-size: 11px; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000; }
+  @keyframes float {
+      0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+</style>
+</head>
+<body>
+<div id="pu-layer"></div>
+<script>
+// Server -> UI: romp.createPickup / showPickupForPlayer / ... (via 0x40).
+window.onRomMessage = function (json) {
+  var msg;
+  try { msg = JSON.parse(json); } catch (e) { return; }
+  if (msg.action === "showPickup") render(msg);
+  else if (msg.action === "hidePickup") remove(msg.id);
+};
+
+var layer = document.getElementById("pu-layer");
+
+function el(id) { return document.getElementById("pu-" + id); }
+
+function remove(id) {
+  var d = el(id);
+  if (d) d.parentNode.removeChild(d);
+}
+
+// Label/ikon kasar dari id model SA-MP (cukup untuk fallback UI).
+function glyphFor(model) {
+  model = Number(model);
+  if (model === 1242 || model === 1240) return "\u2665";      // health/armour
+  if (model === 1241 || model === 1247 || model === 1248) return "\u25A0"; // armour
+  if (model >= 331 && model <= 363) return "\u2694";           // senjata
+  if (model === 1275 || model === 1239) return "\u25C6";       // info/custom
+  return "\u25CF";                                             // custom lain
+}
+
+function labelFor(model) {
+  model = Number(model);
+  if (model === 1242) return "HEALTH";
+  if (model === 1240 || model === 1241) return "ARMOUR";
+  if (model >= 331 && model <= 363) return "SENJATA";
+  return "PICKUP " + model;
+}
+
+function render(m) {
+  var d = el(m.id);
+  if (!d) {
+    d = document.createElement("div");
+    d.id = "pu-" + m.id;
+    d.innerHTML = '<div class="glyph"></div><div class="lbl"></div>';
+    layer.appendChild(d);
+  }
+  d.className = "pu";
+  d.querySelector(".glyph").textContent = glyphFor(m.model);
+  d.querySelector(".lbl").textContent =
+      labelFor(m.model) + " (" + Math.round(Number(m.x)) + ", " +
+      Math.round(Number(m.y)) + ")";
+}
+</script>
+</body>
+</html>

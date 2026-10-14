@@ -386,6 +386,7 @@ int lua_init(const char *script_path) {
     lua_load_helper(script_path, "dialog.lua", "event onDialogResponse aktif");
     lua_load_helper(script_path, "textdraw.lua", "API textdraw aktif");
     lua_load_helper(script_path, "checkpoint.lua", "API checkpoint aktif");
+    lua_load_helper(script_path, "pickup.lua", "API pickup aktif");
     /* event init: onGamemodeInit() */
     call_event_noret("onGamemodeInit");
     return 0;
