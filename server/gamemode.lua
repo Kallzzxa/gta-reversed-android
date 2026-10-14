@@ -39,6 +39,22 @@
 --   onGamemodeInit() — dipanggil sekali saat gamemode dimuat
 --   onConsoleCommand(cmd, args) — return true = di-handle (tambah command console)
 --   onPlayerRequestConnect(name, ip) — return true, "alasan" = tolak koneksi
+--   Checkpoint ala SA-MP:
+--   romp.createCheckpoint(ctype, x, y, z, size) -> id | nil
+--       (romp.CHECKPOINT_NORMAL / romp.CHECKPOINT_RACE)
+--   romp.destroyCheckpoint(id) -> bool
+--   romp.showCheckpointForPlayer(pid, id) -> bool
+--   romp.hideCheckpointForPlayer(pid) -> bool
+--   romp.getPlayerCheckpoint(pid) -> id | nil
+--   romp.setCheckpointPos(id, x, y, z[, size]) -> bool
+--   romp.setRaceCheckpointNext(id, nx, ny, nz) -> bool
+--   romp.getCheckpointPos(id) -> x, y, z, size | nil
+--   romp.getPlayerPos(id) -> x, y, z | nil
+--   romp.isPlayerInCheckpoint(pid) -> bool
+--   Event: onPlayerEnterCheckpoint(pid, cpid),
+--          onPlayerLeaveCheckpoint(pid, cpid),
+--          onPlayerEnterRaceCheckpoint(pid, cpid),
+--          onPlayerLeaveRaceCheckpoint(pid, cpid)
 -- ============================================================
 
 -- Helper JSON untuk pesan NUI (server dijalankan dari folder server/,

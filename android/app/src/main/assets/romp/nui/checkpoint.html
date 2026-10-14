@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>RO-MP Checkpoint</title>
+<style>
+  /* Marker checkpoint ala SA-MP (silinder merah) versi UI.
+     Ini jembatan NUI: client game sesungguhnya merender marker 3D di
+     dunia dari pesan yang sama, halaman ini hanya indikator 2D fallback. */
+  * { box-sizing: border-box; margin: 0; padding: 0;
+      -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden;
+      background: transparent; }
+  #cp-layer { position: absolute; inset: 0; pointer-events: none; }
+  .cp { position: absolute; left: 50%; bottom: 18%; transform: translateX(-50%);
+      text-align: center; pointer-events: none;
+      color: #fff; font-family: Arial, sans-serif; font-weight: bold; }
+  .cp .ring {
+      width: 54px; height: 54px; margin: 0 auto 6px;
+      border: 4px solid rgba(255, 60, 60, .9);
+      border-radius: 50%;
+      box-shadow: 0 0 14px rgba(255, 60, 60, .7), inset 0 0 10px rgba(255,60,60,.35);
+      animation: pulse 1.4s ease-in-out infinite; }
+  .cp.race .ring { border-color: rgba(255, 180, 40, .95);
+      box-shadow: 0 0 14px rgba(255, 180, 40, .7), inset 0 0 10px rgba(255,180,40,.35); }
+  .cp .lbl { font-size: 12px; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000; }
+  @keyframes pulse {
+      0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+</style>
+</head>
+<body>
+<div id="cp-layer"></div>
+<script>
+// Server -> UI: romp.createCheckpoint / showCheckpointForPlayer / ... (via 0x40).
+window.onRomMessage = function (json) {
+  var msg;
+  try { msg = JSON.parse(json); } catch (e) { return; }
+  if (msg.action === "showCheckpoint") render(msg);
+  else if (msg.action === "hideCheckpoint") remove(msg.id);
+};
+
+var layer = document.getElementById("cp-layer");
+
+function el(id) { return document.getElementById("cp-" + id); }
+
+function render(m) {
+  var d = el(m.id);
+  if (!d) {
+    d = document.createElement("div");
+    d.id = "cp-" + m.id;
+    d.innerHTML = '<div class="ring"></div><div class="lbl"></div>';
+    layer.appendChild(d);
+  }
+  d.className = "cp" + (Number(m.type) === 1 ? " race" : "");
+  d.querySelector(".lbl").textContent =
+      (Number(m.type) === 1 ? "RACE CHECKPOINT" : "CHECKPOINT") +
+      " (" + Math.round(Number(m.x)) + ", " + Math.round(Number(m.y)) + ")";
+}
+
+function remove(id) {
+  var d = el(id);
+  if (d) layer.removeChild(d);
+}
+</script>
+</body>
+</html>

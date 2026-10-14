@@ -192,6 +192,17 @@ static int l_romp_announce_now(lua_State *Ls) {
     return 0;
 }
 
+/* romp.getPlayerPos(id) -> x, y, z | nil (belum pernah kirim paket POS) */
+static int l_romp_get_player_pos(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(id);
+    if (!c || !c->pos_known) { lua_pushnil(Ls); return 1; }
+    lua_pushnumber(Ls, (lua_Number)c->pos_x);
+    lua_pushnumber(Ls, (lua_Number)c->pos_y);
+    lua_pushnumber(Ls, (lua_Number)c->pos_z);
+    return 3;
+}
+
 /* ---------------- API NUI (ala FiveM) ---------------- */
 
 /* romp.sendNUIMessage(id, jsonString) -> true/false */
@@ -325,6 +336,7 @@ int lua_init(const char *script_path) {
     lua_pushcfunction(L, l_romp_player_count);     lua_setfield(L, -2, "playerCount");
     lua_pushcfunction(L, l_romp_get_player_name);  lua_setfield(L, -2, "getPlayerName");
     lua_pushcfunction(L, l_romp_get_players);      lua_setfield(L, -2, "getPlayers");
+    lua_pushcfunction(L, l_romp_get_player_pos);  lua_setfield(L, -2, "getPlayerPos");
     lua_pushcfunction(L, l_romp_send_chat_to_all); lua_setfield(L, -2, "sendChatToAll");
     lua_pushcfunction(L, l_romp_send_chat_to_player); lua_setfield(L, -2, "sendChatToPlayer");
     lua_pushcfunction(L, l_romp_kick_player);      lua_setfield(L, -2, "kickPlayer");
@@ -373,6 +385,7 @@ int lua_init(const char *script_path) {
     /* helper ala SA-MP: router dialog + API textdraw */
     lua_load_helper(script_path, "dialog.lua", "event onDialogResponse aktif");
     lua_load_helper(script_path, "textdraw.lua", "API textdraw aktif");
+    lua_load_helper(script_path, "checkpoint.lua", "API checkpoint aktif");
     /* event init: onGamemodeInit() */
     call_event_noret("onGamemodeInit");
     return 0;

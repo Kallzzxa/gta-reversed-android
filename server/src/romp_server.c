@@ -436,6 +436,12 @@ static void handle_pos(Client *c, const uint8_t *p, size_t n) {
     uint64_t t = now_ms();
     if (t - c->last_pos_ms < 30) return; /* rate limit 33 Hz */
     c->last_pos_ms = t;
+    /* Simpan posisi dunia (format paket 0x10: float x,y,z,heading; u8 state;
+     * u16 vehicle_model) agar bisa dipakai scripting (checkpoint, dsb). */
+    memcpy(&c->pos_x, p, 4);
+    memcpy(&c->pos_y, p + 4, 4);
+    memcpy(&c->pos_z, p + 8, 4);
+    c->pos_known = 1;
     uint8_t b[24];
     b[0] = P_PPOS;
     put_u16(b + 1, (uint16_t)c->id);

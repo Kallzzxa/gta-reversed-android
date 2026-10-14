@@ -234,6 +234,35 @@ Textdraw global yang sedang tampil otomatis dikirim ulang ke pemain yang
 baru join; textdraw per-pemain dibersihkan saat pemain leave.
 Halaman UI referensi: `android/app/src/main/assets/romp/nui/textdraw.html`.
 
+### Checkpoint ala SA-MP (via NUI)
+
+API Lua di `server/checkpoint.lua` (dimuat otomatis seperti `dialog.lua`).
+Normal: `romp.createCheckpoint(romp.CHECKPOINT_NORMAL, x, y, z, size)`.
+Race: `romp.createCheckpoint(romp.CHECKPOINT_RACE, x, y, z, size)`.
+Satu checkpoint aktif per pemain ala SA-MP (`romp.showCheckpointForPlayer`/
+`romp.hideCheckpointForPlayer/getPlayerCheckpoint`); tambah
+`romp.destroyCheckpoint/setCheckpointPos/setRaceCheckpointNext/`\n`romp.getCheckpointPos/isPlayerInCheckpoint` dan `romp.getPlayerPos(id)`
+(posisi dunia terakhir dari paket 0x10, `nil` jika belum ada).
+
+Server mendeteksi masuk/keluar tiap detik (event `onTick`) dan memanggil
+event Lua mirip SA-MP: `onPlayerEnterCheckpoint(pid, cpid)` /
+`onPlayerLeaveCheckpoint(pid, cpid)`; varian race:
+`onPlayerEnterRaceCheckpoint(pid, cpid)` / `onPlayerLeaveRaceCheckpoint(pid, cpid)`.
+
+Pesan 0x40 yang dikirim (id `"c1"` = checkpoint 1):
+
+```json
+{"action":"showCheckpoint","id":"c1","type":0,
+ "x":100.0,"y":200.0,"z":3.0,"size":5.0,
+ "nextX":150.0,"nextY":200.0,"nextZ":3.0}
+{"action":"hideCheckpoint","id":"c1"}
+```
+
+`type`: 0=normal, 1=race. `nextX/Y/Z` opsional (hanya race).
+Checkpoint bersifat per-pemain, jadi tidak ada resync saat join;
+state dibersihkan saat pemain leave.
+Halaman UI referensi: `android/app/src/main/assets/romp/nui/checkpoint.html`.
+
 ## Server Browser — UDP Query
 
 Server menjawab query UDP di **port yang sama** dengan TCP (bisa dimatikan

@@ -109,6 +109,9 @@ typedef struct Client {
     size_t  recv_len;
     uint64_t last_activity;
     uint64_t last_pos_ms;
+    /* Posisi dunia terakhir dari paket 0x10 (dipakai checkpoint, dsb). */
+    int    pos_known;          /* 1 = pernah terima paket POS */
+    float  pos_x, pos_y, pos_z;
     uint64_t chat_times[3];    /* anti-spam: 3 pesan / 2 detik */
     int    chat_idx;
     int    dead;               /* ditandai untuk disconnect */
