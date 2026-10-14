@@ -84,6 +84,38 @@ Halaman UI: `android/app/src/main/assets/romp/nui/inventory.html`
 `android/.../java/com/regta/romp/ROMPWebView.java` (JS `onRomMessage`,
 bridge `window.romp.postMessage`, fokus sentuhan; JNI TODO seperti chat).
 
+**Event tambahan:**
+
+| Event | Keterangan |
+|---|---|
+| `onGamemodeInit()` | Sekali saat gamemode dimuat |
+| `onConsoleCommand(cmd, args)` | Return `true` = di-handle (tambah command console) |
+| `onPlayerRequestConnect(name, ip)` | Return `true, "alasan"` = tolak koneksi (whitelist/ban di Lua) |
+
+**API tambahan:**
+
+| Fungsi | Keterangan |
+|---|---|
+| `romp.getPlayerIP(id)` | IP pemain / nil |
+| `romp.setHostname(text)` / `romp.setMOTD(text)` / `romp.setPassword(text)` | Ubah config saat runtime |
+| `romp.getServerInfo()` | Table `{hostname, motd, port, maxplayers, players, hasPassword, query, announce}` |
+| `romp.banIP(ip)` / `romp.unbanIP(ip)` / `romp.isIPBanned(ip)` | Ban IP (in-memory, dicek saat handshake) |
+| `romp.announceNow()` | Paksa announce ke master sekarang |
+
+## Server Browser & Master Server
+
+Biar pemain bisa lihat server yang nyala tanpa hafal IP:
+
+1. **Query UDP** — server menjawab info + daftar pemain di port yang sama
+   (opsi `query 1` di server.cfg).
+2. **Master server** — jalankan `start-master.sh` (atau `.bat`) di VPS,
+   default port 7778. Game server daftarkan diri via
+   `announce 1` + `master_host`/`master_port` di server.cfg.
+3. **Client** — modul `ROMP_Browser` (C++): `FetchMasterList()` untuk daftar
+   dari master, `QueryServer()` untuk info live + ping per server.
+   Contoh UI: `ROMPServerBrowser.java` + `assets/romp/browser.html`
+   (daftar server, ketuk untuk connect; JNI TODO seperti modul lain).
+
 Command bawaan server (`/me` `/pm` `/players` `/help` `/q`) tetap jalan sebagai
 fallback kalau gamemode tidak meng-handle-nya. Error di script Lua hanya
 dicatat di log — server tidak crash.

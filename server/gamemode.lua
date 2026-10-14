@@ -21,6 +21,18 @@
 --   romp.sendNUIMessage(id, jsonString) -> true/false
 --   romp.onNUICallback(name, fn) — fn dipanggil sebagai fn(id, name, dataJson)
 --   romp.setNUIFocus(id, true/false) -> true/false
+--   Info & admin runtime:
+--   romp.getPlayerIP(id) -> ip | nil
+--   romp.setHostname(text), romp.setMOTD(text), romp.setPassword(text)
+--   romp.getServerInfo() -> {hostname, motd, port, maxplayers, players,
+--                            hasPassword, query, announce}
+--   romp.banIP(ip), romp.unbanIP(ip), romp.isIPBanned(ip) -> bool
+--   romp.announceNow() — paksa announce ke master server sekarang
+--
+-- Event tambahan:
+--   onGamemodeInit() — dipanggil sekali saat gamemode dimuat
+--   onConsoleCommand(cmd, args) — return true = di-handle (tambah command console)
+--   onPlayerRequestConnect(name, ip) — return true, "alasan" = tolak koneksi
 -- ============================================================
 
 -- Helper JSON untuk pesan NUI (server dijalankan dari folder server/,
@@ -97,6 +109,27 @@ function onPlayerCommand(id, name, cmd, args)
     elseif cmd == "inv" then
         bukaInventory(id)
         return true
+    elseif cmd == "myip" then
+        romp.sendChatToPlayer(id, romp.KIND_INFO,
+            "*** IP kamu: " .. tostring(romp.getPlayerIP(id)))
+        return true
+    elseif cmd == "serverinfo" then
+        local si = romp.getServerInfo()
+        romp.sendChatToPlayer(id, romp.KIND_INFO,
+            string.format("*** %s | %d/%d pemain | pass:%s query:%s",
+                si.hostname, si.players, si.maxplayers,
+                tostring(si.hasPassword), tostring(si.query)))
+        return true
+    elseif cmd == "sethost" then
+        if args ~= "" then
+            romp.setHostname(args)
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Hostname diganti jadi: " .. args)
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Pakai: /sethost <nama baru>")
+        end
+        return true
     elseif cmd == "kick" then
         -- contoh command admin sederhana: /kick <id> <alasan>
         local target, alasan = args:match("^(%d+)%s*(.*)$")
@@ -126,6 +159,31 @@ function onPlayerChat(id, name, text)
             romp.log("Filter memblokir chat dari " .. name)
             return true
         end
+    end
+    return false
+end
+
+-- Dipanggil sekali saat gamemode dimuat (sebelum server menerima pemain).
+function onGamemodeInit()
+    romp.log("Gamemode init: " .. romp.getConfig("hostname")
+        .. " | query=" .. tostring(romp.getServerInfo().query))
+end
+
+-- Command console custom. Contoh: ketik 'announce' di console server.
+function onConsoleCommand(cmd, args)
+    if cmd == "announce" then
+        romp.announceNow()
+        romp.log("Announce ke master dipaksa via console.")
+        return true
+    end
+    return false
+end
+
+-- Dipanggil SEBELUM handshake selesai. Return true + alasan = tolak koneksi.
+-- Contoh: tolak nickname yang dilarang.
+function onPlayerRequestConnect(name, ip)
+    if name:lower() == "badguy" then
+        return true, "Nickname dilarang di server ini."
     end
     return false
 end

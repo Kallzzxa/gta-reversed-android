@@ -7,6 +7,8 @@
  */
 #pragma once
 
+#include <stddef.h> /* size_t untuk lua_on_player_request */
+
 /* Muat & jalankan file gamemode. 0 = sukses, -1 = gagal (server tetap jalan tanpa Lua). */
 int  lua_init(const char *script_path);
 void lua_shutdown(void);
@@ -19,5 +21,10 @@ int  lua_on_player_chat(int id, const char *name, const char *text);
 int  lua_on_player_command(int id, const char *name, const char *cmd, const char *args);
 /* Callback NUI dari client (selalu dianggap handled, tak ada default C). */
 int  lua_on_nui_callback(int id, const char *name, const char *data);
+/* Event console: true = di-handle gamemode. */
+int  lua_on_console_command(const char *cmd, const char *args);
+/* Event pre-connect: true = tolak (reason_out diisi alasan). */
+int  lua_on_player_request(const char *name, const char *ip,
+                           char *reason_out, size_t reason_sz);
 /* Dipanggil tiap 1 detik. */
 void lua_on_tick(void);

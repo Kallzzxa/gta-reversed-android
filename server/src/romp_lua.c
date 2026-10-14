@@ -95,6 +95,77 @@ static int l_romp_get_config(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- API info & admin runtime ---------------- */
+
+static int l_romp_get_player_ip(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(id);
+    if (!c) { lua_pushnil(Ls); return 1; }
+    lua_pushstring(Ls, c->ip);
+    return 1;
+}
+
+static int l_romp_set_hostname(lua_State *Ls) {
+    const char *s = luaL_checkstring(Ls, 1);
+    strncpy(g_cfg.hostname, s, sizeof(g_cfg.hostname) - 1);
+    g_cfg.hostname[sizeof(g_cfg.hostname) - 1] = '\0';
+    return 0;
+}
+
+static int l_romp_set_motd(lua_State *Ls) {
+    const char *s = luaL_checkstring(Ls, 1);
+    strncpy(g_cfg.motd, s, sizeof(g_cfg.motd) - 1);
+    g_cfg.motd[sizeof(g_cfg.motd) - 1] = '\0';
+    return 0;
+}
+
+static int l_romp_set_password(lua_State *Ls) {
+    const char *s = luaL_checkstring(Ls, 1);
+    strncpy(g_cfg.password, s, sizeof(g_cfg.password) - 1);
+    g_cfg.password[sizeof(g_cfg.password) - 1] = '\0';
+    return 0;
+}
+
+static int l_romp_get_server_info(lua_State *Ls) {
+    lua_newtable(Ls);
+    lua_pushstring(Ls, g_cfg.hostname);   lua_setfield(Ls, -2, "hostname");
+    lua_pushstring(Ls, g_cfg.motd);       lua_setfield(Ls, -2, "motd");
+    lua_pushinteger(Ls, g_cfg.port);      lua_setfield(Ls, -2, "port");
+    lua_pushinteger(Ls, g_cfg.maxplayers); lua_setfield(Ls, -2, "maxplayers");
+    lua_pushinteger(Ls, client_count());   lua_setfield(Ls, -2, "players");
+    lua_pushboolean(Ls, g_cfg.password[0] ? 1 : 0);
+    lua_setfield(Ls, -2, "hasPassword");
+    lua_pushboolean(Ls, g_cfg.query ? 1 : 0);
+    lua_setfield(Ls, -2, "query");
+    lua_pushboolean(Ls, g_cfg.announce ? 1 : 0);
+    lua_setfield(Ls, -2, "announce");
+    return 1;
+}
+
+static int l_romp_ban_ip(lua_State *Ls) {
+    const char *ip = luaL_checkstring(Ls, 1);
+    ban_add(ip);
+    return 0;
+}
+
+static int l_romp_unban_ip(lua_State *Ls) {
+    const char *ip = luaL_checkstring(Ls, 1);
+    ban_remove(ip);
+    return 0;
+}
+
+static int l_romp_is_ip_banned(lua_State *Ls) {
+    const char *ip = luaL_checkstring(Ls, 1);
+    lua_pushboolean(Ls, ban_check(ip));
+    return 1;
+}
+
+static int l_romp_announce_now(lua_State *Ls) {
+    (void)Ls;
+    trigger_announce();
+    return 0;
+}
+
 /* ---------------- API NUI (ala FiveM) ---------------- */
 
 /* romp.sendNUIMessage(id, jsonString) -> true/false */
@@ -136,6 +207,9 @@ static int l_romp_set_nui_focus(lua_State *Ls) {
 
 /* ---------------- Init ---------------- */
 
+/* Dipakai lua_init sebelum definisinya (di bawah). */
+static void call_event_noret(const char *ev);
+
 int lua_init(const char *script_path) {
     L = luaL_newstate();
     if (!L) return -1;
@@ -155,6 +229,15 @@ int lua_init(const char *script_path) {
     lua_pushcfunction(L, l_romp_send_nui_message); lua_setfield(L, -2, "sendNUIMessage");
     lua_pushcfunction(L, l_romp_on_nui_callback);  lua_setfield(L, -2, "onNUICallback");
     lua_pushcfunction(L, l_romp_set_nui_focus);    lua_setfield(L, -2, "setNUIFocus");
+    lua_pushcfunction(L, l_romp_get_player_ip);   lua_setfield(L, -2, "getPlayerIP");
+    lua_pushcfunction(L, l_romp_set_hostname);    lua_setfield(L, -2, "setHostname");
+    lua_pushcfunction(L, l_romp_set_motd);        lua_setfield(L, -2, "setMOTD");
+    lua_pushcfunction(L, l_romp_set_password);    lua_setfield(L, -2, "setPassword");
+    lua_pushcfunction(L, l_romp_get_server_info); lua_setfield(L, -2, "getServerInfo");
+    lua_pushcfunction(L, l_romp_ban_ip);          lua_setfield(L, -2, "banIP");
+    lua_pushcfunction(L, l_romp_unban_ip);        lua_setfield(L, -2, "unbanIP");
+    lua_pushcfunction(L, l_romp_is_ip_banned);    lua_setfield(L, -2, "isIPBanned");
+    lua_pushcfunction(L, l_romp_announce_now);    lua_setfield(L, -2, "announceNow");
     /* konstanta kind chat */
     lua_pushinteger(L, KIND_CHAT); lua_setfield(L, -2, "KIND_CHAT");
     lua_pushinteger(L, KIND_INFO); lua_setfield(L, -2, "KIND_INFO");
@@ -176,6 +259,8 @@ int lua_init(const char *script_path) {
         return -1;
     }
     log_msg("[lua] gamemode dimuat: %s", script_path);
+    /* event init: onGamemodeInit() */
+    call_event_noret("onGamemodeInit");
     return 0;
 }
 
@@ -271,6 +356,42 @@ int lua_on_player_chat(int id, const char *name, const char *text) {
 int lua_on_player_command(int id, const char *name, const char *cmd, const char *args) {
     EvCmd e = { id, name, cmd, args };
     return call_event("onPlayerCommand", push_cmd, &e);
+}
+
+/* onConsoleCommand(cmd, args) -> true = di-handle gamemode. */
+typedef struct { const char *cmd, *args; } EvCon;
+static int push_con(lua_State *Ls, void *ud) {
+    EvCon *e = (EvCon*)ud;
+    lua_pushstring(Ls, e->cmd);
+    lua_pushstring(Ls, e->args);
+    return 2;
+}
+int lua_on_console_command(const char *cmd, const char *args) {
+    EvCon e = { cmd, args };
+    return call_event("onConsoleCommand", push_con, &e);
+}
+
+/* onPlayerRequestConnect(name, ip) -> true, "alasan" = tolak koneksi. */
+int lua_on_player_request(const char *name, const char *ip,
+                          char *reason_out, size_t reason_sz) {
+    if (!L) return 0;
+    lua_getglobal(L, "onPlayerRequestConnect");
+    if (!lua_isfunction(L, -1)) { lua_pop(L, 1); return 0; }
+    lua_pushstring(L, name);
+    lua_pushstring(L, ip);
+    if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
+        log_msg("[lua] error di onPlayerRequestConnect: %s",
+                lua_tostring(L, -1) ? lua_tostring(L, -1) : "?");
+        lua_pop(L, 1);
+        return 0;
+    }
+    int reject = lua_toboolean(L, -2);
+    if (reject && lua_isstring(L, -1) && reason_out && reason_sz > 0) {
+        strncpy(reason_out, lua_tostring(L, -1), reason_sz - 1);
+        reason_out[reason_sz - 1] = '\0';
+    }
+    lua_pop(L, 2);
+    return reject;
 }
 
 /* Dispatch NUI callback dari client ke handler Lua terdaftar. */

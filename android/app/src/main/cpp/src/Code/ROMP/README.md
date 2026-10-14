@@ -17,6 +17,7 @@ Protokol yang dipakai: `server/PROTOCOL.md` (TCP, frame
 | `ROMP_Chat.h` / `.cpp` | `ROMPChat`: ring buffer chat (tampil 12 baris, histori 100) + input buffer ketikan user. |
 | `ROMP_Players.h` / `.cpp` | `ROMPPlayers`: tabel pemain remote + interpolasi linear (lerp eksponensial, update 10 Hz dari server). |
 | `ROMP.h` / `.cpp` | `ROMP::Client` (singleton, facade) + `IROMPPlatform` + `NullPlatform`. |
+| `ROMP_Browser.h` / `.cpp` | `ROMP::ROMPBrowser`: server browser. `QueryServer()` (UDP: info + pemain + ping), `FetchMasterList()` (TCP ke master server). Sinkron + timeout — panggil dari background thread. |
 
 Contoh Java (tidak ikut build native, tidak di-reference file lain):
 
@@ -24,14 +25,11 @@ Contoh Java (tidak ikut build native, tidak di-reference file lain):
   input chat ala SA-MP mobile (EditText + tombol Kirim). Method native
   `sendChatNative(String)` dideklarasikan, tapi **implementasi JNI-nya di
   reGTA.cpp masih TODO** (lihat komentar di file).
-- `android/app/src/main/java/com/regta/romp/ROMPWebView.java` — Overlay
-  WebView transparan untuk **NUI ala FiveM**. `postToUI(json)` dipanggil
-  dari `OnNuiMessage` (paket 0x40); `setFocus(bool)` dari `OnNuiFocus`
-  (paket 0x42, mirip SetNuiFocus); JS memanggil
-  `window.romp.postMessage(name, dataJson)` → native `nuiCallbackNative`
-  → `Client::SendNuiCallback` (paket 0x41). **Implementasi JNI-nya juga
-  masih TODO.** Demo UI: `android/app/src/main/assets/romp/nui/inventory.html`
-  (inventory ala ox_inventory, dibuka via `/inv`).
+- `android/app/src/main/java/com/regta/romp/ROMPServerBrowser.java` — Contoh
+  server browser: ambil daftar dari master, query tiap server, tampilkan di
+  `android/app/src/main/assets/romp/browser.html` (ketuk server untuk connect,
+  ada form connect manual IP:port). Native methods JNI **masih TODO**.
+  Ganti `masterHost`/`masterPort` dengan master publik (mis. di VPS).
 
 ## Cara integrasi ke game
 
@@ -83,10 +81,11 @@ cd ~/workspace/romp/tests/client
 ./run_test.sh
 ```
 
-Menjalankan server asli di port 17777 lalu menghajar skenario penuh:
-connect+HELLO→WELCOME, echo CHAT_MSG, PLAYER_JOIN/POS/CHAT dari client
-fake kedua (socket mentah), NUI (0x40 message + 0x42 focus diterima,
-0x41 callback → Lua → chat), PLAYER_LEAVE, disconnect bersih. 17 cek —
+Menjalankan server asli di port 17777 (+ master di 17779) lalu menghajar
+skenario penuh: connect+HELLO→WELCOME, echo CHAT_MSG, PLAYER_JOIN/POS/CHAT
+dari client fake kedua (socket mentah), NUI (0x40 message + 0x42 focus
+diterima, 0x41 callback → Lua → chat), PLAYER_LEAVE, disconnect bersih,
+server browser (FetchMasterList dari master + entry check). 22 cek —
 semua harus PASS.
 
 ## TODO integrasi game (cari `TODO(GAME)` di kode)

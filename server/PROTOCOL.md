@@ -177,6 +177,79 @@ u8 focus  // 1 = UI ambil alih sentuhan (WebView fokus), 0 = lepas ke game
 
 Mirip `SetNuiFocus` di FiveM. Lua: `romp.setNUIFocus(id, true/false)`.
 
+## Server Browser — UDP Query
+
+Server menjawab query UDP di **port yang sama** dengan TCP (bisa dimatikan
+via `query 0` di server.cfg). Format: magic `"ROMP"` (4 byte) + type(u8).
+Jawaban: magic + reply_type(u8) + payload. Query dengan magic salah diabaikan.
+
+### 0x01 QUERY_INFO (Client -> Server)
+
+```
+"ROMP" 0x01
+```
+
+### 0x02 QUERY_INFO_REPLY (Server -> Client)
+
+```
+"ROMP" 0x02
+u8  hostnamelen, hostname
+u8  motdlen, motd
+u8  versionlen, version      // mis. "romp1"
+u16 players, maxplayers
+u8  has_password              // 1 = pakai password
+```
+
+### 0x03 QUERY_PLAYERS (Client -> Server)
+
+```
+"ROMP" 0x03
+```
+
+### 0x04 QUERY_PLAYERS_REPLY (Server -> Client)
+
+```
+"ROMP" 0x04
+u8  count
+per pemain: u16 playerid, u8 namelen, name
+```
+
+## Master Server (daftar server publik)
+
+`romp-master` (lihat `server/src/romp_master.c`, default port 7778) menyimpan
+daftar server yang announce. Game server mendaftarkan diri tiap 60 detik
+(opsi `announce 1` + `master_host`/`master_port` di server.cfg). Entri yang
+tidak di-announce ulang dalam 180 detik dihapus otomatis.
+
+Protokol TCP, framing sama (u16 LE length + type):
+
+### 0x50 ANNOUNCE (Game server -> Master)
+
+```
+u16 gameport, players, maxplayers
+u8  hostnamelen, hostname
+u8  motdlen, motd
+```
+IP server diambil dari koneksinya (getpeername).
+
+### 0x51 LIST_REQUEST (Client -> Master)
+
+Kosong (hanya type).
+
+### 0x52 LIST (Master -> Client)
+
+```
+u16 count
+per server:
+  u8  iplen, ip
+  u16 port, players, maxplayers
+  u8  hostnamelen, hostname
+  u8  motdlen, motd
+```
+
+Alur browser tipikal: `FetchMasterList` -> untuk tiap entri `QueryServer`
+via UDP (info live + ping) -> tampilkan daftar -> user pilih -> connect.
+
 ## Alur koneksi tipikal
 
 ```

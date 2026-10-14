@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>RO-MP Server Browser</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0;
+      -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden;
+      background: #0b0d11; color: #eee; font-family: system-ui, sans-serif; }
+  #head { padding: 14px 16px 10px; display: flex; align-items: center;
+      justify-content: space-between; border-bottom: 1px solid rgba(0,200,180,.25); }
+  #head h1 { font-size: 17px; letter-spacing: 2px; color: #4de3c8;
+      text-transform: uppercase; }
+  #ref { background: rgba(0,200,180,.12); border: 1px solid rgba(0,200,180,.5);
+      color: #4de3c8; border-radius: 8px; padding: 8px 14px; font-size: 14px; }
+  #ref:active { background: rgba(0,200,180,.3); }
+  #list { overflow-y: auto; height: calc(100% - 128px); padding: 10px 12px; }
+  .srv { background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.1);
+      border-radius: 10px; padding: 12px; margin-bottom: 8px; cursor: pointer; }
+  .srv:active { border-color: #4de3c8; transform: scale(.99); }
+  .srv .hn { font-size: 15px; font-weight: 600; }
+  .srv .mt { font-size: 12px; color: #999; margin-top: 2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .srv .meta { display: flex; justify-content: space-between; margin-top: 8px;
+      font-size: 12px; color: #4de3c8; }
+  .srv .lock { color: #e3a44d; }
+  #empty { text-align: center; color: #666; margin-top: 40px; font-size: 14px;
+      line-height: 1.8; }
+  #manual { display: flex; gap: 8px; padding: 10px 12px;
+      border-top: 1px solid rgba(255,255,255,.08); }
+  #manual input { flex: 1; background: rgba(255,255,255,.06); border: 1px solid
+      rgba(255,255,255,.15); border-radius: 8px; color: #eee; padding: 10px;
+      font-size: 14px; }
+  #manual button { background: rgba(0,200,180,.15); border: 1px solid
+      rgba(0,200,180,.5); color: #4de3c8; border-radius: 8px; padding: 10px 16px;
+      font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="head">
+  <h1>🌐 Server</h1>
+  <button id="ref">⟳ Refresh</button>
+</div>
+<div id="list"><div id="empty">Memuat daftar server…</div></div>
+<div id="manual">
+  <input id="ipport" placeholder="IP:port mis. 1.2.3.4:7777" />
+  <button id="go">Connect</button>
+</div>
+<script>
+// Dipanggil native setelah daftar + query selesai.
+window.onServers = function (json) {
+  var arr;
+  try { arr = JSON.parse(json); } catch (e) { arr = []; }
+  var list = document.getElementById("list");
+  list.innerHTML = "";
+  if (!arr.length) {
+    list.innerHTML = '<div id="empty">Tidak ada server yang nyala.<br>' +
+      'Jalankan romp-server + romp-master,<br>atau connect manual di bawah.</div>';
+    return;
+  }
+  arr.forEach(function (s) {
+    var d = document.createElement("div");
+    d.className = "srv";
+    var lock = s.has_password ? ' <span class="lock">🔒</span>' : "";
+    d.innerHTML = '<div class="hn">' + esc(s.hostname) + lock + "</div>" +
+      '<div class="mt">' + esc(s.motd || "") + "</div>" +
+      '<div class="meta"><span>👥 ' + s.players + "/" + s.maxplayers +
+      "</span><span>" + esc(s.ip) + ":" + s.port +
+      "</span><span>📶 " + s.ping_ms + " ms</span></div>";
+    d.onclick = function () { connectTo(s.ip, s.port); };
+    list.appendChild(d);
+  });
+};
+
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function connectTo(ip, port) {
+  if (window.romp && window.romp.connect) window.romp.connect(ip, port);
+}
+
+document.getElementById("ref").onclick = function () {
+  document.getElementById("list").innerHTML =
+    '<div id="empty">Memuat daftar server…</div>';
+  if (window.romp && window.romp.refresh) window.romp.refresh();
+};
+
+document.getElementById("go").onclick = function () {
+  var v = document.getElementById("ipport").value.trim();
+  var m = v.match(/^([^:]+):(\d+)$/);
+  if (m) connectTo(m[1], parseInt(m[2], 10));
+};
+</script>
+</body>
+</html>

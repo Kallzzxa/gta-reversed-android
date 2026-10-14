@@ -34,7 +34,11 @@ Config g_cfg = {
     "Selamat datang di RO-MP!",
     50,
     "",
-    "gamemode.lua"
+    "gamemode.lua",
+    1,      /* query */
+    0,      /* announce */
+    "",     /* master_host */
+    7778    /* master_port */
 };
 
 static void cfg_load(const char *path) {
@@ -61,8 +65,46 @@ static void cfg_load(const char *path) {
         }
         else if (!strcmp(key, "password")) { strncpy(g_cfg.password, val, sizeof(g_cfg.password)-1); }
         else if (!strcmp(key, "gamemode")) { strncpy(g_cfg.gamemode, val, sizeof(g_cfg.gamemode)-1); }
+        else if (!strcmp(key, "query")) g_cfg.query = atoi(val) ? 1 : 0;
+        else if (!strcmp(key, "announce")) g_cfg.announce = atoi(val) ? 1 : 0;
+        else if (!strcmp(key, "master_host")) { strncpy(g_cfg.master_host, val, sizeof(g_cfg.master_host)-1); }
+        else if (!strcmp(key, "master_port")) g_cfg.master_port = atoi(val);
     }
     fclose(f);
+}
+
+/* ---------------- Daftar ban IP (in-memory) ---------------- */
+typedef struct BanEntry { char ip[48]; struct BanEntry *next; } BanEntry;
+static BanEntry *g_bans = NULL;
+
+void ban_add(const char *ip) {
+    if (!ip || !ip[0] || ban_check(ip)) return;
+    BanEntry *b = (BanEntry*)calloc(1, sizeof(BanEntry));
+    strncpy(b->ip, ip, sizeof(b->ip) - 1);
+    b->next = g_bans; g_bans = b;
+    log_msg("IP %s di-ban.", ip);
+}
+void ban_remove(const char *ip) {
+    BanEntry **pp = &g_bans;
+    while (*pp) {
+        if (!strcmp((*pp)->ip, ip)) {
+            BanEntry *t = *pp; *pp = t->next; free(t);
+            log_msg("IP %s di-unban.", ip);
+            return;
+        }
+        pp = &(*pp)->next;
+    }
+}
+void ban_clear(void) {
+    BanEntry *b = g_bans;
+    while (b) { BanEntry *t = b; b = b->next; free(t); }
+    g_bans = NULL;
+    log_msg("Semua ban IP dihapus.");
+}
+int ban_check(const char *ip) {
+    for (BanEntry *b = g_bans; b; b = b->next)
+        if (!strcmp(b->ip, ip)) return 1;
+    return 0;
 }
 
 /* ---------------- Logging ---------------- */
@@ -118,7 +160,7 @@ uint64_t now_ms(void) {
 
 /* ---------------- Client ---------------- */
 Client *g_clients = NULL;
-static int g_running = 1;
+static volatile sig_atomic_t g_running = 1;
 static int g_next_id = 0;
 
 int client_count(void) {
@@ -343,6 +385,25 @@ static void handle_hello(Client *c, const uint8_t *p, size_t n) {
     }
     char name[25];
     memcpy(name, p + 2, nl); name[nl] = '\0';
+
+    /* Lua: onPlayerRequestConnect(name, ip) -> true, "alasan" = tolak */
+    {
+        char reason[128] = "";
+        if (lua_on_player_request(name, c->ip, reason, sizeof(reason))) {
+            if (!reason[0]) strcpy(reason, "Ditolak gamemode.");
+            send_reject(c, reason); c->dead = 1;
+            log_msg("Handshake ditolak gamemode: %s (%s): %s", name, c->ip, reason);
+            return;
+        }
+    }
+
+    /* ban IP */
+    if (ban_check(c->ip)) {
+        send_reject(c, "IP kamu di-ban dari server ini.");
+        c->dead = 1;
+        log_msg("Handshake ditolak (banned): %s (%s)", name, c->ip);
+        return;
+    }
 
     /* password */
     size_t off = 2 + nl;
@@ -578,6 +639,12 @@ static void *console_thread(void *arg) {
 static void console_cmd(const char *line) {
     char cmd[16];
     if (sscanf(line, "%15s", cmd) != 1) return;
+    /* Lua dulu: onConsoleCommand(cmd, args) -> true = di-handle gamemode */
+    {
+        const char *args = line + strlen(cmd);
+        while (*args == ' ' || *args == '\t') args++;
+        if (lua_on_console_command(cmd, args)) return;
+    }
     if (!strcmp(cmd, "help")) {
         printf("  help              - daftar command\n");
         printf("  say <pesan>       - kirim pengumuman ke semua pemain\n");
@@ -607,6 +674,143 @@ static void console_cmd(const char *line) {
     fflush(stdout);
 }
 
+/* ---------------- UDP query (server browser) ---------------- */
+/* Format: "ROMP" + type(u8). Jawaban: "ROMP" + reply_type(u8) + payload. */
+static void handle_query(SOCKET usock) {
+    uint8_t buf[64];
+    struct sockaddr_in from;
+    socklen_t flen = sizeof(from);
+    ssize_t n = recvfrom(usock, (char*)buf, sizeof(buf), 0,
+                         (struct sockaddr*)&from, &flen);
+    if (n < (ssize_t)(QUERY_MAGIC_LEN + 1)) return;
+    if (memcmp(buf, QUERY_MAGIC, QUERY_MAGIC_LEN)) return;
+    uint8_t q = buf[QUERY_MAGIC_LEN];
+
+    uint8_t out[1024];
+    size_t o = 0;
+    memcpy(out, QUERY_MAGIC, QUERY_MAGIC_LEN); o += QUERY_MAGIC_LEN;
+
+    if (q == Q_INFO) {
+        out[o++] = Q_INFO_REPLY;
+        size_t hl = strlen(g_cfg.hostname), ml = strlen(g_cfg.motd);
+        const char *ver = "romp1";
+        size_t vl = strlen(ver);
+        out[o++] = (uint8_t)hl; memcpy(out + o, g_cfg.hostname, hl); o += hl;
+        out[o++] = (uint8_t)ml; memcpy(out + o, g_cfg.motd, ml); o += ml;
+        out[o++] = (uint8_t)vl; memcpy(out + o, ver, vl); o += vl;
+        put_u16(out + o, (uint16_t)client_count()); o += 2;
+        put_u16(out + o, (uint16_t)g_cfg.maxplayers); o += 2;
+        out[o++] = g_cfg.password[0] ? 1 : 0;
+    } else if (q == Q_PLAYERS) {
+        out[o++] = Q_PLAYERS_REPLY;
+        uint8_t cnt = 0;
+        size_t cntpos = o++;
+        for (Client *c = g_clients; c && cnt < 100; c = c->next) {
+            if (!c->handshaked) continue;
+            size_t nl = strlen(c->name);
+            if (o + 3 + nl > sizeof(out)) break;
+            put_u16(out + o, (uint16_t)c->id); o += 2;
+            out[o++] = (uint8_t)nl; memcpy(out + o, c->name, nl); o += nl;
+            cnt++;
+        }
+        out[cntpos] = cnt;
+    } else {
+        return;
+    }
+    sendto(usock, (char*)out, (int)o, 0, (struct sockaddr*)&from, flen);
+}
+
+/* ---------------- Announce ke master server ---------------- */
+static volatile int g_announce_now = 0;
+
+void trigger_announce(void) { g_announce_now = 1; }
+
+/* TCP connect dengan timeout (dipakai announce thread). -1 = gagal. */
+static SOCKET tcp_connect_timeout(const char *host, int port, int timeout_ms) {
+    struct sockaddr_in a;
+    memset(&a, 0, sizeof(a));
+    a.sin_family = AF_INET;
+    a.sin_port = htons((uint16_t)port);
+    /* coba sebagai IP dulu, lalu DNS */
+    if (inet_pton(AF_INET, host, &a.sin_addr) != 1) {
+        struct hostent *he = gethostbyname(host);
+        if (!he) return INVALID_SOCKET;
+        memcpy(&a.sin_addr, he->h_addr, 4);
+    }
+    SOCKET s = socket(AF_INET, SOCK_STREAM, 0);
+    if (s == INVALID_SOCKET) return INVALID_SOCKET;
+    sock_nonblock(s);
+    int rc = connect(s, (struct sockaddr*)&a, sizeof(a));
+    if (rc == SOCKET_ERROR) {
+#ifdef _WIN32
+        int e = WSAGetLastError();
+        if (e != WSAEWOULDBLOCK) { CLOSESOCK(s); return INVALID_SOCKET; }
+#else
+        if (errno != EINPROGRESS) { CLOSESOCK(s); return INVALID_SOCKET; }
+#endif
+        fd_set wf; FD_ZERO(&wf); FD_SET(s, &wf);
+        struct timeval tv = { timeout_ms / 1000, (timeout_ms % 1000) * 1000 };
+        if (select((int)(s + 1), NULL, &wf, NULL, &tv) <= 0) {
+            CLOSESOCK(s); return INVALID_SOCKET;
+        }
+        int err = 0; socklen_t el = sizeof(err);
+        getsockopt(s, SOL_SOCKET, SO_ERROR, (char*)&err, &el);
+        if (err != 0) { CLOSESOCK(s); return INVALID_SOCKET; }
+    }
+    return s;
+}
+
+static int send_all_blocking(SOCKET s, const uint8_t *b, size_t n) {
+    while (n > 0) {
+        ssize_t r = send(s, (const char*)b, (int)n, 0);
+        if (r <= 0) return -1;
+        b += r; n -= (size_t)r;
+    }
+    return 0;
+}
+
+static void do_announce(void) {
+    SOCKET s = tcp_connect_timeout(g_cfg.master_host, g_cfg.master_port, 5000);
+    if (s == INVALID_SOCKET) {
+        log_msg("[announce] master %s:%d tidak terjangkau.",
+                g_cfg.master_host, g_cfg.master_port);
+        return;
+    }
+    uint8_t p[512], f[516];
+    size_t o = 0;
+    size_t hl = strlen(g_cfg.hostname), ml = strlen(g_cfg.motd);
+    if (hl > 63) hl = 63; if (ml > 255) ml = 255;
+    put_u16(p + o, (uint16_t)g_cfg.port); o += 2;
+    put_u16(p + o, (uint16_t)client_count()); o += 2;
+    put_u16(p + o, (uint16_t)g_cfg.maxplayers); o += 2;
+    p[o++] = (uint8_t)hl; memcpy(p + o, g_cfg.hostname, hl); o += hl;
+    p[o++] = (uint8_t)ml; memcpy(p + o, g_cfg.motd, ml); o += ml;
+    put_u16(f, (uint16_t)(o + 1)); f[2] = M_ANNOUNCE; memcpy(f + 3, p, o);
+    if (send_all_blocking(s, f, o + 3) == 0)
+        log_msg("[announce] terdaftar di master %s:%d.",
+                g_cfg.master_host, g_cfg.master_port);
+    CLOSESOCK(s);
+}
+
+static void *announce_thread(void *arg) {
+    (void)arg;
+    /* announce pertama langsung */
+    if (g_cfg.announce && g_cfg.master_host[0]) do_announce();
+    while (g_running) {
+        for (int i = 0; i < 60 && g_running; i++) {
+            if (g_announce_now) { g_announce_now = 0; break; }
+#ifdef _WIN32
+            Sleep(1000);
+#else
+            sleep(1);
+#endif
+        }
+        if (!g_running) break;
+        if (g_cfg.announce && g_cfg.master_host[0]) do_announce();
+    }
+    return NULL;
+}
+
 /* ---------------- Accept & cleanup ---------------- */
 static void accept_new(SOCKET lsock) {
     struct sockaddr_in addr;
@@ -621,8 +825,9 @@ static void accept_new(SOCKET lsock) {
     c->last_activity = now_ms();
     c->next = g_clients;
     g_clients = c;
-    char ip[32];
+    char ip[48];
     inet_ntop(AF_INET, &addr.sin_addr, ip, sizeof(ip));
+    strncpy(c->ip, ip, sizeof(c->ip) - 1);
     log_msg("Koneksi baru dari %s", ip);
 }
 
@@ -700,6 +905,25 @@ int main(int argc, char **argv) {
     }
     if (listen(lsock, 16) == SOCKET_ERROR) { fprintf(stderr, "listen gagal\n"); return 1; }
 
+    /* socket UDP untuk server browser query (port yang sama) */
+    SOCKET usock = INVALID_SOCKET;
+    if (g_cfg.query) {
+        usock = socket(AF_INET, SOCK_DGRAM, 0);
+        if (usock != INVALID_SOCKET) {
+            struct sockaddr_in uaddr;
+            memset(&uaddr, 0, sizeof(uaddr));
+            uaddr.sin_family = AF_INET;
+            uaddr.sin_addr.s_addr = INADDR_ANY;
+            uaddr.sin_port = htons((uint16_t)g_cfg.port);
+            if (bind(usock, (struct sockaddr*)&uaddr, sizeof(uaddr)) == SOCKET_ERROR) {
+                CLOSESOCK(usock); usock = INVALID_SOCKET;
+                log_msg("WARNING: bind UDP query gagal, server browser query mati.");
+            } else {
+                sock_nonblock(usock);
+            }
+        }
+    }
+
     log_msg("===========================================");
     log_msg(" RO-MP Dedicated Server v1 (Lua gamemode)");
     log_msg(" Hostname : %s", g_cfg.hostname);
@@ -707,6 +931,10 @@ int main(int argc, char **argv) {
     log_msg(" Max pemain: %d%s", g_cfg.maxplayers, g_cfg.password[0] ? " (password ON)" : "");
     log_msg(" MOTD     : %s", g_cfg.motd);
     log_msg(" Gamemode : %s", g_cfg.gamemode);
+    if (g_cfg.announce && g_cfg.master_host[0])
+        log_msg(" Announce : ke master %s:%d tiap 60 dtk",
+                g_cfg.master_host, g_cfg.master_port);
+    if (g_cfg.query) log_msg(" UDP query: aktif (server browser)");
     log_msg(" Ketik 'help' untuk command console.");
     log_msg("===========================================");
 
@@ -716,12 +944,20 @@ int main(int argc, char **argv) {
     pthread_t cthread;
     pthread_create(&cthread, NULL, console_thread, NULL);
 
+    pthread_t athr = 0;
+    if (g_cfg.announce && g_cfg.master_host[0])
+        pthread_create(&athr, NULL, announce_thread, NULL);
+
     uint64_t last_lua_tick = now_ms();
     while (g_running) {
         fd_set rfds;
         FD_ZERO(&rfds);
         FD_SET(lsock, &rfds);
         SOCKET mx = lsock;
+        if (usock != INVALID_SOCKET) {
+            FD_SET(usock, &rfds);
+            if (usock > mx) mx = usock;
+        }
         for (Client *c = g_clients; c; c = c->next) {
             FD_SET(c->sock, &rfds);
             if (c->sock > mx) mx = c->sock;
@@ -738,6 +974,7 @@ int main(int argc, char **argv) {
         }
         if (r > 0) {
             if (FD_ISSET(lsock, &rfds)) accept_new(lsock);
+            if (usock != INVALID_SOCKET && FD_ISSET(usock, &rfds)) handle_query(usock);
             for (Client *c = g_clients; c; c = c->next) {
                 if (c->dead) continue;
                 if (FD_ISSET(c->sock, &rfds)) {
@@ -760,9 +997,17 @@ int main(int argc, char **argv) {
     }
 
     log_msg("Server dimatikan...");
+    g_running = 0;
+    /* Bangunkan console thread yang mungkin ke-block di fgets(stdin).
+     * Tanpa ini, exit() deadlock: thread itu megang stdio lock selamanya. */
+    pthread_cancel(cthread);
+    pthread_join(cthread, NULL);
+    if (athr) pthread_join(athr, NULL);
     lua_shutdown();
+    ban_clear();
     for (Client *c = g_clients; c; c = c->next) CLOSESOCK(c->sock);
     CLOSESOCK(lsock);
+    if (usock != INVALID_SOCKET) CLOSESOCK(usock);
     if (g_logf) fclose(g_logf);
 #ifdef _WIN32
     WSACleanup();

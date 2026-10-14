@@ -48,6 +48,19 @@ typedef int SOCKET;
 #define P_NUI_CB      0x41
 #define P_NUI_FOCUS   0x42
 
+/* ---- Protokol UDP query (server browser), port sama dengan TCP ---- */
+#define QUERY_MAGIC   "ROMP"
+#define QUERY_MAGIC_LEN 4
+#define Q_INFO          0x01  /* client -> server: minta info */
+#define Q_INFO_REPLY    0x02  /* server -> client: info server */
+#define Q_PLAYERS       0x03  /* client -> server: minta daftar pemain */
+#define Q_PLAYERS_REPLY 0x04  /* server -> client: daftar pemain */
+
+/* ---- Protokol master server (TCP, framing sama: u16 LE + type) ---- */
+#define M_ANNOUNCE    0x50  /* server -> master: daftarkan server */
+#define M_LIST_REQ    0x51  /* client -> master: minta daftar */
+#define M_LIST        0x52  /* master -> client: daftar server */
+
 #define CHAT_SERVER   0xFFFF
 #define KIND_CHAT 0
 #define KIND_INFO 1
@@ -67,6 +80,10 @@ typedef struct {
     int  maxplayers;
     char password[64];
     char gamemode[256];   /* path file gamemode.lua */
+    int  query;           /* 1 = jawab UDP query server browser (default 1) */
+    int  announce;        /* 1 = announce periodik ke master server */
+    char master_host[128];/* host master server (kosong = tidak announce) */
+    int  master_port;     /* port master server (default 7778) */
 } Config;
 
 extern Config g_cfg;
@@ -78,6 +95,7 @@ typedef struct Client {
     SOCKET sock;
     int    id;                 /* -1 = belum handshake */
     char   name[25];
+    char   ip[48];             /* IP remote (dari accept) */
     int    handshaked;
     uint8_t recv[RECV_BUF];
     size_t  recv_len;
@@ -105,3 +123,10 @@ int client_send_frame(Client *c, const uint8_t *payload, size_t n);
 /* Kick pemain + umumkan. Dipakai console & Lua. */
 void server_kick(int id, const char *reason);
 uint64_t now_ms(void);
+/* Daftar IP yang di-ban (in-memory). Dipakai Lua (banIP/unbanIP/isIPBanned). */
+void ban_add(const char *ip);
+void ban_remove(const char *ip);
+void ban_clear(void);
+int  ban_check(const char *ip);
+/* Minta announce thread segera kirim announce ke master. Dipakai Lua. */
+void trigger_announce(void);
