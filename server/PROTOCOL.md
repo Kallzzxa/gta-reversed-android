@@ -177,6 +177,38 @@ u8 focus  // 1 = UI ambil alih sentuhan (WebView fokus), 0 = lepas ke game
 
 Mirip `SetNuiFocus` di FiveM. Lua: `romp.setNUIFocus(id, true/false)`.
 
+### Dialog ala SA-MP (via NUI)
+
+`romp.showDialog(id, dialogId, style, caption, info, button1, button2)`
+mengirim pesan berikut lewat 0x40, lalu 0x42 focus=1:
+
+```json
+{"action":"showDialog","id":100,"style":2,
+ "caption":"Menu Demo","info":"Info Server\nGanti Nickname",
+ "button1":"Pilih","button2":"Batal"}
+```
+
+`style`: 0=MSGBOX, 1=INPUT, 2=LIST, 3=PASSWORD. `info` boleh multi-baris
+(`\n`); untuk LIST tiap baris jadi satu item yang bisa diketuk.
+
+`romp.hideDialog(id)` mengirim `{"action":"hideDialog"}` lalu 0x42 focus=0.
+
+Jawaban pemain dikirim client sebagai 0x41 NUI_CALLBACK bernama
+`__dialog_response` dengan JSON:
+
+```json
+{"dialogId":100,"response":true,"listitem":1,"inputtext":"Ganti Nickname"}
+```
+
+`response`: true = tombol1 / item di-klik, false = tombol2 / ditutup.
+`listitem`: index item (0-based) untuk LIST, -1 untuk style lain.
+`inputtext`: teks input (INPUT/PASSWORD) atau teks item yang di-klik (LIST).
+
+Server me-routing otomatis ke event Lua
+`onDialogResponse(id, name, dialogId, response, listitem, inputtext)`
+(lihat `server/dialog.lua`). Halaman UI referensi:
+`android/app/src/main/assets/romp/nui/dialog.html`.
+
 ## Server Browser — UDP Query
 
 Server menjawab query UDP di **port yang sama** dengan TCP (bisa dimatikan

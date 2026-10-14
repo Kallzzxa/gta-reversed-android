@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>RO-MP Dialog</title>
+<style>
+  /* Dialog klasik ala SA-MP: panel biru-abu gelap, caption terang. */
+  * { box-sizing: border-box; margin: 0; padding: 0;
+      -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden;
+      background: transparent; font-family: system-ui, sans-serif; }
+  #wrap { position: absolute; inset: 0; display: none;
+      align-items: center; justify-content: center;
+      background: rgba(0,0,0,.55); }
+  #wrap.open { display: flex; }
+  #dlg { width: min(92vw, 440px); max-height: 84vh; display: flex;
+      flex-direction: column; background: #1d2836;
+      border: 1px solid #4a5a70; border-radius: 6px;
+      box-shadow: 0 8px 40px rgba(0,0,0,.65); overflow: hidden; }
+  #cap { background: #2c3a4e; color: #fff; font-size: 15px; font-weight: bold;
+      padding: 10px 14px; border-bottom: 1px solid #4a5a70;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #body { padding: 12px 14px; color: #e8e8e8; font-size: 14px;
+      overflow-y: auto; max-height: 50vh; }
+  #body .line { margin-bottom: 2px; }
+  #list { display: flex; flex-direction: column; gap: 2px; }
+  .item { padding: 9px 10px; background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.08); border-radius: 4px;
+      color: #e8e8e8; font-size: 14px; cursor: pointer; }
+  .item:active { background: rgba(120,170,255,.25); border-color: #78aaff; }
+  #inp { width: 100%; margin-top: 10px; padding: 10px; font-size: 15px;
+      background: #10161f; border: 1px solid #4a5a70; border-radius: 4px;
+      color: #fff; outline: none; user-select: text; }
+  #inp:focus { border-color: #78aaff; }
+  #btns { display: flex; gap: 8px; padding: 12px 14px;
+      border-top: 1px solid #4a5a70; background: #222e3f; }
+  .btn { flex: 1; padding: 11px; font-size: 14px; font-weight: bold;
+      border: 1px solid #5a6c85; border-radius: 4px; cursor: pointer;
+      background: #33415a; color: #fff; }
+  .btn:active { background: #42536f; }
+  .btn.primary { background: #2e6da4; border-color: #4a90d9; }
+  .btn.primary:active { background: #3a7fb8; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="dlg">
+    <div id="cap"></div>
+    <div id="body"></div>
+    <div id="btns"></div>
+  </div>
+</div>
+<script>
+// Server -> UI: romp.showDialog / romp.hideDialog (via 0x40 NUI_MESSAGE).
+window.onRomMessage = function (json) {
+  var msg;
+  try { msg = JSON.parse(json); } catch (e) { return; }
+  if (msg.action === "showDialog") render(msg);
+  else if (msg.action === "hideDialog") hide();
+};
+
+var curId = 0;
+
+function bridge(name, data) {
+  if (window.romp && window.romp.postMessage)
+    window.romp.postMessage(name, JSON.stringify(data));
+}
+
+function respond(response, listitem, inputtext) {
+  bridge("__dialog_response", {
+    dialogId: curId,
+    response: !!response,
+    listitem: (listitem === undefined ? -1 : listitem),
+    inputtext: (inputtext === undefined ? "" : String(inputtext))
+  });
+  hide();
+}
+
+function setText(el, s) { el.textContent = (s === undefined || s === null) ? "" : s; }
+
+// info multi-baris (\n) -> baris-baris teks.
+function renderLines(el, info) {
+  el.innerHTML = "";
+  String(info).split("\n").forEach(function (ln) {
+    var d = document.createElement("div");
+    d.className = "line";
+    setText(d, ln);
+    el.appendChild(d);
+  });
+}
+
+function makeBtn(label, primary, onclick) {
+  var b = document.createElement("button");
+  b.className = "btn" + (primary ? " primary" : "");
+  setText(b, label);
+  b.onclick = onclick;
+  return b;
+}
+
+function render(msg) {
+  curId = msg.id || 0;
+  var style = msg.style || 0; // 0=MSGBOX 1=INPUT 2=LIST 3=PASSWORD
+  setText(document.getElementById("cap"), msg.caption);
+  var body = document.getElementById("body");
+  var btns = document.getElementById("btns");
+  body.innerHTML = "";
+  btns.innerHTML = "";
+  var b1 = msg.button1 || "", b2 = msg.button2 || "";
+
+  if (style === 2) {
+    // DIALOG_STYLE_LIST: tiap baris bisa diketuk -> jawab langsung.
+    var list = document.createElement("div");
+    list.id = "list";
+    String(msg.info || "").split("\n").forEach(function (ln, idx) {
+      var it = document.createElement("div");
+      it.className = "item";
+      setText(it, ln);
+      it.onclick = function () { respond(true, idx, ln); };
+      list.appendChild(it);
+    });
+    body.appendChild(list);
+  } else {
+    renderLines(body, msg.info || "");
+  }
+
+  var input = null;
+  if (style === 1 || style === 3) {
+    input = document.createElement("input");
+    input.id = "inp";
+    input.type = (style === 3) ? "password" : "text";
+    input.autocomplete = "off";
+    input.onkeydown = function (e) {
+      if (e.key === "Enter") { respond(true, -1, input.value); }
+    };
+    body.appendChild(input);
+    setTimeout(function () { input.focus(); }, 50);
+  }
+
+  var getVal = function () { return input ? input.value : ""; };
+  if (b1 !== "") btns.appendChild(makeBtn(b1, true, function () {
+    respond(true, -1, getVal());
+  }));
+  if (b2 !== "") btns.appendChild(makeBtn(b2, false, function () {
+    respond(false, -1, getVal());
+  }));
+
+  document.getElementById("wrap").classList.add("open");
+}
+
+function hide() {
+  document.getElementById("wrap").classList.remove("open");
+}
+</script>
+</body>
+</html>

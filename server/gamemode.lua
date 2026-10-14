@@ -21,6 +21,12 @@
 --   romp.sendNUIMessage(id, jsonString) -> true/false
 --   romp.onNUICallback(name, fn) — fn dipanggil sebagai fn(id, name, dataJson)
 --   romp.setNUIFocus(id, true/false) -> true/false
+--   Dialog ala SA-MP (DIALOG_STYLE_MSGBOX/LIST/INPUT/PASSWORD):
+--   romp.showDialog(id, dialogId, style, caption, info, button1, button2)
+--       -> true/false (otomatis fokus NUI on)
+--   romp.hideDialog(id) -> true/false (otomatis fokus NUI off)
+--   romp.DIALOG_MSGBOX / DIALOG_INPUT / DIALOG_LIST / DIALOG_PASSWORD
+--   Event: onDialogResponse(id, name, dialogId, response, listitem, inputtext)
 --   Info & admin runtime:
 --   romp.getPlayerIP(id) -> ip | nil
 --   romp.setHostname(text), romp.setMOTD(text), romp.setPassword(text)
@@ -59,6 +65,40 @@ local function bukaInventory(id)
     romp.setNUIFocus(id, true)
     romp.sendChatToPlayer(id, romp.KIND_INFO,
         "*** Inventory terbuka (demo NUI).")
+end
+
+-- ============================================================
+-- DEMO DIALOG ala SA-MP. Ketik /dialog di dalam game.
+-- Halaman UI: android/.../assets/romp/nui/dialog.html
+-- Jawaban pemain masuk ke onDialogResponse di bawah.
+-- ============================================================
+
+-- Pemain menjawab dialog. dialogId sesuai yang dikirim showDialog.
+function onDialogResponse(id, name, dialogId, response, listitem, inputtext)
+    if dialogId == 100 then
+        -- Menu utama (LIST). Klik item = response true.
+        if not response then return end
+        if listitem == 0 then
+            local si = romp.getServerInfo()
+            romp.showDialog(id, 101, romp.DIALOG_MSGBOX, "Info Server",
+                "Hostname: " .. si.hostname
+                .. "\nPemain: " .. si.players .. "/" .. si.maxplayers
+                .. "\nPassword: " .. (si.hasPassword and "ya" or "tidak"),
+                "OK", "")
+        elseif listitem == 1 then
+            romp.showDialog(id, 102, romp.DIALOG_INPUT, "Ganti Nickname",
+                "Masukkan nickname baru:", "Ganti", "Batal")
+        end
+    elseif dialogId == 102 and response then
+        -- Hasil input nickname.
+        if inputtext ~= "" then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Nickname diganti jadi: " .. inputtext .. " (demo dialog)")
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Nickname tidak boleh kosong.")
+        end
+    end
 end
 
 -- JS -> Lua: pemain memakai item dari UI.
@@ -108,6 +148,10 @@ function onPlayerCommand(id, name, cmd, args)
         return true
     elseif cmd == "inv" then
         bukaInventory(id)
+        return true
+    elseif cmd == "dialog" then
+        romp.showDialog(id, 100, romp.DIALOG_LIST, "Menu Demo",
+            "Info Server\nGanti Nickname", "Pilih", "Batal")
         return true
     elseif cmd == "myip" then
         romp.sendChatToPlayer(id, romp.KIND_INFO,

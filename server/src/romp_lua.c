@@ -19,6 +19,32 @@ int lua_active(void) { return L != NULL; }
 /* Helper frame kecil untuk romp_lua.c */
 static void lput_u16(uint8_t *b, uint16_t v) { b[0] = v & 0xFF; b[1] = (v >> 8) & 0xFF; }
 
+/* Escape string agar aman disisipkan sebagai nilai JSON (kutip ganda). */
+static void json_escape(const char *s, char *out, size_t out_sz) {
+    size_t o = 0;
+    for (const unsigned char *p = (const unsigned char *)s; *p && o + 6 < out_sz; p++) {
+        if (*p == '"' || *p == '\\') { out[o++] = '\\'; out[o++] = (char)*p; }
+        else if (*p == '\n') { out[o++] = '\\'; out[o++] = 'n'; }
+        else if (*p == '\r') { out[o++] = '\\'; out[o++] = 'r'; }
+        else if (*p == '\t') { out[o++] = '\\'; out[o++] = 't'; }
+        else if (*p < 0x20) {
+            o += (size_t)snprintf(out + o, out_sz - o, "\\u%04x", *p);
+        } else { out[o++] = (char)*p; }
+    }
+    out[o] = '\0';
+}
+
+/* Kirim NUI_MESSAGE mentah ke client. 1 = sukses, 0 = gagal. */
+static int nui_send_raw(Client *c, const char *json) {
+    size_t jl = strlen(json);
+    if (jl == 0 || jl > 4000) return 0;
+    uint8_t b[4100];
+    b[0] = P_NUI_MSG;
+    lput_u16(b + 1, (uint16_t)jl);
+    memcpy(b + 3, json, jl);
+    return client_send_frame(c, b, 3 + jl) == 0;
+}
+
 /* ---------------- API romp.* untuk gamemode ---------------- */
 
 static int l_romp_log(lua_State *Ls) {
@@ -205,10 +231,87 @@ static int l_romp_set_nui_focus(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- API Dialog ala SA-MP ----------------
+ * romp.showDialog(id, dialogId, style, caption, info, button1, button2)
+ *   style: romp.DIALOG_MSGBOX(0) / DIALOG_INPUT(1) / DIALOG_LIST(2) /
+ *          DIALOG_PASSWORD(3). info boleh multi-baris (\n).
+ *   -> true/false. Otomatis setNUIFocus(id, true).
+ * romp.hideDialog(id) -> true/false. Otomatis setNUIFocus(id, false).
+ * Jawaban client datang sebagai callback NUI "__dialog_response" dan
+ * di-routing dialog.lua ke event Lua:
+ *   onDialogResponse(id, name, dialogId, response, listitem, inputtext)
+ */
+static int l_romp_show_dialog(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    int dlg = (int)luaL_checkinteger(Ls, 2);
+    int style = (int)luaL_checkinteger(Ls, 3);
+    const char *caption = luaL_checkstring(Ls, 4);
+    const char *info = luaL_checkstring(Ls, 5);
+    const char *b1 = luaL_optstring(Ls, 6, "");
+    const char *b2 = luaL_optstring(Ls, 7, "");
+    Client *c = client_by_id(id);
+    if (!c || style < 0 || style > 3) { lua_pushboolean(Ls, 0); return 1; }
+    char ec[768], ei[2048], eb1[128], eb2[128];
+    json_escape(caption, ec, sizeof ec);
+    json_escape(info, ei, sizeof ei);
+    json_escape(b1, eb1, sizeof eb1);
+    json_escape(b2, eb2, sizeof eb2);
+    char js[4096];
+    int n = snprintf(js, sizeof js,
+        "{\"action\":\"showDialog\",\"id\":%d,\"style\":%d,"
+        "\"caption\":\"%s\",\"info\":\"%s\",\"button1\":\"%s\",\"button2\":\"%s\"}",
+        dlg, style, ec, ei, eb1, eb2);
+    /* Buffer di atas cukup untuk semua escape terpanjang, jadi n tak
+     * mungkin terpotong; cek defensif saja. */
+    if (n < 0 || (size_t)n >= sizeof js) { lua_pushboolean(Ls, 0); return 1; }
+    if (!nui_send_raw(c, js)) { lua_pushboolean(Ls, 0); return 1; }
+    uint8_t f[2] = { P_NUI_FOCUS, 1 };
+    lua_pushboolean(Ls, client_send_frame(c, f, 2) == 0);
+    return 1;
+}
+
+static int l_romp_hide_dialog(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(id);
+    if (!c) { lua_pushboolean(Ls, 0); return 1; }
+    nui_send_raw(c, "{\"action\":\"hideDialog\"}");
+    uint8_t f[2] = { P_NUI_FOCUS, 0 };
+    lua_pushboolean(Ls, client_send_frame(c, f, 2) == 0);
+    return 1;
+}
+
 /* ---------------- Init ---------------- */
 
 /* Dipakai lua_init sebelum definisinya (di bawah). */
 static void call_event_noret(const char *ev);
+
+/* Muat dialog.lua (router event onDialogResponse) dari folder yang sama
+ * dengan file gamemode. Tidak fatal kalau file tidak ada. */
+static void lua_load_dialog(const char *script_path) {
+    char dir[512];
+    const char *slash = strrchr(script_path, '/');
+#ifdef _WIN32
+    const char *bs = strrchr(script_path, '\\');
+    if (bs && (!slash || bs > slash)) slash = bs;
+#endif
+    if (slash) {
+        size_t dl = (size_t)(slash - script_path);
+        if (dl > sizeof dir - 16) dl = sizeof dir - 16;
+        memcpy(dir, script_path, dl);
+        dir[dl] = '\0';
+    } else {
+        dir[0] = '.'; dir[1] = '\0';
+    }
+    char path[528];
+    snprintf(path, sizeof path, "%s/dialog.lua", dir);
+    if (luaL_loadfile(L, path) != LUA_OK || lua_pcall(L, 0, 0, 0) != LUA_OK) {
+        log_msg("[lua] dialog.lua tidak dimuat (%s): %s", path,
+                lua_tostring(L, -1) ? lua_tostring(L, -1) : "?");
+        lua_pop(L, 1);
+    } else {
+        log_msg("[lua] dialog.lua dimuat (event onDialogResponse aktif)");
+    }
+}
 
 int lua_init(const char *script_path) {
     L = luaL_newstate();
@@ -229,6 +332,8 @@ int lua_init(const char *script_path) {
     lua_pushcfunction(L, l_romp_send_nui_message); lua_setfield(L, -2, "sendNUIMessage");
     lua_pushcfunction(L, l_romp_on_nui_callback);  lua_setfield(L, -2, "onNUICallback");
     lua_pushcfunction(L, l_romp_set_nui_focus);    lua_setfield(L, -2, "setNUIFocus");
+    lua_pushcfunction(L, l_romp_show_dialog);      lua_setfield(L, -2, "showDialog");
+    lua_pushcfunction(L, l_romp_hide_dialog);      lua_setfield(L, -2, "hideDialog");
     lua_pushcfunction(L, l_romp_get_player_ip);   lua_setfield(L, -2, "getPlayerIP");
     lua_pushcfunction(L, l_romp_set_hostname);    lua_setfield(L, -2, "setHostname");
     lua_pushcfunction(L, l_romp_set_motd);        lua_setfield(L, -2, "setMOTD");
@@ -244,6 +349,11 @@ int lua_init(const char *script_path) {
     lua_pushinteger(L, KIND_ME);   lua_setfield(L, -2, "KIND_ME");
     lua_pushinteger(L, KIND_PM);   lua_setfield(L, -2, "KIND_PM");
     lua_pushinteger(L, KIND_SYS);  lua_setfield(L, -2, "KIND_SYS");
+    /* konstanta style dialog ala SA-MP */
+    lua_pushinteger(L, 0); lua_setfield(L, -2, "DIALOG_MSGBOX");
+    lua_pushinteger(L, 1); lua_setfield(L, -2, "DIALOG_INPUT");
+    lua_pushinteger(L, 2); lua_setfield(L, -2, "DIALOG_LIST");
+    lua_pushinteger(L, 3); lua_setfield(L, -2, "DIALOG_PASSWORD");
     lua_setglobal(L, "romp");
 
     /* tabel registry untuk NUI callback */
@@ -259,6 +369,8 @@ int lua_init(const char *script_path) {
         return -1;
     }
     log_msg("[lua] gamemode dimuat: %s", script_path);
+    /* router dialog ala SA-MP (event onDialogResponse) */
+    lua_load_dialog(script_path);
     /* event init: onGamemodeInit() */
     call_event_noret("onGamemodeInit");
     return 0;

@@ -5,7 +5,7 @@ Setiap fitur: implementasi → compile/test → commit (English) → push.
 
 ## Server (dedicated)
 
-- [ ] Sistem dialog ala SA-MP (DIALOG_STYLE_MSGBOX/LIST/INPUT/PASSWORD) via Lua + NUI
+- [x] Sistem dialog ala SA-MP (DIALOG_STYLE_MSGBOX/LIST/INPUT/PASSWORD) via Lua + NUI — DONE 2026-10-14 (romp.showDialog/hideDialog, event onDialogResponse, dialog.html)
 - [ ] Textdraw global & per-pemain (teks 2D di layar) via Lua API
 - [ ] Checkpoint & race checkpoint (masuk/keluar event Lua)
 - [ ] Pickup (senjata, health, custom) dengan event onPlayerPickup
