@@ -264,6 +264,118 @@ void broadcast_frame(const uint8_t *payload, size_t n, Client *except) {
     broadcast(payload, n, except);
 }
 
+/* ---- Interior & virtual world ala SA-MP ----
+ * Dua pemain saling "terlihat" (posisi, chat, tembakan, entity join/leave)
+ * hanya bila virtual world DAN interior mereka sama. Mirip SA-MP. */
+int client_visible(const Client *a, const Client *b) {
+    if (!a || !b) return 0;
+    return a->vw == b->vw && a->interior == b->interior;
+}
+
+/* Broadcast hanya ke client yang terlihat oleh `ref`. */
+static void broadcast_scoped(const uint8_t *payload, size_t n,
+                             Client *ref, Client *except) {
+    for (Client *c = g_clients; c; c = c->next) {
+        if (!c->handshaked || c->dead || c == except) continue;
+        if (!client_visible(ref, c)) continue;
+        if (send_frame(c, payload, n) < 0) c->dead = 1;
+    }
+}
+
+void broadcast_frame_ref(const uint8_t *payload, size_t n,
+                         Client *ref, Client *except) {
+    if (ref) broadcast_scoped(payload, n, ref, except);
+    else broadcast(payload, n, except);
+}
+
+void broadcast_frame_vw(const uint8_t *payload, size_t n,
+                        Client *except, uint32_t vw) {
+    for (Client *c = g_clients; c; c = c->next) {
+        if (!c->handshaked || c->dead || c == except) continue;
+        if (c->vw != vw) continue;
+        if (send_frame(c, payload, n) < 0) c->dead = 1;
+    }
+}
+
+/* Paket 0x25: beritahu pemain interior & vw-nya saat ini. */
+void send_int_vw(Client *c) {
+    uint8_t b[6];
+    b[0] = P_INT_VW;
+    b[1] = c->interior;
+    b[2] = (uint8_t)(c->vw & 0xFF);
+    b[3] = (uint8_t)((c->vw >> 8) & 0xFF);
+    b[4] = (uint8_t)((c->vw >> 16) & 0xFF);
+    b[5] = (uint8_t)((c->vw >> 24) & 0xFF);
+    if (send_frame(c, b, 6) < 0) c->dead = 1;
+}
+
+/* Ganti interior & vw pemain + resync streaming. Dipakai API Lua.
+ * - Event Lua onPlayerInteriorChange / onPlayerVirtualWorldChange.
+ * - Pemain lain yang tak terlihat lagi -> P_LEAVE; yang baru terlihat -> P_JOIN.
+ * - Kendaraan: resync bila vw berubah; bila pemain menyopir, kendaraan ikut
+ *   pindah vw bersamanya. */
+void player_set_world(Client *c, int interior, uint32_t vw) {
+    if (!c || !c->handshaked) return;
+    if (interior < 0) interior = 0;
+    if (interior > 255) interior = 255;
+    uint8_t old_int = c->interior;
+    uint32_t old_vw = c->vw;
+    if (old_int == (uint8_t)interior && old_vw == vw) return;
+    c->interior = (uint8_t)interior;
+    c->vw = vw;
+    send_int_vw(c);
+    if (old_int != c->interior)
+        lua_on_player_interior_change(c->id, old_int, c->interior);
+    if (old_vw != vw)
+        lua_on_player_vw_change(c->id, old_vw, vw);
+    /* Resync streaming dua arah: c hilang/muncul di pandangan pemain lain,
+     * dan sebaliknya. */
+    for (Client *o = g_clients; o; o = o->next) {
+        if (!o->handshaked || o->dead || o == c) continue;
+        int was = (old_vw == o->vw && old_int == o->interior);
+        int now = client_visible(c, o);
+        if (was == now) continue;
+        if (!now) {
+            /* c tak terlihat lagi oleh o, dan sebaliknya */
+            uint8_t bl[4];
+            bl[0] = P_LEAVE;
+            put_u16(bl + 1, (uint16_t)c->id);
+            bl[3] = LEAVE_QUIT;
+            if (send_frame(o, bl, 4) < 0) o->dead = 1;
+            put_u16(bl + 1, (uint16_t)o->id);
+            if (send_frame(c, bl, 4) < 0) c->dead = 1;
+        } else {
+            /* c & o baru saling terlihat */
+            uint8_t bj[64];
+            size_t nl = strlen(c->name);
+            if (nl > 24) nl = 24;
+            bj[0] = P_JOIN;
+            put_u16(bj + 1, (uint16_t)c->id);
+            bj[3] = (uint8_t)nl;
+            memcpy(bj + 4, c->name, nl);
+            if (send_frame(o, bj, 4 + nl) < 0) o->dead = 1;
+            nl = strlen(o->name);
+            if (nl > 24) nl = 24;
+            bj[0] = P_JOIN;
+            put_u16(bj + 1, (uint16_t)o->id);
+            bj[3] = (uint8_t)nl;
+            memcpy(bj + 4, o->name, nl);
+            if (send_frame(c, bj, 4 + nl) < 0) c->dead = 1;
+        }
+    }
+    /* Resync kendaraan bila vw berubah: despawn vw lama & spawn vw baru dulu,
+     * lalu bila pemain menyopir, kendaraan ikut pindah vw bersamanya. */
+    if (old_vw != vw) {
+        vehicle_sync_world(c, old_vw);
+        if (c->vehicle_id >= 0) {
+            Vehicle *v = vehicle_by_id(c->vehicle_id);
+            if (v && v->driver == c->id) vehicle_set_vw(v->id, vw);
+        }
+    }
+    log_msg("[vw] %s (id %d): interior %d->%d, vw %u->%u",
+            c->name, c->id, old_int, c->interior, old_vw, vw);
+}
+
 /* ---------------- Chat ---------------- */
 void chat_broadcast(uint16_t pid, uint8_t kind, const char *msg) {
     uint8_t b[512];
@@ -290,6 +402,22 @@ void chat_to(Client *c, uint16_t pid, uint8_t kind, const char *msg) {
     if (send_frame(c, b, 5 + ml) < 0) c->dead = 1;
 }
 
+/* Chat ala SA-MP: chat pemain (/me, chat biasa) hanya sampai ke pemain yang
+ * se-vw & se-interior dengan `ref`. Pengumuman server (join/kick/dsb) tetap
+ * global via chat_broadcast. */
+void chat_broadcast_scoped(Client *ref, uint16_t pid, uint8_t kind, const char *msg) {
+    uint8_t b[512];
+    size_t ml = strlen(msg);
+    if (ml > 200) ml = 200;
+    b[0] = P_CHAT_MSG;
+    put_u16(b + 1, pid);
+    b[3] = kind;
+    b[4] = (uint8_t)ml;
+    memcpy(b + 5, msg, ml);
+    broadcast_scoped(b, 5 + ml, ref, NULL);
+    log_msg("[chat] %s", msg);
+}
+
 void server_say(const char *msg) {
     char full[256];
     snprintf(full, sizeof(full), "*** %s", msg);
@@ -304,6 +432,7 @@ static void send_player_list(Client *c) {
     size_t off = 2;
     for (Client *o = g_clients; o; o = o->next) {
         if (!o->handshaked || o == c || o->dead) continue;
+        if (!client_visible(c, o)) continue; /* hanya yang se-vw & se-interior */
         size_t nl = strlen(o->name);
         if (off + 3 + nl > sizeof(b)) break;
         put_u16(b + off, (uint16_t)o->id); off += 2;
@@ -336,12 +465,12 @@ static void do_join(Client *c) {
     /* stream kendaraan yang sudah ada ke pemain baru */
     vehicle_sync_join(c);
 
-    /* beritahu yang lain */
+    /* beritahu yang lain (hanya yang se-vw & se-interior) */
     b[0] = P_JOIN;
     put_u16(b + 1, (uint16_t)c->id);
     b[3] = (uint8_t)nl;
     memcpy(b + 4, c->name, nl);
-    broadcast(b, 4 + nl, c);
+    broadcast_scoped(b, 4 + nl, c, c);
 
     char msg[128];
     snprintf(msg, sizeof(msg), "*** %s (id %d) bergabung.", c->name, c->id);
@@ -358,7 +487,7 @@ static void do_leave(Client *c, int reason) {
     b[0] = P_LEAVE;
     put_u16(b + 1, (uint16_t)c->id);
     b[3] = (uint8_t)reason;
-    broadcast(b, 4, c);
+    broadcast_scoped(b, 4, c, c);
     const char *rs = reason == LEAVE_KICK ? "di-kick" : reason == LEAVE_TIMEOUT ? "timeout" : "keluar";
     char msg[128];
     snprintf(msg, sizeof(msg), "*** %s (id %d) %s.", c->name, c->id, rs);
@@ -437,6 +566,8 @@ static void handle_hello(Client *c, const uint8_t *p, size_t n) {
     c->id = id;
     strcpy(c->name, name);
     c->handshaked = 1;
+    c->interior = 0;
+    c->vw = 0;
     c->last_activity = now_ms();
     do_join(c);
 }
@@ -456,7 +587,7 @@ static void handle_pos(Client *c, const uint8_t *p, size_t n) {
     b[0] = P_PPOS;
     put_u16(b + 1, (uint16_t)c->id);
     memcpy(b + 3, p, 19);
-    broadcast(b, 22, c);
+    broadcast_scoped(b, 22, c, c); /* hanya ke yang se-vw & se-interior */
 }
 
 static void handle_chat_cmd(Client *c, const char *msg);
@@ -487,7 +618,7 @@ static void handle_chat(Client *c, const uint8_t *p, size_t n) {
 
     char full[256];
     snprintf(full, sizeof(full), "%s (%d): %s", c->name, c->id, msg);
-    chat_broadcast((uint16_t)c->id, KIND_CHAT, full);
+    chat_broadcast_scoped(c, (uint16_t)c->id, KIND_CHAT, full);
 }
 
 static void handle_chat_cmd(Client *c, const char *msg) {
@@ -526,7 +657,7 @@ static void handle_chat_cmd(Client *c, const char *msg) {
         if (!*arg) { chat_to(c, CHAT_SERVER, KIND_INFO, "*** Pakai: /me <aksi>"); return; }
         char full[256];
         snprintf(full, sizeof(full), "* %s %s", c->name, arg);
-        chat_broadcast((uint16_t)c->id, KIND_ME, full);
+        chat_broadcast_scoped(c, (uint16_t)c->id, KIND_ME, full);
         return;
     }
     if (!strcmp(cmd, "pm")) {

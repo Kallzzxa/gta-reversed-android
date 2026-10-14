@@ -76,6 +76,8 @@ static int l_romp_get_players(lua_State *Ls) {
         lua_newtable(Ls);
         lua_pushinteger(Ls, c->id); lua_setfield(Ls, -2, "id");
         lua_pushstring(Ls, c->name); lua_setfield(Ls, -2, "name");
+        lua_pushinteger(Ls, c->interior); lua_setfield(Ls, -2, "interior");
+        lua_pushinteger(Ls, (lua_Integer)c->vw); lua_setfield(Ls, -2, "vw");
         lua_rawseti(Ls, -2, i++);
     }
     return 1;
@@ -569,6 +571,63 @@ static int l_romp_weapon_slot(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- Interior & virtual world ala SA-MP ---------------- */
+
+static int l_romp_get_player_interior(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(id);
+    if (!c || !c->handshaked) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, c->interior);
+    return 1;
+}
+
+static int l_romp_set_player_interior(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    int interior = (int)luaL_checkinteger(Ls, 2);
+    Client *c = client_by_id(id);
+    if (!c || !c->handshaked) { lua_pushboolean(Ls, 0); return 1; }
+    player_set_world(c, interior, c->vw);
+    lua_pushboolean(Ls, 1);
+    return 1;
+}
+
+static int l_romp_get_player_vw(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(id);
+    if (!c || !c->handshaked) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, (lua_Integer)c->vw);
+    return 1;
+}
+
+static int l_romp_set_player_vw(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    lua_Integer vw = luaL_checkinteger(Ls, 2);
+    Client *c = client_by_id(id);
+    if (!c || !c->handshaked) { lua_pushboolean(Ls, 0); return 1; }
+    if (vw < 0) vw = 0;
+    if (vw > 0x7FFFFFFF) vw = 0x7FFFFFFF;
+    player_set_world(c, c->interior, (uint32_t)vw);
+    lua_pushboolean(Ls, 1);
+    return 1;
+}
+
+static int l_romp_get_vehicle_vw(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    Vehicle *v = vehicle_by_id(id);
+    if (!v) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, (lua_Integer)v->vw);
+    return 1;
+}
+
+static int l_romp_set_vehicle_vw(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    lua_Integer vw = luaL_checkinteger(Ls, 2);
+    if (vw < 0) vw = 0;
+    if (vw > 0x7FFFFFFF) vw = 0x7FFFFFFF;
+    lua_pushboolean(Ls, vehicle_set_vw(id, (uint32_t)vw));
+    return 1;
+}
+
 /* ---------------- Init ---------------- */
 
 /* Dipakai lua_init sebelum definisinya (di bawah). */
@@ -661,6 +720,13 @@ int lua_init(const char *script_path) {
     lua_pushcfunction(L, l_romp_get_player_weapon);  lua_setfield(L, -2, "getPlayerWeapon");
     lua_pushcfunction(L, l_romp_get_player_weapon_data); lua_setfield(L, -2, "getPlayerWeaponData");
     lua_pushcfunction(L, l_romp_weapon_slot);        lua_setfield(L, -2, "weaponSlot");
+    /* interior & virtual world ala SA-MP */
+    lua_pushcfunction(L, l_romp_get_player_interior); lua_setfield(L, -2, "getPlayerInterior");
+    lua_pushcfunction(L, l_romp_set_player_interior); lua_setfield(L, -2, "setPlayerInterior");
+    lua_pushcfunction(L, l_romp_get_player_vw); lua_setfield(L, -2, "getPlayerVirtualWorld");
+    lua_pushcfunction(L, l_romp_set_player_vw); lua_setfield(L, -2, "setPlayerVirtualWorld");
+    lua_pushcfunction(L, l_romp_get_vehicle_vw); lua_setfield(L, -2, "getVehicleVirtualWorld");
+    lua_pushcfunction(L, l_romp_set_vehicle_vw); lua_setfield(L, -2, "setVehicleVirtualWorld");
     /* konstanta hittype tembakan ala SA-MP */
     lua_pushinteger(L, 0); lua_setfield(L, -2, "WPN_HIT_NONE");
     lua_pushinteger(L, 1); lua_setfield(L, -2, "WPN_HIT_PLAYER");
@@ -918,6 +984,34 @@ void lua_on_player_weapon_shot(int pid, int weaponid, int hittype, int hitid,
                                float x, float y, float z) {
     EvShot e = { pid, weaponid, hittype, hitid, x, y, z };
     call_event("onPlayerWeaponShot", push_shot, &e);
+}
+
+typedef struct { int pid; int oldi; int newi; } EvInt;
+static int push_int(lua_State *Ls, void *ud) {
+    EvInt *e = (EvInt*)ud;
+    lua_pushinteger(Ls, e->pid);
+    lua_pushinteger(Ls, e->oldi);
+    lua_pushinteger(Ls, e->newi);
+    return 3;
+}
+
+void lua_on_player_interior_change(int pid, int old_int, int new_int) {
+    EvInt e = { pid, old_int, new_int };
+    call_event("onPlayerInteriorChange", push_int, &e);
+}
+
+typedef struct { int pid; uint32_t oldv; uint32_t newv; } EvVw;
+static int push_vw(lua_State *Ls, void *ud) {
+    EvVw *e = (EvVw*)ud;
+    lua_pushinteger(Ls, e->pid);
+    lua_pushinteger(Ls, (lua_Integer)e->oldv);
+    lua_pushinteger(Ls, (lua_Integer)e->newv);
+    return 3;
+}
+
+void lua_on_player_vw_change(int pid, uint32_t old_vw, uint32_t new_vw) {
+    EvVw e = { pid, old_vw, new_vw };
+    call_event("onPlayerVirtualWorldChange", push_vw, &e);
 }
 
 /* Dispatch NUI callback dari client ke handler Lua terdaftar. */int lua_on_nui_callback(int id, const char *name, const char *data) {

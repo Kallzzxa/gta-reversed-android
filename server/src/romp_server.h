@@ -42,6 +42,7 @@ typedef int SOCKET;
 #define P_JOIN        0x22
 #define P_LEAVE       0x23
 #define P_LIST        0x24
+#define P_INT_VW      0x25  /* server -> client: interior(u8) + vw(u32 LE) pemain */
 #define P_PING        0x30
 #define P_PONG        0x31
 #define P_NUI_MSG     0x40
@@ -128,6 +129,9 @@ typedef struct Client {
     int    chat_idx;
     int    dead;               /* ditandai untuk disconnect */
     int    kick_reason;
+    /* Interior & virtual world ala SA-MP (default 0/0). */
+    uint8_t  interior;
+    uint32_t vw;
     /* Kendaraan yang ditumpangi (-1 = tidak di kendaraan; seat 0 = sopir). */
     int    vehicle_id;
     int    vehicle_seat;
@@ -147,12 +151,26 @@ int client_count(void);
 Client *client_by_id(int id);
 Client *client_by_name(const char *name);
 void chat_broadcast(uint16_t pid, uint8_t kind, const char *msg);
+void chat_broadcast_scoped(Client *ref, uint16_t pid, uint8_t kind, const char *msg);
 void chat_to(Client *c, uint16_t pid, uint8_t kind, const char *msg);
 void server_say(const char *msg);
 /* Kirim frame mentah ke client (dipakai scripting layer). 0 = sukses. */
 int client_send_frame(Client *c, const uint8_t *payload, size_t n);
 /* Broadcast frame ke semua client yang handshake (kecuali `except`). */
 void broadcast_frame(const uint8_t *payload, size_t n, Client *except);
+/* Broadcast frame hanya ke client yang "melihat" `ref` (vw & interior sama).
+ * `except` dikecualikan. Dipakai relay posisi/chat/tembakan ala SA-MP. */
+void broadcast_frame_ref(const uint8_t *payload, size_t n, Client *ref, Client *except);
+/* Broadcast frame hanya ke client dengan virtual world tertentu
+ * (interior diabaikan). Dipakai paket kendaraan ala SA-MP. */
+void broadcast_frame_vw(const uint8_t *payload, size_t n, Client *except, uint32_t vw);
+/* 1 = a dan b saling terlihat (vw & interior sama), 0 = tidak. */
+int client_visible(const Client *a, const Client *b);
+/* Kirim paket 0x25 (interior+vw) ke pemain. */
+void send_int_vw(Client *c);
+/* Ganti interior & vw pemain; lakukan resync streaming (P_JOIN/P_LEAVE/
+ * kendaraan) terhadap pemain lain. Dipakai Lua & test. */
+void player_set_world(Client *c, int interior, uint32_t vw);
 /* Kick pemain + umumkan. Dipakai console & Lua. */
 void server_kick(int id, const char *reason);
 uint64_t now_ms(void);

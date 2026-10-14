@@ -41,7 +41,12 @@ static int alloc_vid(void) {
     return -1;
 }
 
-/* ---------------- Broadcast paket kendaraan ---------------- */
+/* ---------------- Broadcast paket kendaraan (vw-scoped ala SA-MP) ----------------
+ * Kendaraan punya virtual world sendiri (default 0). Spawn/despawn/seat
+ * hanya dikirim ke pemain yang vw-nya sama dengan kendaraan; relay posisi
+ * (VEH_SYNC) hanya ke pemain yang terlihat oleh sopir (vw & interior sama).
+ * Update driverless (teleport/respawn dari server) ke semua pemain di vw
+ * kendaraan. */
 
 /* 0x13 VEH_SYNC: u16 driverid | u16 vid | f32 x,y,z | f32 heading | u16 health.
  * driverid 0xFFFF = update server-side (teleport/respawn), bukan dari sopir. */
@@ -55,13 +60,16 @@ static void bcast_veh_sync(Vehicle *v, int driverid) {
     vput_f32(b + 13, v->z);
     vput_f32(b + 17, v->heading);
     vput_u16(b + 21, v->health);
-    broadcast_frame(b, 23, NULL);
+    if (driverid >= 0) {
+        /* relay dari sopir: hanya yang terlihat oleh sopir */
+        broadcast_frame_ref(b, 23, client_by_id(driverid), NULL);
+    } else {
+        broadcast_frame_vw(b, 23, NULL, v->vw);
+    }
 }
 
-/* 0x14 VEH_SPAWN: u16 vid | u16 model | f32 x,y,z | f32 angle |
- *                 u8 c1 | u8 c2 | u16 health | u16 driverid (0xFFFF = kosong) */
-static void bcast_veh_spawn(Vehicle *v) {
-    uint8_t b[27];
+/* Isi frame 0x14 VEH_SPAWN untuk satu kendaraan. */
+static size_t veh_spawn_frame(Vehicle *v, uint8_t *b) {
     b[0] = P_VEH_SPAWN;
     vput_u16(b + 1, (uint16_t)v->id);
     vput_u16(b + 3, v->model);
@@ -73,25 +81,48 @@ static void bcast_veh_spawn(Vehicle *v) {
     b[22] = v->c2;
     vput_u16(b + 23, v->health);
     vput_u16(b + 25, (uint16_t)(v->driver < 0 ? 0xFFFF : v->driver));
-    broadcast_frame(b, 27, NULL);
+    return 27;
+}
+
+/* 0x14 VEH_SPAWN: u16 vid | u16 model | f32 x,y,z | f32 angle |
+ *                 u8 c1 | u8 c2 | u16 health | u16 driverid (0xFFFF = kosong) */
+static void bcast_veh_spawn(Vehicle *v) {
+    uint8_t b[27];
+    broadcast_frame_vw(b, veh_spawn_frame(v, b), NULL, v->vw);
 }
 
 /* 0x15 VEH_DESPAWN: u16 vid */
-static void bcast_veh_despawn(int vid) {
+static void bcast_veh_despawn(int vid, uint32_t vw) {
     uint8_t b[3];
     b[0] = P_VEH_DESPAWN;
     vput_u16(b + 1, (uint16_t)vid);
-    broadcast_frame(b, 3, NULL);
+    broadcast_frame_vw(b, 3, NULL, vw);
 }
 
 /* 0x16 VEH_SEAT: u16 vid | u8 seat | u16 pid (0xFFFF = kosong) */
-static void bcast_veh_seat(int vid, int seat, int pid) {
+static void bcast_veh_seat(Vehicle *v, int seat, int pid) {
     uint8_t b[6];
     b[0] = P_VEH_SEAT;
-    vput_u16(b + 1, (uint16_t)vid);
+    vput_u16(b + 1, (uint16_t)v->id);
     b[3] = (uint8_t)seat;
     vput_u16(b + 4, (uint16_t)(pid < 0 ? 0xFFFF : pid));
-    broadcast_frame(b, 6, NULL);
+    broadcast_frame_vw(b, 6, NULL, v->vw);
+}
+
+/* Kirim 0x14 (+ 0x16 untuk kursi terisi) satu kendaraan ke satu client. */
+static void send_veh_to(Client *c, Vehicle *v) {
+    uint8_t b[27];
+    client_send_frame(c, b, veh_spawn_frame(v, b));
+    for (int s = 0; s < VEH_SEATS; s++) {
+        int occ = vehicle_occupant(v->id, s);
+        if (occ < 0) continue;
+        uint8_t sb[6];
+        sb[0] = P_VEH_SEAT;
+        vput_u16(sb + 1, (uint16_t)v->id);
+        sb[3] = (uint8_t)s;
+        vput_u16(sb + 4, (uint16_t)occ);
+        client_send_frame(c, sb, 6);
+    }
 }
 
 /* ---------------- API inti ---------------- */
@@ -131,7 +162,7 @@ static void eject_all(Vehicle *v, int fire_exit) {
         if (pids[s] < 0) continue;
         Client *c = client_by_id(pids[s]);
         if (c) { c->vehicle_id = -1; c->vehicle_seat = -1; }
-        bcast_veh_seat(v->id, s, -1);
+        bcast_veh_seat(v, s, -1);
         if (fire_exit) lua_on_player_exit_vehicle(pids[s], v->id);
     }
 }
@@ -142,7 +173,7 @@ int vehicle_destroy(int id) {
         if ((*pp)->id == id) {
             Vehicle *v = *pp;
             eject_all(v, 1);
-            bcast_veh_despawn(id);
+            bcast_veh_despawn(id, v->vw);
             *pp = v->next;
             free(v);
             log_msg("[veh] dihancurkan id %d", id);
@@ -242,7 +273,7 @@ int vehicle_put_player(int pid, int vid, int seat) {
     else v->pass[seat - 1] = pid;
     c->vehicle_id = vid;
     c->vehicle_seat = seat;
-    bcast_veh_seat(vid, seat, pid);
+    bcast_veh_seat(v, seat, pid);
     lua_on_player_enter_vehicle(pid, vid, seat);
     return 1;
 }
@@ -259,7 +290,7 @@ static int remove_player_impl(int pid, int fire_exit) {
         if (seat == 0 && v->driver == pid) v->driver = -1;
         else if (seat >= 1 && seat < VEH_SEATS && v->pass[seat - 1] == pid)
             v->pass[seat - 1] = -1;
-        bcast_veh_seat(vid, seat, -1);
+        bcast_veh_seat(v, seat, -1);
     }
     if (fire_exit) lua_on_player_exit_vehicle(pid, vid);
     return 1;
@@ -319,33 +350,48 @@ void vehicle_on_packet(Client *c, const uint8_t *p, size_t n) {
     bcast_veh_sync(v, c->id);
 }
 
+/* Stream kendaraan ke pemain yang baru join / pindah vw:
+ * hanya kendaraan yang vw-nya sama dengan pemain. */
 void vehicle_sync_join(Client *c) {
     for (Vehicle *v = g_vehicles; v; v = v->next) {
         if (v->destroyed) continue;
-        uint8_t b[27];
-        b[0] = P_VEH_SPAWN;
-        vput_u16(b + 1, (uint16_t)v->id);
-        vput_u16(b + 3, v->model);
-        vput_f32(b + 5, v->x);
-        vput_f32(b + 9, v->y);
-        vput_f32(b + 13, v->z);
-        vput_f32(b + 17, v->sangle);
-        b[21] = v->c1;
-        b[22] = v->c2;
-        vput_u16(b + 23, v->health);
-        vput_u16(b + 25, (uint16_t)(v->driver < 0 ? 0xFFFF : v->driver));
-        client_send_frame(c, b, 27);
-        for (int s = 0; s < VEH_SEATS; s++) {
-            int occ = vehicle_occupant(v->id, s);
-            if (occ < 0) continue;
-            uint8_t sb[6];
-            sb[0] = P_VEH_SEAT;
-            vput_u16(sb + 1, (uint16_t)v->id);
-            sb[3] = (uint8_t)s;
-            vput_u16(sb + 4, (uint16_t)occ);
-            client_send_frame(c, sb, 6);
+        if (v->vw != c->vw) continue;
+        send_veh_to(c, v);
+    }
+}
+
+/* Resync kendaraan saat pemain pindah vw: despawn yang vw lama,
+ * spawn yang vw baru. */
+void vehicle_sync_world(Client *c, uint32_t old_vw) {
+    uint8_t d[3];
+    d[0] = P_VEH_DESPAWN;
+    for (Vehicle *v = g_vehicles; v; v = v->next) {
+        if (v->destroyed) continue;
+        if (v->vw == old_vw && old_vw != c->vw) {
+            vput_u16(d + 1, (uint16_t)v->id);
+            client_send_frame(c, d, 3);
         }
     }
+    vehicle_sync_join(c);
+}
+
+/* Pindahkan kendaraan ke virtual world lain ala SA-MP
+ * (SetVehicleVirtualWorld). Broadcast despawn ke viewer vw lama,
+ * spawn ke viewer vw baru. 1 = sukses. */
+int vehicle_set_vw(int id, uint32_t vw) {
+    Vehicle *v = vehicle_by_id(id);
+    if (!v) return 0;
+    if (v->vw == vw) return 1;
+    uint32_t old = v->vw;
+    bcast_veh_despawn(v->id, old);
+    v->vw = vw;
+    bcast_veh_spawn(v);
+    for (int s = 0; s < VEH_SEATS; s++) {
+        int occ = vehicle_occupant(v->id, s);
+        if (occ >= 0) bcast_veh_seat(v, s, occ);
+    }
+    log_msg("[veh] id %d pindah vw %u -> %u", id, old, vw);
+    return 1;
 }
 
 void vehicle_tick(uint64_t now) {

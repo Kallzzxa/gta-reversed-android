@@ -28,6 +28,7 @@ typedef struct Vehicle {
     int      driver;             /* player id sopir, -1 = kosong */
     int      pass[3];            /* player id penumpang seat 1..3, -1 = kosong */
     uint32_t respawn_ms;         /* 0 = tidak respawn otomatis */
+    uint32_t vw;                 /* virtual world ala SA-MP (default 0) */
     uint64_t dead_at;            /* now_ms() saat hancur */
     int      destroyed;          /* 1 = sedang hancur, menunggu respawn */
     uint64_t last_sync_ms;       /* rate limit paket VEH */
@@ -56,6 +57,9 @@ int vehicle_damage(int id, uint16_t amount, int killerid);
 /* Kembalikan ke posisi spawn + health penuh (penumpang tetap). */
 int vehicle_respawn(int id);
 int vehicle_set_colors(int id, uint8_t c1, uint8_t c2);
+/* Pindahkan kendaraan ke virtual world lain (SetVehicleVirtualWorld).
+ * Broadcast despawn ke vw lama + spawn ke vw baru. 1 = sukses. */
+int vehicle_set_vw(int id, uint32_t vw);
 
 /* ---- Penumpang ---- */
 /* Masukkan pemain ke kendaraan (seat 0..3). Broadcast 0x16 + event
@@ -76,7 +80,11 @@ int vehicle_occupant(int vid, int seat);
 /* ---- Sync jaringan ---- */
 /* Proses paket 0x12 VEH dari client (harus sopir). Relay 0x13. */
 void vehicle_on_packet(Client *c, const uint8_t *p, size_t n);
-/* Kirim 0x14 (+ 0x16 untuk kursi terisi) semua kendaraan ke client baru. */
+/* Kirim 0x14 (+ 0x16 untuk kursi terisi) semua kendaraan ke client baru
+ * (hanya yang vw-nya sama dengan pemain). */
 void vehicle_sync_join(Client *c);
+/* Resync kendaraan saat pemain pindah vw (dipakai player_set_world):
+ * despawn kendaraan vw lama + spawn kendaraan vw baru ke client. */
+void vehicle_sync_world(Client *c, uint32_t old_vw);
 /* Dipanggil tiap 1 detik dari main loop: respawn kendaraan hancur. */
 void vehicle_tick(uint64_t now);

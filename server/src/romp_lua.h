@@ -8,6 +8,7 @@
 #pragma once
 
 #include <stddef.h> /* size_t untuk lua_on_player_request */
+#include <stdint.h> /* uint32_t untuk event virtual world */
 
 /* Muat & jalankan file gamemode. 0 = sukses, -1 = gagal (server tetap jalan tanpa Lua). */
 int  lua_init(const char *script_path);
@@ -37,5 +38,10 @@ void lua_on_vehicle_spawn(int vid);
  * hitid, x, y, z). */
 void lua_on_player_weapon_shot(int pid, int weaponid, int hittype, int hitid,
                                float x, float y, float z);
+/* Event interior & virtual world ala SA-MP (tidak ada default C):
+ * onPlayerInteriorChange(pid, old, new),
+ * onPlayerVirtualWorldChange(pid, old, new). */
+void lua_on_player_interior_change(int pid, int old_int, int new_int);
+void lua_on_player_vw_change(int pid, uint32_t old_vw, uint32_t new_vw);
 /* Dipanggil tiap 1 detik. */
 void lua_on_tick(void);

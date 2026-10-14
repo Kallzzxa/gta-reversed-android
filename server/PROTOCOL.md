@@ -196,6 +196,8 @@ u8  reason  // 0 = quit, 1 = kick, 2 = timeout
 
 ### 0x24 PLAYER_LIST
 Daftar pemain yang sedang online, dikirim tepat setelah WELCOME.
+Hanya berisi pemain yang terlihat oleh penerima (vw & interior sama,
+lihat "Interior & Virtual World" di bawah).
 
 ```
 u8 count
@@ -204,6 +206,39 @@ u16 playerid
 u8  namelen
 char name[namelen]
 ```
+
+### 0x25 INT_VW
+Dikirim server ke pemain setiap kali interior/virtual world-nya berubah
+(via `romp.setPlayerInterior` / `romp.setPlayerVirtualWorld`). Client pakai
+ini untuk tahu dunia mana yang sedang ia huni.
+
+```
+u8  interior
+u32 virtual_world  // little-endian
+```
+
+## Interior & Virtual World (ala SA-MP)
+
+Setiap pemain punya `interior` (0-255) dan `virtual world` (0-2^31-1),
+default 0/0. Dua pemain saling **terlihat** hanya bila vw DAN interior
+mereka sama. Yang di-scope:
+
+- `0x11 PLAYER_POS`, chat pemain (`0x20`/`KIND_CHAT`, `/me`), `0x18 WPN_SYNC`
+- `0x22 PLAYER_JOIN` / `0x23 PLAYER_LEAVE` (entity)
+- `0x24 PLAYER_LIST` (hanya yang terlihat)
+
+Pengumuman server (`romp.sendChatToAll`, join/kick) tetap global.
+Saat pemain pindah vw/interior, server otomatis mengirim `0x25` ke pemain
+tersebut plus `0x23`/`0x22` dua arah ke pemain yang (tak) terlihat lagi,
+dan me-resync kendaraan (lihat bawah). Event Lua:
+`onPlayerInteriorChange(pid, old, new)`,
+`onPlayerVirtualWorldChange(pid, old, new)`.
+
+Kendaraan juga punya virtual world (`romp.setVehicleVirtualWorld`,
+default 0). `0x14 VEH_SPAWN` / `0x15 VEH_DESPAWN` / `0x16 VEH_SEAT` hanya
+dikirim ke pemain yang vw-nya sama dengan kendaraan; `0x13 VEH_SYNC`
+hanya ke pemain yang terlihat oleh sopir. Bila sopir pindah vw,
+kendaraannya ikut pindah.
 
 ### 0x17 WPN_SHOT (Client -> Server)
 Event tembakan dari pemain. Server bersifat otoritatif untuk inventory:

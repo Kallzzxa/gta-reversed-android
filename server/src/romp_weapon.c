@@ -130,7 +130,8 @@ void weapon_on_packet(Client *c, const uint8_t *p, size_t n) {
     wput_f32(b + 8, x);
     wput_f32(b + 12, y);
     wput_f32(b + 16, z);
-    broadcast_frame(b, sizeof(b), c);
+    /* hanya yang terlihat oleh penembak (se-vw & se-interior) */
+    broadcast_frame_ref(b, sizeof(b), c, c);
 
     lua_on_player_weapon_shot(c->id, weaponid, hittype, hitid, x, y, z);
 }
