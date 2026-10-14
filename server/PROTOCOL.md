@@ -252,7 +252,7 @@ via UDP (info live + ping) -> tampilkan daftar -> user pilih -> connect.
 
 ## LAN Discovery (tanpa master/VPS)
 
-Server yang `lan_discovery 1` (default) broadcast beacon UDP tiap 5 detik
+Server yang `lan_discovery 1` (default) broadcast beacon UDP tiap 3 detik
 ke `255.255.255.255:7779` supaya client di jaringan lokal yang sama
 otomatis menemukannya — murni server -> client, tanpa perantara.
 

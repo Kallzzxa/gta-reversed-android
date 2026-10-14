@@ -835,8 +835,7 @@ static void beacon_send(void) {
     size_t o = 0;
     memcpy(out, QUERY_MAGIC, QUERY_MAGIC_LEN); o += QUERY_MAGIC_LEN;
     out[o++] = LAN_BEACON;
-    put_u16(out + o, (uint16_t)g_cfg.port); o += 2;
-    size_t hl = strlen(g_cfg.hostname), ml = strlen(g_cfg.motd);
+    put_u16(out + o, (uint16_t)g_cfg.port); o += 2;    size_t hl = strlen(g_cfg.hostname), ml = strlen(g_cfg.motd);
     if (hl > 63) hl = 63; if (ml > 200) ml = 200;
     out[o++] = (uint8_t)hl; memcpy(out + o, g_cfg.hostname, hl); o += hl;
     put_u16(out + o, (uint16_t)client_count()); o += 2;
@@ -984,7 +983,8 @@ int main(int argc, char **argv) {
         log_msg(" Announce : ke master %s:%d tiap 60 dtk",
                 g_cfg.master_host, g_cfg.master_port);
     if (g_cfg.query) log_msg(" UDP query: aktif (server browser)");
-    if (g_cfg.lan_discovery) log_msg(" LAN beacon: broadcast tiap 5 dtk (port %d)", LAN_BEACON_PORT);
+    if (g_cfg.lan_discovery) log_msg(" LAN beacon: broadcast tiap %d dtk (port %d)",
+                                     LAN_BEACON_MS / 1000, LAN_BEACON_PORT);
     log_msg(" Ketik 'help' untuk command console.");
     log_msg(" Ketik 'help' untuk command console.");
     log_msg("===========================================");
@@ -1047,8 +1047,8 @@ int main(int argc, char **argv) {
             lua_on_tick();
         }
 
-        /* beacon LAN tiap 5 detik */
-        if (g_cfg.lan_discovery && tnow - last_beacon_ms >= 5000) {
+        /* beacon LAN tiap LAN_BEACON_MS */
+        if (g_cfg.lan_discovery && tnow - last_beacon_ms >= LAN_BEACON_MS) {
             last_beacon_ms = tnow;
             beacon_send();
         }

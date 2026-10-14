@@ -56,9 +56,10 @@ typedef int SOCKET;
 #define Q_PLAYERS       0x03  /* client -> server: minta daftar pemain */
 #define Q_PLAYERS_REPLY 0x04  /* server -> client: daftar pemain */
 
-/* ---- LAN discovery: server broadcast beacon tiap 5 detik ---- */
+/* ---- LAN discovery: server broadcast beacon tiap 3 detik ---- */
 #define LAN_BEACON_PORT 7779  /* port UDP tetap untuk beacon & listen client */
 #define LAN_BEACON      0x11  /* server -> broadcast: info + gameport */
+#define LAN_BEACON_MS   3000  /* interval broadcast */
 /* format: "ROMP" 0x11 gameport(u16) hostnamelen(u8) hostname
  *         players(u16) maxplayers(u16) has_password(u8) motdlen(u8) motd */
 
@@ -90,7 +91,7 @@ typedef struct {
     int  announce;        /* 1 = announce periodik ke master server */
     char master_host[128];/* host master server (kosong = tidak announce) */
     int  master_port;     /* port master server (default 7778) */
-    int  lan_discovery;   /* 1 = broadcast beacon LAN tiap 5 dtk (default 1) */
+    int  lan_discovery;   /* 1 = broadcast beacon LAN tiap 3 dtk (default 1) */
 } Config;
 
 extern Config g_cfg;

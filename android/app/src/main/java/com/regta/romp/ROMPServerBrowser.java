@@ -104,7 +104,7 @@ public class ROMPServerBrowser {
     public void scanLan() {
         new Thread(() -> {
             try {
-                String json = nativeListenLan(3000);
+                String json = nativeListenLan(6000);
                 pushToPage(json);
             } catch (Exception ex) {
                 pushToPage("[]");
