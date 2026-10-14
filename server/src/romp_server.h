@@ -141,6 +141,11 @@ typedef struct Client {
     int    chat_idx;
     int    dead;               /* ditandai untuk disconnect */
     int    kick_reason;
+    /* NPC/bot ala SA-MP (ConnectNPC): koneksi virtual tanpa socket.
+     * 1 = NPC: tak pernah di-pump, tak kena timeout, tak menerima paket
+     * (send_frame jadi no-op), tapi muncul di daftar pemain, chat, dan
+     * relay posisi seperti pemain biasa. */
+    int    is_npc;
     /* Interior & virtual world ala SA-MP (default 0/0). */
     uint8_t  interior;
     uint32_t vw;
@@ -186,6 +191,17 @@ void player_set_world(Client *c, int interior, uint32_t vw);
 /* Kick pemain + umumkan. Dipakai console & Lua. */
 void server_kick(int id, const char *reason);
 uint64_t now_ms(void);
+/* ---------------- NPC/bot ala SA-MP (ConnectNPC) ----------------
+ * Koneksi virtual untuk testing & populasi server. NPC menempati slot
+ * pemain (client_count), muncul di P_LIST/daftar pemain/query, bisa chat
+ * dan gerak via Lua, tapi tidak punya socket: tak menerima paket apa pun
+ * dan tak pernah timeout. Event Lua onPlayerJoin/Leave/Chat ikut menyala
+ * untuk NPC; gamemode membedakan via romp.isNPC(id). */
+int  npc_connect(const char *name);   /* return id, -1 = gagal */
+void npc_disconnect(int id, int reason);
+int  npc_set_pos(int id, float x, float y, float z); /* broadcast 0x11 */
+int  npc_send_chat(int id, const char *text);
+int  npc_count(void);
 /* Daftar IP yang di-ban (in-memory). Dipakai Lua (banIP/unbanIP/isIPBanned). */
 void ban_add(const char *ip);
 void ban_remove(const char *ip);

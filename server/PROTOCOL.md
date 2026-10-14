@@ -185,7 +185,13 @@ char msg[msglen]  // sudah diformat server, mis. "Andi (3): halo"
 u16 playerid
 u8  namelen
 char name[namelen]
+u8  flags   // bit0 = 1 kalau pemain ini NPC/bot (lihat "NPC/bot ala SA-MP")
 ```
+
+> Client lama yang parse nama pakai `namelen` boleh mengabaikan byte
+> tambahan ini — format lama tetap kompatibel.
+
+### 0x23 PLAYER_LEAVE
 
 ### 0x23 PLAYER_LEAVE
 
@@ -606,6 +612,64 @@ char out[outlen]  // output teks command, baris dipisah '\n'
 Anti brute-force: maks 2 request/detik per IP (lebihnya diabaikan diam);
 5x password salah beruntun = IP diblokir 60 detik. Setiap command yang
 dieksekusi dicatat di log server (`[rcon] <ip>: <command>`).
+
+## NPC/bot ala SA-MP (ConnectNPC)
+
+Koneksi virtual untuk testing & populasi server — mirip `ConnectNPC` di
+SA-MP. NPC **tidak punya socket TCP**: tak mengirim/menerima paket apa pun,
+tak kena timeout, tak di-pump loop select, tapi menempati slot pemain
+(`client_count`) dan muncul di semua tempat seperti pemain biasa:
+- `0x24 PLAYER_LIST` & `0x03/0x04` UDP query (dihitung sebagai pemain)
+- `0x22 PLAYER_JOIN` dengan `flags` bit0 = 1 (client bisa tampilkan ikon
+  "[NPC]" / warna berbeda)
+- `0x23 PLAYER_LEAVE` saat disconnect; chat pemain (NPC bisa chat via
+  gamemode); `/players` di console menandai `[NPC]`
+
+Posisi NPC di-relay seperti pemain biasa lewat `0x11 PLAYER_POS`
+(digagas gamemode, mis. tiap detik), jadi NPC bisa "berjalan" di dunia.
+NPC ikut aturan visibility vw & interior: relay & JOIN/LEAVE hanya ke
+pemain yang se-vw & se-interior.
+
+### API Lua
+
+```
+romp.connectNPC(name)            -- -> id | nil, err (validasi nick ala SA-MP,
+                                 --    nama tak boleh sudah dipakai, slot penuh = gagal)
+romp.disconnectNPC(id[, reason]) -- -> bool; reason: 0=quit, 1=kick, 2=timeout
+romp.isNPC(id)                   -- -> bool
+romp.setNPCPos(id, x, y, z)      -- -> bool; relay 0x11 ke pemain yang melihat
+romp.npcSendChat(id, text)       -- -> bool; memicu onPlayerChat dulu ala
+                                 --    SA-MP (NPC chat memicu OnPlayerText)
+romp.getNPCs()                   -- -> tabel array berisi id NPC yang online
+romp.getPlayers()                -- tiap entri punya field boolean `isnpc`
+```
+
+Event Lua yang menyala untuk NPC sama seperti pemain biasa
+(`onPlayerJoin`, `onPlayerLeave`, `onPlayerChat`, `onPlayerCommand`,
+`onPlayerInteriorChange`, `onPlayerVirtualWorldChange`) — gamemode
+membedakan via `romp.isNPC(id)`.
+
+### Console & RCON
+
+```
+npc <nama>    - sambungkan NPC/bot (koneksi virtual)
+unnpc <id>    - putuskan NPC/bot
+players       - daftar online: "[id] nama [NPC]" + hitung NPC terpisah
+```
+
+Kick via console/RCON (`kick <id>`) juga menangani NPC dengan benar
+(mengarahkan ke `npc_disconnect`).
+
+### Batasan (v1)
+
+- NPC **belum bisa naik kendaraan** (`romp.putPlayerInVehicle` untuk NPC
+  selalu gagal) — direncanakan di iterasi berikut.
+- NPC tak bisa menerima NUI (0x40) — tak ada WebView di sisi bot.
+- Fix penting: loop select server melewatkan NPC saat `FD_SET` (sebelumnya
+  `FD_SET(-1)` pada sock NPC = undefined behavior / korupsi memori).
+
+Test: `~/workspace/romp/tests/test_npc.py`
+(+ `test_npc_gamemode.lua`) — 34 checks.
 
 ## Master Server (daftar server publik)
 

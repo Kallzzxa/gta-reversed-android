@@ -83,6 +83,7 @@ static int l_romp_get_players(lua_State *Ls) {
         lua_pushstring(Ls, c->name); lua_setfield(Ls, -2, "name");
         lua_pushinteger(Ls, c->interior); lua_setfield(Ls, -2, "interior");
         lua_pushinteger(Ls, (lua_Integer)c->vw); lua_setfield(Ls, -2, "vw");
+        lua_pushboolean(Ls, c->is_npc); lua_setfield(Ls, -2, "isnpc");
         lua_rawseti(Ls, -2, i++);
     }
     return 1;
@@ -664,6 +665,69 @@ static int l_romp_get_fs(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- API NPC/bot ala SA-MP (ConnectNPC) ----------------
+ * romp.connectNPC(name) -> npcid | nil, err
+ * romp.disconnectNPC(npcid[, reason]) -> bool
+ * romp.isNPC(playerid) -> bool
+ * romp.setNPCPos(npcid, x, y, z) -> bool (relay 0x11 ke pemain yang melihat)
+ * romp.npcSendChat(npcid, text) -> bool (picu onPlayerChat, lalu broadcast)
+ * romp.getNPCs() -> tabel array berisi id NPC yang online */
+static int l_romp_connect_npc(lua_State *Ls) {
+    const char *name = luaL_checkstring(Ls, 1);
+    int id = npc_connect(name);
+    if (id < 0) {
+        lua_pushnil(Ls);
+        lua_pushstring(Ls, "nama invalid / sudah dipakai / server penuh");
+        return 2;
+    }
+    lua_pushinteger(Ls, id);
+    return 1;
+}
+
+static int l_romp_disconnect_npc(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    int reason = (int)luaL_optinteger(Ls, 2, 0);
+    Client *c = client_by_id(id);
+    if (!c || !c->is_npc) { lua_pushboolean(Ls, 0); return 1; }
+    npc_disconnect(id, reason);
+    lua_pushboolean(Ls, 1);
+    return 1;
+}
+
+static int l_romp_is_npc(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(id);
+    lua_pushboolean(Ls, c && c->is_npc);
+    return 1;
+}
+
+static int l_romp_set_npc_pos(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    float x = (float)luaL_checknumber(Ls, 2);
+    float y = (float)luaL_checknumber(Ls, 3);
+    float z = (float)luaL_checknumber(Ls, 4);
+    lua_pushboolean(Ls, npc_set_pos(id, x, y, z));
+    return 1;
+}
+
+static int l_romp_npc_send_chat(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    const char *text = luaL_checkstring(Ls, 2);
+    lua_pushboolean(Ls, npc_send_chat(id, text));
+    return 1;
+}
+
+static int l_romp_get_npcs(lua_State *Ls) {
+    lua_newtable(Ls);
+    int i = 1;
+    for (Client *c = g_clients; c; c = c->next) {
+        if (!c->handshaked || c->dead || !c->is_npc) continue;
+        lua_pushinteger(Ls, c->id);
+        lua_rawseti(Ls, -2, i++);
+    }
+    return 1;
+}
+
 /* ---------------- Init ---------------- */
 
 /* Dipakai script_setup sebelum definisinya (di bawah). */
@@ -750,6 +814,13 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_load_fs);        lua_setfield(Ls, -2, "loadFilterScript");
     lua_pushcfunction(Ls, l_romp_unload_fs);      lua_setfield(Ls, -2, "unloadFilterScript");
     lua_pushcfunction(Ls, l_romp_get_fs);         lua_setfield(Ls, -2, "getFilterScripts");
+    /* NPC/bot ala SA-MP (ConnectNPC) */
+    lua_pushcfunction(Ls, l_romp_connect_npc);    lua_setfield(Ls, -2, "connectNPC");
+    lua_pushcfunction(Ls, l_romp_disconnect_npc); lua_setfield(Ls, -2, "disconnectNPC");
+    lua_pushcfunction(Ls, l_romp_is_npc);         lua_setfield(Ls, -2, "isNPC");
+    lua_pushcfunction(Ls, l_romp_set_npc_pos);    lua_setfield(Ls, -2, "setNPCPos");
+    lua_pushcfunction(Ls, l_romp_npc_send_chat);  lua_setfield(Ls, -2, "npcSendChat");
+    lua_pushcfunction(Ls, l_romp_get_npcs);       lua_setfield(Ls, -2, "getNPCs");
     /* konstanta hittype tembakan ala SA-MP */
     lua_pushinteger(Ls, 0); lua_setfield(Ls, -2, "WPN_HIT_NONE");
     lua_pushinteger(Ls, 1); lua_setfield(Ls, -2, "WPN_HIT_PLAYER");

@@ -263,6 +263,7 @@ int vehicle_put_player(int pid, int vid, int seat) {
     Client *c = client_by_id(pid);
     Vehicle *v = vehicle_by_id(vid);
     if (!c || !v || v->destroyed) return 0;
+    if (c->is_npc) return 0; /* NPC belum bisa naik kendaraan (v1) */
     if (seat < 0 || seat >= VEH_SEATS) return 0;
     if (c->vehicle_id == vid && c->vehicle_seat == seat) return 1;
     int taken = (seat == 0) ? v->driver : v->pass[seat - 1];

@@ -249,6 +249,8 @@ static int send_all(SOCKET s, const uint8_t *b, size_t n) {
 
 /* b = payload (sudah termasuk type di b[0]); n = panjang payload */
 static int send_frame(Client *c, const uint8_t *payload, size_t n) {
+    /* NPC tak punya socket: kirim ke NPC selalu jadi no-op (sukses). */
+    if (c->is_npc) return 0;
     uint8_t hdr[2];
     put_u16(hdr, (uint16_t)n);
     if (send_all(c->sock, hdr, 2) < 0) return -1;
@@ -272,7 +274,7 @@ static void send_reject(Client *c, const char *reason) {
 
 static void broadcast(const uint8_t *payload, size_t n, Client *except) {
     for (Client *c = g_clients; c; c = c->next) {
-        if (!c->handshaked || c->dead || c == except) continue;
+        if (!c->handshaked || c->dead || c->is_npc || c == except) continue;
         if (send_frame(c, payload, n) < 0) c->dead = 1;
     }
 }
@@ -294,7 +296,7 @@ int client_visible(const Client *a, const Client *b) {
 static void broadcast_scoped(const uint8_t *payload, size_t n,
                              Client *ref, Client *except) {
     for (Client *c = g_clients; c; c = c->next) {
-        if (!c->handshaked || c->dead || c == except) continue;
+        if (!c->handshaked || c->dead || c->is_npc || c == except) continue;
         if (!client_visible(ref, c)) continue;
         if (send_frame(c, payload, n) < 0) c->dead = 1;
     }
@@ -309,7 +311,7 @@ void broadcast_frame_ref(const uint8_t *payload, size_t n,
 void broadcast_frame_vw(const uint8_t *payload, size_t n,
                         Client *except, uint32_t vw) {
     for (Client *c = g_clients; c; c = c->next) {
-        if (!c->handshaked || c->dead || c == except) continue;
+        if (!c->handshaked || c->dead || c->is_npc || c == except) continue;
         if (c->vw != vw) continue;
         if (send_frame(c, payload, n) < 0) c->dead = 1;
     }
@@ -332,6 +334,7 @@ void send_int_vw(Client *c) {
  * - Pemain lain yang tak terlihat lagi -> P_LEAVE; yang baru terlihat -> P_JOIN.
  * - Kendaraan: resync bila vw berubah; bila pemain menyopir, kendaraan ikut
  *   pindah vw bersamanya. */
+static size_t build_join(uint8_t *b, const Client *who); /* didefinisikan di bawah */
 void player_set_world(Client *c, int interior, uint32_t vw) {
     if (!c || !c->handshaked) return;
     if (interior < 0) interior = 0;
@@ -365,20 +368,10 @@ void player_set_world(Client *c, int interior, uint32_t vw) {
         } else {
             /* c & o baru saling terlihat */
             uint8_t bj[64];
-            size_t nl = strlen(c->name);
-            if (nl > 24) nl = 24;
-            bj[0] = P_JOIN;
-            put_u16(bj + 1, (uint16_t)c->id);
-            bj[3] = (uint8_t)nl;
-            memcpy(bj + 4, c->name, nl);
-            if (send_frame(o, bj, 4 + nl) < 0) o->dead = 1;
-            nl = strlen(o->name);
-            if (nl > 24) nl = 24;
-            bj[0] = P_JOIN;
-            put_u16(bj + 1, (uint16_t)o->id);
-            bj[3] = (uint8_t)nl;
-            memcpy(bj + 4, o->name, nl);
-            if (send_frame(c, bj, 4 + nl) < 0) c->dead = 1;
+            size_t jn = build_join(bj, c);
+            if (send_frame(o, bj, jn) < 0) o->dead = 1;
+            jn = build_join(bj, o);
+            if (send_frame(c, bj, jn) < 0) c->dead = 1;
         }
     }
     /* Resync kendaraan bila vw berubah: despawn vw lama & spawn vw baru dulu,
@@ -443,6 +436,20 @@ void server_say(const char *msg) {
 }
 
 /* ---------------- Join / Leave ---------------- */
+/* Bangun paket 0x22 PLAYER_JOIN untuk `who`.
+ * v1.1: 1 byte flags ditambahkan setelah nama (bit0 = 1 kalau NPC).
+ * Client lama yang parse nama pakai namelen boleh abaikan byte tambahan ini. */
+static size_t build_join(uint8_t *b, const Client *who) {
+    size_t nl = strlen(who->name);
+    if (nl > 24) nl = 24;
+    b[0] = P_JOIN;
+    put_u16(b + 1, (uint16_t)who->id);
+    b[3] = (uint8_t)nl;
+    memcpy(b + 4, who->name, nl);
+    b[4 + nl] = who->is_npc ? 1 : 0;
+    return 5 + nl;
+}
+
 static void send_player_list(Client *c) {
     uint8_t b[4096];
     b[0] = P_LIST;
@@ -464,7 +471,6 @@ static void send_player_list(Client *c) {
 
 static void do_join(Client *c) {
     uint8_t b[64];
-    size_t nl = strlen(c->name);
 
     /* WELCOME */
     uint8_t w[512];
@@ -484,11 +490,8 @@ static void do_join(Client *c) {
     vehicle_sync_join(c);
 
     /* beritahu yang lain (hanya yang se-vw & se-interior) */
-    b[0] = P_JOIN;
-    put_u16(b + 1, (uint16_t)c->id);
-    b[3] = (uint8_t)nl;
-    memcpy(b + 4, c->name, nl);
-    broadcast_scoped(b, 4 + nl, c, c);
+    size_t jn = build_join(b, c);
+    broadcast_scoped(b, jn, c, c);
 
     char msg[128];
     snprintf(msg, sizeof(msg), "*** %s (id %d) bergabung.", c->name, c->id);
@@ -514,10 +517,16 @@ static void do_leave(Client *c, int reason) {
     log_msg("%s keluar (%s). Online: %d", c->name, rs, client_count());
 }
 
-/* Kick pemain + umumkan. Dipakai console & Lua. */
+/* Kick pemain + umumkan. Dipakai console & Lua.
+ * NPC di-kick lewat npc_disconnect (tak punya socket untuk ditandai dead). */
 void server_kick(int id, const char *reason) {
     Client *c = client_by_id(id);
     if (!c) return;
+    if (c->is_npc) {
+        log_msg("Kicked NPC %s (id %d)", c->name, c->id);
+        npc_disconnect(id, LEAVE_KICK);
+        return;
+    }
     char msg[256];
     if (reason && reason[0])
         snprintf(msg, sizeof(msg), "*** %s (id %d) di-kick (%s).", c->name, c->id, reason);
@@ -527,6 +536,128 @@ void server_kick(int id, const char *reason) {
     c->dead = 1;
     c->kick_reason = LEAVE_KICK;
     log_msg("Kicked %s (id %d)", c->name, c->id);
+}
+
+/* ---------------- NPC / bot ala SA-MP (ConnectNPC) ---------------- */
+/* Sambungkan NPC: koneksi virtual tanpa socket. Menempati slot pemain,
+ * muncul di P_LIST & daftar pemain, dan memicu event onPlayerJoin Lua
+ * (gamemode bedakan via romp.isNPC). Return id, -1 = gagal. */
+int npc_connect(const char *name) {
+    if (!name) return -1;
+    size_t nl = strlen(name);
+    if (!valid_nick(name, nl)) return -1;
+    if (client_by_name(name)) return -1;
+    if (client_count() >= g_cfg.maxplayers) return -1;
+    int id = alloc_id();
+    if (id < 0) return -1;
+    Client *c = (Client *)calloc(1, sizeof(Client));
+    if (!c) return -1;
+    c->sock = INVALID_SOCKET;
+    c->id = id;
+    memcpy(c->name, name, nl); c->name[nl] = '\0';
+    c->handshaked = 1;
+    c->is_npc = 1;
+    c->interior = 0;
+    c->vw = 0;
+    c->vehicle_id = -1;
+    c->vehicle_seat = -1;
+    c->last_activity = now_ms();
+    strncpy(c->ip, "npc", sizeof(c->ip) - 1);
+    c->next = g_clients;
+    g_clients = c;
+
+    /* beritahu pemain lain (hanya yang se-vw & se-interior) */
+    uint8_t b[64];
+    size_t jn = build_join(b, c);
+    broadcast_scoped(b, jn, c, NULL);
+
+    char msg[128];
+    snprintf(msg, sizeof(msg), "*** %s (id %d) bergabung.", c->name, c->id);
+    if (!lua_on_player_join(c->id, c->name))
+        chat_broadcast(CHAT_SERVER, KIND_SYS, msg);
+    log_msg("[npc] %s bergabung (id %d). Online: %d", c->name, c->id,
+            client_count());
+    return id;
+}
+
+/* Putuskan NPC. Unlink + free langsung (tak lewat sweep_dead) supaya aman
+ * bila dipanggil dari dalam event Lua (reentrancy). */
+void npc_disconnect(int id, int reason) {
+    Client *c = client_by_id(id);
+    if (!c || !c->is_npc || !c->handshaked) return;
+    vehicle_remove_player_silent(id);
+    /* salin field yang dipakai setelah free */
+    int nid = c->id;
+    uint8_t interior = c->interior;
+    uint32_t vw = c->vw;
+    char name[25];
+    strncpy(name, c->name, sizeof(name) - 1); name[sizeof(name) - 1] = '\0';
+    Client **pp = &g_clients;
+    while (*pp) {
+        if (*pp == c) { *pp = c->next; break; }
+        pp = &(*pp)->next;
+    }
+    free(c);
+    /* P_LEAVE ke pemain yang dulu se-vw & se-interior dengan NPC */
+    uint8_t b[4];
+    b[0] = P_LEAVE;
+    put_u16(b + 1, (uint16_t)nid);
+    b[3] = (uint8_t)reason;
+    for (Client *o = g_clients; o; o = o->next) {
+        if (!o->handshaked || o->dead || o->is_npc) continue;
+        if (o->vw != vw || o->interior != interior) continue;
+        if (send_frame(o, b, 4) < 0) o->dead = 1;
+    }
+    const char *rs = reason == LEAVE_KICK ? "di-kick" :
+                     reason == LEAVE_TIMEOUT ? "timeout" : "keluar";
+    char msg[128];
+    snprintf(msg, sizeof(msg), "*** %s (id %d) %s.", name, nid, rs);
+    if (!lua_on_player_leave(nid, name, reason))
+        chat_broadcast(CHAT_SERVER, KIND_SYS, msg);
+    log_msg("[npc] %s keluar (%s). Online: %d", name, rs, client_count());
+}
+
+/* Pindahkan NPC + relay 0x11 P_PPOS ke pemain yang melihatnya.
+ * 1 = sukses, 0 = id bukan NPC. */
+int npc_set_pos(int id, float x, float y, float z) {
+    Client *c = client_by_id(id);
+    if (!c || !c->is_npc) return 0;
+    c->pos_x = x; c->pos_y = y; c->pos_z = z;
+    c->pos_known = 1;
+    uint8_t b[24];
+    b[0] = P_PPOS;
+    put_u16(b + 1, (uint16_t)id);
+    memcpy(b + 3, &x, 4);
+    memcpy(b + 7, &y, 4);
+    memcpy(b + 11, &z, 4);
+    float heading = 0.0f;
+    memcpy(b + 15, &heading, 4);
+    b[19] = 0;          /* state: jalan kaki */
+    b[20] = 0; b[21] = 0; /* vehicle_model = 0 */
+    broadcast_scoped(b, 22, c, NULL);
+    return 1;
+}
+
+/* NPC kirim chat. Lewat event onPlayerChat Lua dulu (ala SA-MP: NPC chat
+ * memicu OnPlayerText); kalau tak di-handle, broadcast seperti chat biasa.
+ * 1 = sukses, 0 = id bukan NPC. */
+int npc_send_chat(int id, const char *text) {
+    Client *c = client_by_id(id);
+    if (!c || !c->is_npc || !text || !text[0]) return 0;
+    char msg[129];
+    strncpy(msg, text, sizeof(msg) - 1); msg[sizeof(msg) - 1] = '\0';
+    if (lua_on_player_chat(c->id, c->name, msg)) return 1;
+    char full[256];
+    snprintf(full, sizeof(full), "%s (%d): %s", c->name, c->id, msg);
+    chat_broadcast_scoped(c, (uint16_t)c->id, KIND_CHAT, full);
+    return 1;
+}
+
+int npc_count(void) {
+    int n = 0;
+    for (Client *c = g_clients; c; c = c->next)
+        if (c->handshaked && c->is_npc) n++;
+    return n;
 }
 
 /* ---------------- Handler paket ---------------- */
@@ -663,7 +794,8 @@ static void handle_chat_cmd(Client *c, const char *msg) {
         o += snprintf(o, sizeof(buf) - (o - buf), "*** Online (%d): ", client_count());
         for (Client *p = g_clients; p; p = p->next) {
             if (!p->handshaked) continue;
-            o += snprintf(o, sizeof(buf) - (o - buf), "%s(%d) ", p->name, p->id);
+            o += snprintf(o, sizeof(buf) - (o - buf), "%s(%d)%s ", p->name, p->id,
+                          p->is_npc ? "[NPC]" : "");
             if ((size_t)(o - buf) > sizeof(buf) - 32) break;
         }
         chat_to(c, CHAT_SERVER, KIND_INFO, buf);
@@ -849,11 +981,16 @@ static void console_run(const char *line, OutBuf *o) {
         emit_line(o, "  unloadfs <nama>   - unload filterscript");
         emit_line(o, "  reloadfs <nama>   - reload filterscript");
         emit_line(o, "  filterscripts     - daftar filterscript yang aktif");
+        emit_line(o, "  npc <nama>        - sambungkan NPC/bot (koneksi virtual)");
+        emit_line(o, "  unnpc <id>        - putuskan NPC/bot");
         emit_line(o, "  stop              - matikan server");
     } else if (!strcmp(cmd, "players")) {
-        emit_line(o, "Online (%d/%d):", client_count(), g_cfg.maxplayers);
+        emit_line(o, "Online (%d/%d, NPC: %d):", client_count(), g_cfg.maxplayers,
+                  npc_count());
         for (Client *c = g_clients; c; c = c->next)
-            if (c->handshaked) emit_line(o, "  [%d] %s", c->id, c->name);
+            if (c->handshaked)
+                emit_line(o, "  [%d] %s%s", c->id, c->name,
+                          c->is_npc ? " [NPC]" : "");
     } else if (!strcmp(cmd, "vehicles")) {
         emit_line(o, "Kendaraan (%d):", vehicle_count());
         for (Vehicle *v = vehicle_first(); v; v = vehicle_next(v))
@@ -930,6 +1067,31 @@ static void console_run(const char *line, OutBuf *o) {
         for (int i = 0; i < fs_count(); i++)
             emit_line(o, "  %s", fs_get_name(i));
         if (!fs_count()) emit_line(o, "  (kosong)");
+    } else if (!strcmp(cmd, "npc")) {
+        const char *nm = line + 3;
+        while (*nm == ' ') nm++;
+        if (!*nm) { emit_line(o, "Pakai: npc <nama>"); return; }
+        char name[25];
+        strncpy(name, nm, sizeof(name) - 1); name[sizeof(name) - 1] = '\0';
+        /* potong di spasi pertama (nama tak boleh berspasi ala SA-MP) */
+        for (char *sp = name; *sp; sp++)
+            if (*sp == ' ' || *sp == '\t') { *sp = '\0'; break; }
+        int id = npc_connect(name);
+        if (id < 0)
+            emit_line(o, "Gagal spawn NPC '%s' (nama invalid/sudah dipakai/server penuh).", name);
+        else
+            emit_line(o, "*** NPC '%s' terhubung (id %d).", name, id);
+    } else if (!strcmp(cmd, "unnpc")) {
+        int id;
+        if (sscanf(line, "unnpc %d", &id) != 1) {
+            emit_line(o, "Pakai: unnpc <id>"); return;
+        }
+        Client *t = client_by_id(id);
+        if (!t || !t->is_npc) {
+            emit_line(o, "NPC id %d tidak ditemukan.", id); return;
+        }
+        npc_disconnect(id, LEAVE_QUIT);
+        emit_line(o, "*** NPC id %d diputus.", id);
     } else if (!strcmp(cmd, "stop")) {
         emit_line(o, "*** Server dimatikan...");
         g_running = 0;
@@ -1251,7 +1413,8 @@ static void sweep_dead(void) {
     while (*pp) {
         Client *c = *pp;
         int gone = c->dead;
-        if (!gone && c->handshaked && now_ms() - c->last_activity > 90000) {
+        /* NPC tak punya socket & tak kirim paket: jangan timeout. */
+        if (!gone && !c->is_npc && c->handshaked && now_ms() - c->last_activity > 90000) {
             log_msg("Timeout: %s (id %d)", c->name, c->id);
             c->kick_reason = LEAVE_TIMEOUT;
             gone = 1;
@@ -1388,6 +1551,7 @@ int main(int argc, char **argv) {
             if (usock > mx) mx = usock;
         }
         for (Client *c = g_clients; c; c = c->next) {
+            if (c->is_npc) continue; /* NPC tak punya socket: jangan FD_SET(-1) */
             FD_SET(c->sock, &rfds);
             if (c->sock > mx) mx = c->sock;
         }
@@ -1405,7 +1569,7 @@ int main(int argc, char **argv) {
             if (FD_ISSET(lsock, &rfds)) accept_new(lsock);
             if (usock != INVALID_SOCKET && FD_ISSET(usock, &rfds)) handle_query(usock);
             for (Client *c = g_clients; c; c = c->next) {
-                if (c->dead) continue;
+                if (c->dead || c->is_npc) continue; /* NPC tak pernah di-pump */
                 if (FD_ISSET(c->sock, &rfds)) {
                     if (pump_client(c) < 0) { c->dead = 1; c->kick_reason = LEAVE_QUIT; }
                 }
