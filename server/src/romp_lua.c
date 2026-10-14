@@ -4,6 +4,7 @@
  */
 #include "romp_lua.h"
 #include "romp_server.h"
+#include "romp_vehicle.h"
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -291,6 +292,223 @@ static int l_romp_hide_dialog(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- API Kendaraan ala SA-MP ----------------
+ * romp.createVehicle(model, x, y, z, angle, c1, c2, respawnDelayMs) -> vid|nil
+ *   model: id model SA-MP 400..611. respawnDelayMs 0 = tanpa respawn otomatis.
+ * romp.destroyVehicle(vid) -> bool
+ * romp.setVehiclePos(vid, x, y, z [, angle]) -> bool
+ * romp.getVehiclePos(vid) -> x, y, z, angle | nil
+ * romp.setVehicleHealth(vid, health [, killerid]) -> bool   (health 0..1000)
+ * romp.getVehicleHealth(vid) -> number | nil
+ * romp.damageVehicle(vid, amount [, killerid]) -> health baru | nil
+ * romp.putPlayerInVehicle(pid, vid, seat) -> bool   (seat 0=sopir, 1..3)
+ * romp.removePlayerFromVehicle(pid) -> bool
+ * romp.isPlayerInVehicle(pid) -> bool
+ * romp.getPlayerVehicle(pid) -> vid | nil
+ * romp.getPlayerVehicleSeat(pid) -> seat | nil
+ * romp.getVehicleModel(vid) -> model | nil
+ * romp.getVehicleColors(vid) -> c1, c2 | nil
+ * romp.setVehicleColors(vid, c1, c2) -> bool
+ * romp.getVehicleDriver(vid) -> pid | nil
+ * romp.getVehiclePassenger(vid, seat) -> pid | nil
+ * romp.respawnVehicle(vid) -> bool
+ * romp.getVehicles() -> tabel {id,model,x,y,z,heading,c1,c2,health,
+ *                              destroyed,driver,seats[0..3]}
+ * Event: onPlayerEnterVehicle(pid, vid, seat), onPlayerExitVehicle(pid, vid),
+ *        onVehicleDamage(vid, damagerid, newhealth),
+ *        onVehicleDeath(vid, killerid), onVehicleSpawn(vid)
+ */
+
+static int l_romp_create_vehicle(lua_State *Ls) {
+    uint16_t model = (uint16_t)luaL_checkinteger(Ls, 1);
+    float x = (float)luaL_checknumber(Ls, 2);
+    float y = (float)luaL_checknumber(Ls, 3);
+    float z = (float)luaL_checknumber(Ls, 4);
+    float angle = (float)luaL_optnumber(Ls, 5, 0.0);
+    uint8_t c1 = (uint8_t)luaL_optinteger(Ls, 6, 0);
+    uint8_t c2 = (uint8_t)luaL_optinteger(Ls, 7, 0);
+    lua_Integer rd = luaL_optinteger(Ls, 8, 0);
+    if (rd < 0) rd = 0;
+    int vid = vehicle_create(model, x, y, z, angle, c1, c2, (uint32_t)rd);
+    if (vid < 0) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, vid);
+    return 1;
+}
+
+static int l_romp_destroy_vehicle(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    lua_pushboolean(Ls, vehicle_destroy(vid));
+    return 1;
+}
+
+static int l_romp_set_vehicle_pos(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    float x = (float)luaL_checknumber(Ls, 2);
+    float y = (float)luaL_checknumber(Ls, 3);
+    float z = (float)luaL_checknumber(Ls, 4);
+    Vehicle *v = vehicle_by_id(vid);
+    float angle = v ? v->heading : 0.0f;
+    if (lua_gettop(Ls) >= 5) angle = (float)luaL_checknumber(Ls, 5);
+    lua_pushboolean(Ls, vehicle_set_pos(vid, x, y, z, angle));
+    return 1;
+}
+
+static int l_romp_get_vehicle_pos(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    Vehicle *v = vehicle_by_id(vid);
+    if (!v) { lua_pushnil(Ls); return 1; }
+    lua_pushnumber(Ls, (lua_Number)v->x);
+    lua_pushnumber(Ls, (lua_Number)v->y);
+    lua_pushnumber(Ls, (lua_Number)v->z);
+    lua_pushnumber(Ls, (lua_Number)v->heading);
+    return 4;
+}
+
+static int l_romp_set_vehicle_health(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    lua_Integer h = luaL_checkinteger(Ls, 2);
+    int killer = (int)luaL_optinteger(Ls, 3, -1);
+    if (h < 0) h = 0;
+    if (h > VEH_HEALTH_MAX) h = VEH_HEALTH_MAX;
+    lua_pushboolean(Ls, vehicle_set_health(vid, (uint16_t)h, killer));
+    return 1;
+}
+
+static int l_romp_get_vehicle_health(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    Vehicle *v = vehicle_by_id(vid);
+    if (!v) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, v->health);
+    return 1;
+}
+
+static int l_romp_damage_vehicle(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    lua_Integer amount = luaL_checkinteger(Ls, 2);
+    int killer = (int)luaL_optinteger(Ls, 3, -1);
+    if (amount < 0) amount = 0;
+    if (amount > VEH_HEALTH_MAX) amount = VEH_HEALTH_MAX;
+    int nh = vehicle_damage(vid, (uint16_t)amount, killer);
+    if (nh < 0) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, nh);
+    return 1;
+}
+
+static int l_romp_put_player_in_vehicle(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int vid = (int)luaL_checkinteger(Ls, 2);
+    int seat = (int)luaL_checkinteger(Ls, 3);
+    lua_pushboolean(Ls, vehicle_put_player(pid, vid, seat));
+    return 1;
+}
+
+static int l_romp_remove_player_from_vehicle(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    lua_pushboolean(Ls, vehicle_remove_player(pid));
+    return 1;
+}
+
+static int l_romp_is_player_in_vehicle(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    lua_pushboolean(Ls, vehicle_of_player(pid) >= 0);
+    return 1;
+}
+
+static int l_romp_get_player_vehicle(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int vid = vehicle_of_player(pid);
+    if (vid < 0) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, vid);
+    return 1;
+}
+
+static int l_romp_get_player_vehicle_seat(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int seat = vehicle_seat_of_player(pid);
+    if (seat < 0) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, seat);
+    return 1;
+}
+
+static int l_romp_get_vehicle_model(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    Vehicle *v = vehicle_by_id(vid);
+    if (!v) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, v->model);
+    return 1;
+}
+
+static int l_romp_get_vehicle_colors(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    Vehicle *v = vehicle_by_id(vid);
+    if (!v) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, v->c1);
+    lua_pushinteger(Ls, v->c2);
+    return 2;
+}
+
+static int l_romp_set_vehicle_colors(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    uint8_t c1 = (uint8_t)luaL_checkinteger(Ls, 2);
+    uint8_t c2 = (uint8_t)luaL_checkinteger(Ls, 3);
+    lua_pushboolean(Ls, vehicle_set_colors(vid, c1, c2));
+    return 1;
+}
+
+static int l_romp_get_vehicle_driver(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    int pid = vehicle_occupant(vid, 0);
+    if (pid < 0) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, pid);
+    return 1;
+}
+
+static int l_romp_get_vehicle_passenger(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    int seat = (int)luaL_checkinteger(Ls, 2);
+    int pid = vehicle_occupant(vid, seat);
+    if (pid < 0) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, pid);
+    return 1;
+}
+
+static int l_romp_respawn_vehicle(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    lua_pushboolean(Ls, vehicle_respawn(vid));
+    return 1;
+}
+
+static int l_romp_get_vehicles(lua_State *Ls) {
+    lua_newtable(Ls);
+    int i = 1;
+    for (Vehicle *v = vehicle_first(); v; v = vehicle_next(v)) {
+        lua_newtable(Ls);
+        lua_pushinteger(Ls, v->id);      lua_setfield(Ls, -2, "id");
+        lua_pushinteger(Ls, v->model);   lua_setfield(Ls, -2, "model");
+        lua_pushnumber(Ls, (lua_Number)v->x); lua_setfield(Ls, -2, "x");
+        lua_pushnumber(Ls, (lua_Number)v->y); lua_setfield(Ls, -2, "y");
+        lua_pushnumber(Ls, (lua_Number)v->z); lua_setfield(Ls, -2, "z");
+        lua_pushnumber(Ls, (lua_Number)v->heading); lua_setfield(Ls, -2, "heading");
+        lua_pushinteger(Ls, v->c1);      lua_setfield(Ls, -2, "c1");
+        lua_pushinteger(Ls, v->c2);      lua_setfield(Ls, -2, "c2");
+        lua_pushinteger(Ls, v->health);  lua_setfield(Ls, -2, "health");
+        lua_pushboolean(Ls, v->destroyed); lua_setfield(Ls, -2, "destroyed");
+        if (v->driver >= 0) { lua_pushinteger(Ls, v->driver); }
+        else { lua_pushnil(Ls); }
+        lua_setfield(Ls, -2, "driver");
+        lua_newtable(Ls);
+        for (int s = 0; s < VEH_SEATS; s++) {
+            int occ = vehicle_occupant(v->id, s);
+            if (occ >= 0) { lua_pushinteger(Ls, occ); }
+            else { lua_pushnil(Ls); }
+            lua_rawseti(Ls, -2, s + 1); /* seats[1]=sopir, [2..4]=penumpang */
+        }
+        lua_setfield(Ls, -2, "seats");
+        lua_rawseti(Ls, -2, i++);
+    }
+    return 1;
+}
+
 /* ---------------- Init ---------------- */
 
 /* Dipakai lua_init sebelum definisinya (di bawah). */
@@ -356,6 +574,26 @@ int lua_init(const char *script_path) {
     lua_pushcfunction(L, l_romp_unban_ip);        lua_setfield(L, -2, "unbanIP");
     lua_pushcfunction(L, l_romp_is_ip_banned);    lua_setfield(L, -2, "isIPBanned");
     lua_pushcfunction(L, l_romp_announce_now);    lua_setfield(L, -2, "announceNow");
+    /* API kendaraan ala SA-MP */
+    lua_pushcfunction(L, l_romp_create_vehicle);   lua_setfield(L, -2, "createVehicle");
+    lua_pushcfunction(L, l_romp_destroy_vehicle);  lua_setfield(L, -2, "destroyVehicle");
+    lua_pushcfunction(L, l_romp_set_vehicle_pos);  lua_setfield(L, -2, "setVehiclePos");
+    lua_pushcfunction(L, l_romp_get_vehicle_pos);  lua_setfield(L, -2, "getVehiclePos");
+    lua_pushcfunction(L, l_romp_set_vehicle_health); lua_setfield(L, -2, "setVehicleHealth");
+    lua_pushcfunction(L, l_romp_get_vehicle_health); lua_setfield(L, -2, "getVehicleHealth");
+    lua_pushcfunction(L, l_romp_damage_vehicle);   lua_setfield(L, -2, "damageVehicle");
+    lua_pushcfunction(L, l_romp_put_player_in_vehicle); lua_setfield(L, -2, "putPlayerInVehicle");
+    lua_pushcfunction(L, l_romp_remove_player_from_vehicle); lua_setfield(L, -2, "removePlayerFromVehicle");
+    lua_pushcfunction(L, l_romp_is_player_in_vehicle); lua_setfield(L, -2, "isPlayerInVehicle");
+    lua_pushcfunction(L, l_romp_get_player_vehicle); lua_setfield(L, -2, "getPlayerVehicle");
+    lua_pushcfunction(L, l_romp_get_player_vehicle_seat); lua_setfield(L, -2, "getPlayerVehicleSeat");
+    lua_pushcfunction(L, l_romp_get_vehicle_model); lua_setfield(L, -2, "getVehicleModel");
+    lua_pushcfunction(L, l_romp_get_vehicle_colors); lua_setfield(L, -2, "getVehicleColors");
+    lua_pushcfunction(L, l_romp_set_vehicle_colors); lua_setfield(L, -2, "setVehicleColors");
+    lua_pushcfunction(L, l_romp_get_vehicle_driver); lua_setfield(L, -2, "getVehicleDriver");
+    lua_pushcfunction(L, l_romp_get_vehicle_passenger); lua_setfield(L, -2, "getVehiclePassenger");
+    lua_pushcfunction(L, l_romp_respawn_vehicle);  lua_setfield(L, -2, "respawnVehicle");
+    lua_pushcfunction(L, l_romp_get_vehicles);      lua_setfield(L, -2, "getVehicles");
     /* konstanta kind chat */
     lua_pushinteger(L, KIND_CHAT); lua_setfield(L, -2, "KIND_CHAT");
     lua_pushinteger(L, KIND_INFO); lua_setfield(L, -2, "KIND_INFO");
@@ -388,6 +626,7 @@ int lua_init(const char *script_path) {
     lua_load_helper(script_path, "checkpoint.lua", "API checkpoint aktif");
     lua_load_helper(script_path, "pickup.lua", "API pickup aktif");
     lua_load_helper(script_path, "mapicon.lua", "API map icon aktif");
+    lua_load_helper(script_path, "vehicle.lua", "API kendaraan aktif");
     /* event init: onGamemodeInit() */
     call_event_noret("onGamemodeInit");
     return 0;
@@ -523,8 +762,72 @@ int lua_on_player_request(const char *name, const char *ip,
     return reject;
 }
 
-/* Dispatch NUI callback dari client ke handler Lua terdaftar. */
-int lua_on_nui_callback(int id, const char *name, const char *data) {
+/* ---------------- Event kendaraan ala SA-MP ---------------- */
+
+typedef struct { int pid, vid, seat; } EvVehSeat;
+static int push_veh_seat(lua_State *Ls, void *ud) {
+    EvVehSeat *e = (EvVehSeat *)ud;
+    lua_pushinteger(Ls, e->pid);
+    lua_pushinteger(Ls, e->vid);
+    lua_pushinteger(Ls, e->seat);
+    return 3;
+}
+
+typedef struct { int pid, vid; } EvVehPidVid;
+static int push_veh_pidvid(lua_State *Ls, void *ud) {
+    EvVehPidVid *e = (EvVehPidVid *)ud;
+    lua_pushinteger(Ls, e->pid);
+    lua_pushinteger(Ls, e->vid);
+    return 2;
+}
+
+typedef struct { int vid, a, b; } EvVehVAB;
+static int push_veh_vab(lua_State *Ls, void *ud) {
+    EvVehVAB *e = (EvVehVAB *)ud;
+    lua_pushinteger(Ls, e->vid);
+    lua_pushinteger(Ls, e->a);
+    lua_pushinteger(Ls, e->b);
+    return 3;
+}
+
+typedef struct { int vid, killer; } EvVehDeath;
+static int push_veh_death(lua_State *Ls, void *ud) {
+    EvVehDeath *e = (EvVehDeath *)ud;
+    lua_pushinteger(Ls, e->vid);
+    lua_pushinteger(Ls, e->killer);
+    return 2;
+}
+
+static int push_veh_vid(lua_State *Ls, void *ud) {
+    lua_pushinteger(Ls, *(int *)ud);
+    return 1;
+}
+
+void lua_on_player_enter_vehicle(int pid, int vid, int seat) {
+    EvVehSeat e = { pid, vid, seat };
+    call_event("onPlayerEnterVehicle", push_veh_seat, &e);
+}
+
+void lua_on_player_exit_vehicle(int pid, int vid) {
+    EvVehPidVid e = { pid, vid };
+    call_event("onPlayerExitVehicle", push_veh_pidvid, &e);
+}
+
+void lua_on_vehicle_damage(int vid, int damagerid, int newhealth) {
+    EvVehVAB e = { vid, damagerid, newhealth };
+    call_event("onVehicleDamage", push_veh_vab, &e);
+}
+
+void lua_on_vehicle_death(int vid, int killerid) {
+    EvVehDeath e = { vid, killerid };
+    call_event("onVehicleDeath", push_veh_death, &e);
+}
+
+void lua_on_vehicle_spawn(int vid) {
+    call_event("onVehicleSpawn", push_veh_vid, &vid);
+}
+
+/* Dispatch NUI callback dari client ke handler Lua terdaftar. */int lua_on_nui_callback(int id, const char *name, const char *data) {
     if (!L) return 0;
     lua_rawgeti(L, LUA_REGISTRYINDEX, nui_cb_ref);
     lua_getfield(L, -1, name);

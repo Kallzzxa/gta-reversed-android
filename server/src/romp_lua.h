@@ -26,5 +26,11 @@ int  lua_on_console_command(const char *cmd, const char *args);
 /* Event pre-connect: true = tolak (reason_out diisi alasan). */
 int  lua_on_player_request(const char *name, const char *ip,
                            char *reason_out, size_t reason_sz);
+/* Event kendaraan ala SA-MP (tidak ada default C; gamemode opsional). */
+void lua_on_player_enter_vehicle(int pid, int vid, int seat);
+void lua_on_player_exit_vehicle(int pid, int vid);
+void lua_on_vehicle_damage(int vid, int damagerid, int newhealth);
+void lua_on_vehicle_death(int vid, int killerid);
+void lua_on_vehicle_spawn(int vid);
 /* Dipanggil tiap 1 detik. */
 void lua_on_tick(void);

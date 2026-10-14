@@ -11,6 +11,7 @@
 
 #include "romp_server.h"
 #include "romp_lua.h"
+#include "romp_vehicle.h"
 
 #include <time.h>
 #include <pthread.h>
@@ -257,6 +258,11 @@ static void broadcast(const uint8_t *payload, size_t n, Client *except) {
     }
 }
 
+/* Wrapper non-static untuk modul lain (mis. romp_vehicle.c). */
+void broadcast_frame(const uint8_t *payload, size_t n, Client *except) {
+    broadcast(payload, n, except);
+}
+
 /* ---------------- Chat ---------------- */
 void chat_broadcast(uint16_t pid, uint8_t kind, const char *msg) {
     uint8_t b[512];
@@ -325,6 +331,9 @@ static void do_join(Client *c) {
     send_frame(c, w, off);
 
     send_player_list(c);
+
+    /* stream kendaraan yang sudah ada ke pemain baru */
+    vehicle_sync_join(c);
 
     /* beritahu yang lain */
     b[0] = P_JOIN;
@@ -566,6 +575,7 @@ static void dispatch(Client *c, uint8_t type, const uint8_t *p, size_t n) {
         case P_CHAT:  handle_chat(c, p, n); break;
         case P_PING:  handle_ping(c, p, n); break;
         case P_NUI_CB: handle_nui_callback(c, p, n); break;
+        case P_VEH:   vehicle_on_packet(c, p, n); break;
         default: break;
     }
 }
@@ -657,12 +667,19 @@ static void console_cmd(const char *line) {
         printf("  help              - daftar command\n");
         printf("  say <pesan>       - kirim pengumuman ke semua pemain\n");
         printf("  players           - daftar pemain online\n");
+        printf("  vehicles          - daftar kendaraan aktif\n");
         printf("  kick <id> [alasan]- kick pemain\n");
         printf("  stop              - matikan server\n");
     } else if (!strcmp(cmd, "players")) {
         printf("Online (%d/%d):\n", client_count(), g_cfg.maxplayers);
         for (Client *c = g_clients; c; c = c->next)
             if (c->handshaked) printf("  [%d] %s\n", c->id, c->name);
+    } else if (!strcmp(cmd, "vehicles")) {
+        printf("Kendaraan (%d):\n", vehicle_count());
+        for (Vehicle *v = vehicle_first(); v; v = vehicle_next(v))
+            printf("  [vid %d] model %u pos %.1f,%.1f,%.1f hp %u%s driver %d\n",
+                   v->id, v->model, v->x, v->y, v->z, v->health,
+                   v->destroyed ? " (HANCUR)" : "", v->driver);
     } else if (!strcmp(cmd, "say")) {
         const char *msg = line + 3;
         while (*msg == ' ') msg++;
@@ -876,6 +893,8 @@ static void accept_new(SOCKET lsock) {
     Client *c = (Client*)calloc(1, sizeof(Client));
     c->sock = s;
     c->id = -1;
+    c->vehicle_id = -1;
+    c->vehicle_seat = -1;
     c->last_activity = now_ms();
     c->next = g_clients;
     g_clients = c;
@@ -896,6 +915,8 @@ static void sweep_dead(void) {
             gone = 1;
         }
         if (gone) {
+            /* Keluarkan diam-diam dari kendaraan sebelum event leave. */
+            vehicle_remove_player_silent(c->id);
             do_leave(c, c->kick_reason);
             CLOSESOCK(c->sock);
             *pp = c->next;
@@ -1051,6 +1072,7 @@ int main(int argc, char **argv) {
         if (tnow - last_lua_tick >= 1000) {
             last_lua_tick = tnow;
             lua_on_tick();
+            vehicle_tick(tnow); /* respawn kendaraan hancur */
         }
 
         /* beacon LAN tiap LAN_BEACON_MS */

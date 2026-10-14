@@ -99,6 +99,76 @@ u8  state
 u16 vehicle_model
 ```
 
+### 0x12 VEH (Client -> Server)
+Sync posisi kendaraan, dikirim ~10x per detik **oleh sopir saja**.
+Paket dari non-sopir diabaikan server (anti-cheat dasar). Rate limit 33 Hz.
+
+```
+u16 vehicleid
+float x, y, z
+float heading
+u16 health  // 0-1000, <=250 = hancur
+```
+
+### 0x13 VEH_SYNC
+Broadcast posisi kendaraan (tidak di-echo ke pengirim paket 0x12).
+
+```
+u16 driverid  // 0xFFFF = update server-side (teleport/respawn), bukan dari sopir
+u16 vehicleid
+float x, y, z
+float heading
+u16 health
+```
+
+### 0x14 VEH_SPAWN
+Kendaraan baru muncul (broadcast saat `romp.createVehicle`; dikirim juga ke
+pemain yang baru join untuk semua kendaraan aktif).
+
+```
+u16 vehicleid
+u16 model        // id model SA-MP 400-611
+float x, y, z
+float angle
+u8  color1
+u8  color2
+u16 health
+u16 driverid     // 0xFFFF = kosong
+```
+
+### 0x15 VEH_DESPAWN
+Kendaraan dihancurkan (`romp.destroyVehicle`).
+
+```
+u16 vehicleid
+```
+
+### 0x16 VEH_SEAT
+Perubahan penumpang (masuk/keluar/pindah kursi).
+
+```
+u16 vehicleid
+u8  seat         // 0 = sopir, 1-3 = penumpang
+u16 playerid     // 0xFFFF = kursi dikosongkan
+```
+
+API Lua (di-register C, `server/vehicle.lua` hanya untuk NUI):
+`romp.createVehicle(model, x, y, z, angle, c1, c2, respawnDelayMs)` /
+`romp.destroyVehicle(vid)` / `romp.setVehiclePos(vid, x, y, z [, angle])` /
+`romp.getVehiclePos(vid)` / `romp.setVehicleHealth(vid, health [, killerid])` /
+`romp.getVehicleHealth(vid)` / `romp.damageVehicle(vid, amount [, killerid])` /
+`romp.putPlayerInVehicle(pid, vid, seat)` / `romp.removePlayerFromVehicle(pid)` /
+`romp.isPlayerInVehicle(pid)` / `romp.getPlayerVehicle(pid)` /
+`romp.getPlayerVehicleSeat(pid)` / `romp.getVehicleModel(vid)` /
+`romp.getVehicleColors(vid)` / `romp.setVehicleColors(vid, c1, c2)` /
+`romp.getVehicleDriver(vid)` / `romp.getVehiclePassenger(vid, seat)` /
+`romp.respawnVehicle(vid)` / `romp.getVehicles()`.
+Event: `onPlayerEnterVehicle(pid, vid, seat)`,
+`onPlayerExitVehicle(pid, vid)`, `onVehicleDamage(vid, damagerid, newhealth)`,
+`onVehicleDeath(vid, killerid)`, `onVehicleSpawn(vid)`.
+Health <= 250 = hancur: penumpang dikeluarkan, event death, lalu respawn
+otomatis ke posisi spawn setelah `respawnDelayMs` (0 = tidak respawn).
+
 ### 0x21 CHAT_MSG
 
 ```
@@ -303,6 +373,24 @@ icon agar radar UI bisa menggambar blip relatif terhadap pemain; state
 dibersihkan saat pemain leave.
 Halaman UI referensi: `android/app/src/main/assets/romp/nui/mapicon.html`.
 
+### Kendaraan ala SA-MP (NUI_MESSAGE `0x40`)
+
+```json
+{"action":"showVehicle","id":"v1","vid":1,"model":411,
+ "x":100.0,"y":200.0,"z":3.0,"angle":90.0,"c1":0,"c2":0,
+ "health":1000,"destroyed":false,"driver":3,"seats":"3,-,-,-"}
+{"action":"updateVehicle","id":"v1","vid":1,"x":101.0,"y":200.0,"z":3.0,
+ "health":800,"destroyed":false,"driver":3,"seats":"3,-,-,-"}
+{"action":"hideVehicle","id":"v1"}
+```
+
+Dikirim oleh `server/vehicle.lua` (dimuat otomatis), di-diff tiap detik dari
+`romp.getVehicles()`. `seats`: daftar penghuni kursi 0-3 dipisah koma
+(`-` = kosong). State otoritatif kendaraan ada di server C
+(`server/src/romp_vehicle.c`); client game merender kendaraan 3D dari paket
+`0x13`/`0x14`/`0x15`/`0x16`, halaman ini hanya indikator 2D fallback.
+Halaman UI referensi: `android/app/src/main/assets/romp/nui/vehicle.html`.
+
 ## Server Browser — UDP Query
 
 Server menjawab query UDP di **port yang sama** dengan TCP (bisa dimatikan
@@ -401,9 +489,14 @@ server sebelumnya. Cocok untuk main bareng satu WiFi/warnet.
 C -> S  HELLO("Andi")
 S -> C  WELCOME(id=3, ...)
 S -> C  PLAYER_LIST([...pemain online...])
+S -> C  VEH_SPAWN(...)                // tiap kendaraan aktif (stream saat join)
 S -> *  PLAYER_JOIN(3, "Andi")        // ke semua pemain lain
 C -> S  POS ... (10 Hz)
 S -> *  PLAYER_POS(3, ...)            // ke semua pemain lain
+S -> *  VEH_SPAWN(1, ...)             // Lua: romp.createVehicle
+S -> *  VEH_SEAT(1, seat=0, pid=3)    // Lua: romp.putPlayerInVehicle
+C -> S  VEH(1, x,y,z, heading, hp)    // sopir sync ~10 Hz
+S -> *  VEH_SYNC(3, 1, ...)           // ke semua pemain lain
 C -> S  CHAT("halo semua")
 S -> *  CHAT_MSG(3, kind=0, "Andi (3): halo semua")
 C -> S  CHAT("/q")
@@ -414,4 +507,5 @@ S -> *  PLAYER_LEAVE(3, 0)
 
 - Chat: maks 3 pesan per 2 detik, selebihnya pesan dibuang; spam berat = kick.
 - POS: paket yang datang lebih cepat dari 30ms diabaikan.
+- VEH: hanya sopir yang boleh sync; paket non-sopir diabaikan; rate limit 30ms.
 - Nickname duplikat / invalid = REJECT.

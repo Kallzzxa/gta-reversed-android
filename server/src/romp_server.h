@@ -48,6 +48,13 @@ typedef int SOCKET;
 #define P_NUI_CB      0x41
 #define P_NUI_FOCUS   0x42
 
+/* ---- Sinkronisasi kendaraan ala SA-MP (lihat PROTOCOL.md) ---- */
+#define P_VEH         0x12  /* client -> server: sync posisi dari sopir */
+#define P_VEH_SYNC    0x13  /* server -> client: relay posisi kendaraan */
+#define P_VEH_SPAWN   0x14  /* server -> client: kendaraan muncul */
+#define P_VEH_DESPAWN 0x15  /* server -> client: kendaraan hilang */
+#define P_VEH_SEAT    0x16  /* server -> client: perubahan penumpang */
+
 /* ---- Protokol UDP query (server browser), port sama dengan TCP ---- */
 #define QUERY_MAGIC   "ROMP"
 #define QUERY_MAGIC_LEN 4
@@ -116,6 +123,9 @@ typedef struct Client {
     int    chat_idx;
     int    dead;               /* ditandai untuk disconnect */
     int    kick_reason;
+    /* Kendaraan yang ditumpangi (-1 = tidak di kendaraan; seat 0 = sopir). */
+    int    vehicle_id;
+    int    vehicle_seat;
     struct Client *next;
 } Client;
 
@@ -131,6 +141,8 @@ void chat_to(Client *c, uint16_t pid, uint8_t kind, const char *msg);
 void server_say(const char *msg);
 /* Kirim frame mentah ke client (dipakai scripting layer). 0 = sukses. */
 int client_send_frame(Client *c, const uint8_t *payload, size_t n);
+/* Broadcast frame ke semua client yang handshake (kecuali `except`). */
+void broadcast_frame(const uint8_t *payload, size_t n, Client *except);
 /* Kick pemain + umumkan. Dipakai console & Lua. */
 void server_kick(int id, const char *reason);
 uint64_t now_ms(void);
