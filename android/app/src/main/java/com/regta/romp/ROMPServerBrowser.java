@@ -141,6 +141,27 @@ public class ROMPServerBrowser {
         public void scanLan() {
             ROMPServerBrowser.this.scanLan();
         }
+
+        @JavascriptInterface
+        public void toggleFavorite(String ip, int port, String name) {
+            boolean now = ROMPFavorites.toggle(getContext(), ip, port, name);
+            pushFavorites();
+        }
+
+        @JavascriptInterface
+        public boolean isFavorite(String ip, int port) {
+            return ROMPFavorites.isFavorite(getContext(), ip, port);
+        }
+
+        @JavascriptInterface
+        public void loadFavorites() {
+            pushFavorites();
+        }
+    }
+
+    private void pushFavorites() {
+        final String json = ROMPFavorites.toJson(getContext());
+        postToPage("onFavorites", json);
     }
 
     // TODO(GAME): implementasikan via JNI -> ROMP::ROMPBrowser.

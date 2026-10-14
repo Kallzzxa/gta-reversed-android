@@ -62,16 +62,26 @@
 </div>
 <script>
 var mode = "lan";
+// Favorit: pakai native ROMPFavorites (mirip SA-MP Mobile Launcher),
+// fallback ke localStorage kalau bridge tidak ada.
 var favs = [];
+var useNativeFav = !!(window.romp && window.romp.loadFavorites);
 try { favs = JSON.parse(localStorage.getItem("romp_favs") || "[]"); } catch (e) {}
 
 function saveFavs() {
   try { localStorage.setItem("romp_favs", JSON.stringify(favs)); } catch (e) {}
 }
 function isFav(ip, port) {
+  if (useNativeFav && window.romp.isFavorite) {
+    try { return window.romp.isFavorite(ip, port); } catch (e) {}
+  }
   return favs.some(function (f) { return f.ip === ip && f.port === port; });
 }
 function toggleFav(ip, port, hostname) {
+  if (useNativeFav && window.romp.toggleFavorite) {
+    window.romp.toggleFavorite(ip, port, hostname || "");
+    return;  // onFavorites() akan dipanggil balik
+  }
   var i = favs.findIndex(function (f) { return f.ip === ip && f.port === port; });
   if (i >= 0) favs.splice(i, 1);
   else favs.push({ ip: ip, port: port, hostname: hostname || (ip + ":" + port) });
@@ -79,8 +89,16 @@ function toggleFav(ip, port, hostname) {
   render(current);
 }
 
-// Dipanggil native setelah daftar selesai.
+// Dipanggil native setelah daftar favorit berubah.
 var current = [];
+window.onFavorites = function (json) {
+  try { favs = JSON.parse(json); } catch (e) { favs = []; }
+  saveFavs();  // sinkronkan cache lokal
+  if (mode === "fav") render(favs);
+  else render(current);
+};
+
+// Dipanggil native setelah daftar selesai.
 window.onServers = function (json) {
   try { current = JSON.parse(json); } catch (e) { current = []; }
   render(current);
@@ -139,7 +157,10 @@ function doRefresh() {
   if (!window.romp) { render([]); return; }
   if (mode === "lan" && window.romp.scanLan) window.romp.scanLan();
   else if (mode === "net" && window.romp.refresh) window.romp.refresh();
-  else if (mode === "fav") render(favs);
+  else if (mode === "fav") {
+    if (window.romp.loadFavorites) window.romp.loadFavorites();
+    else render(favs);
+  }
 }
 
 document.getElementById("t-lan").onclick = function () { setMode("lan"); };
