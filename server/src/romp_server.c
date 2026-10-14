@@ -2,92 +2,39 @@
  * RO-MP Dedicated Server v1
  * SA-MP-like multiplayer server untuk gta-reversed-android (project gabut).
  *
- * Build Linux:   gcc -O2 -Wall -o romp-server romp_server.c -pthread
- * Build Windows: x86_64-w64-mingw32-gcc -O2 -Wall -o romp-server.exe romp_server.c -lws2_32 -pthread -static
+ * Build: lihat Makefile (make linux / make windows).
+ * Gamemode scripting: Lua, lihat gamemode.lua (ala FiveM).
  *
  * Protokol: lihat ../PROTOCOL.md
  */
 #define _CRT_SECURE_NO_WARNINGS
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
-#include <stdarg.h>
+#include "romp_server.h"
+#include "romp_lua.h"
+
 #include <time.h>
+#include <pthread.h>
 
 #ifdef _WIN32
-#define FD_SETSIZE 128
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <windows.h>
-#include <pthread.h>
 #pragma comment(lib, "ws2_32.lib")
-typedef int socklen_t;
-#define CLOSESOCK closesocket
 #define SOCKERR WSAGetLastError()
 #else
-#include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <pthread.h>
 #include <signal.h>
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <sys/select.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #include <netdb.h>
-#define CLOSESOCK close
 #define SOCKERR errno
-#define INVALID_SOCKET (-1)
-#define SOCKET_ERROR (-1)
-typedef int SOCKET;
 #endif
 
-/* ---------------- Protokol ---------------- */
-#define ROMP_PROTO_VER   1
-#define ROMP_MAX_FRAME   4096
-
-#define P_HELLO       0x01
-#define P_WELCOME     0x02
-#define P_REJECT      0x03
-#define P_POS         0x10
-#define P_PPOS        0x11
-#define P_CHAT        0x20
-#define P_CHAT_MSG    0x21
-#define P_JOIN        0x22
-#define P_LEAVE       0x23
-#define P_LIST        0x24
-#define P_PING        0x30
-#define P_PONG        0x31
-
-#define CHAT_SERVER   0xFFFF
-#define KIND_CHAT 0
-#define KIND_INFO 1
-#define KIND_ME   2
-#define KIND_PM   3
-#define KIND_SYS  4
-
-#define LEAVE_QUIT 0
-#define LEAVE_KICK 1
-#define LEAVE_TIMEOUT 2
-
 /* ---------------- Konfigurasi ---------------- */
-typedef struct {
-    int  port;
-    char hostname[64];
-    char motd[256];
-    int  maxplayers;
-    char password[64];
-} Config;
-
-static Config g_cfg = {
+Config g_cfg = {
     7777,
     "RO-MP Server",
     "Selamat datang di RO-MP!",
     50,
-    ""
+    "",
+    "gamemode.lua"
 };
 
 static void cfg_load(const char *path) {
@@ -113,6 +60,7 @@ static void cfg_load(const char *path) {
             if (g_cfg.maxplayers > 120) g_cfg.maxplayers = 120;
         }
         else if (!strcmp(key, "password")) { strncpy(g_cfg.password, val, sizeof(g_cfg.password)-1); }
+        else if (!strcmp(key, "gamemode")) { strncpy(g_cfg.gamemode, val, sizeof(g_cfg.gamemode)-1); }
     }
     fclose(f);
 }
@@ -120,7 +68,7 @@ static void cfg_load(const char *path) {
 /* ---------------- Logging ---------------- */
 static FILE *g_logf = NULL;
 
-static void log_msg(const char *fmt, ...) {
+void log_msg(const char *fmt, ...) {
     char buf[1024];
     time_t t = time(NULL);
     struct tm *tm = localtime(&t);
@@ -158,7 +106,7 @@ static uint32_t get_u32(const uint8_t *b) {
 }
 static float get_f32(const uint8_t *b) { uint32_t u = get_u32(b); float f; memcpy(&f, &u, 4); return f; }
 
-static uint64_t now_ms(void) {
+uint64_t now_ms(void) {
 #ifdef _WIN32
     return GetTickCount64();
 #else
@@ -169,41 +117,23 @@ static uint64_t now_ms(void) {
 }
 
 /* ---------------- Client ---------------- */
-#define RECV_BUF 8192
-
-typedef struct Client {
-    SOCKET sock;
-    int    id;                 /* -1 = belum handshake */
-    char   name[25];
-    int    handshaked;
-    uint8_t recv[RECV_BUF];
-    size_t  recv_len;
-    uint64_t last_activity;
-    uint64_t last_pos_ms;
-    uint64_t chat_times[3];    /* anti-spam: 3 pesan / 2 detik */
-    int    chat_idx;
-    int    dead;               /* ditandai untuk disconnect */
-    int    kick_reason;
-    struct Client *next;
-} Client;
-
-static Client *g_clients = NULL;
+Client *g_clients = NULL;
 static int g_running = 1;
 static int g_next_id = 0;
 
-static int client_count(void) {
+int client_count(void) {
     int n = 0;
     for (Client *c = g_clients; c; c = c->next) if (c->handshaked) n++;
     return n;
 }
 
-static Client *client_by_id(int id) {
+Client *client_by_id(int id) {
     for (Client *c = g_clients; c; c = c->next)
         if (c->handshaked && c->id == id) return c;
     return NULL;
 }
 
-static Client *client_by_name(const char *name) {
+Client *client_by_name(const char *name) {
     for (Client *c = g_clients; c; c = c->next)
         if (c->handshaked && !strcmp(c->name, name)) return c;
     return NULL;
@@ -279,7 +209,7 @@ static void broadcast(const uint8_t *payload, size_t n, Client *except) {
 }
 
 /* ---------------- Chat ---------------- */
-static void chat_broadcast(uint16_t pid, uint8_t kind, const char *msg) {
+void chat_broadcast(uint16_t pid, uint8_t kind, const char *msg) {
     uint8_t b[512];
     size_t ml = strlen(msg);
     if (ml > 200) ml = 200;
@@ -292,7 +222,7 @@ static void chat_broadcast(uint16_t pid, uint8_t kind, const char *msg) {
     log_msg("[chat] %s", msg);
 }
 
-static void chat_to(Client *c, uint16_t pid, uint8_t kind, const char *msg) {
+void chat_to(Client *c, uint16_t pid, uint8_t kind, const char *msg) {
     uint8_t b[512];
     size_t ml = strlen(msg);
     if (ml > 200) ml = 200;
@@ -304,7 +234,7 @@ static void chat_to(Client *c, uint16_t pid, uint8_t kind, const char *msg) {
     if (send_frame(c, b, 5 + ml) < 0) c->dead = 1;
 }
 
-static void server_say(const char *msg) {
+void server_say(const char *msg) {
     char full[256];
     snprintf(full, sizeof(full), "*** %s", msg);
     chat_broadcast(CHAT_SERVER, KIND_INFO, full);
@@ -356,7 +286,9 @@ static void do_join(Client *c) {
 
     char msg[128];
     snprintf(msg, sizeof(msg), "*** %s (id %d) bergabung.", c->name, c->id);
-    chat_broadcast(CHAT_SERVER, KIND_SYS, msg);
+    /* event Lua dulu; kalau tidak di-handle, pakai pengumuman default */
+    if (!lua_on_player_join(c->id, c->name))
+        chat_broadcast(CHAT_SERVER, KIND_SYS, msg);
     log_msg("%s bergabung (id %d). Online: %d", c->name, c->id, client_count());
 }
 
@@ -371,8 +303,24 @@ static void do_leave(Client *c, int reason) {
     const char *rs = reason == LEAVE_KICK ? "di-kick" : reason == LEAVE_TIMEOUT ? "timeout" : "keluar";
     char msg[128];
     snprintf(msg, sizeof(msg), "*** %s (id %d) %s.", c->name, c->id, rs);
-    chat_broadcast(CHAT_SERVER, KIND_SYS, msg);
+    if (!lua_on_player_leave(c->id, c->name, reason))
+        chat_broadcast(CHAT_SERVER, KIND_SYS, msg);
     log_msg("%s keluar (%s). Online: %d", c->name, rs, client_count());
+}
+
+/* Kick pemain + umumkan. Dipakai console & Lua. */
+void server_kick(int id, const char *reason) {
+    Client *c = client_by_id(id);
+    if (!c) return;
+    char msg[256];
+    if (reason && reason[0])
+        snprintf(msg, sizeof(msg), "*** %s (id %d) di-kick (%s).", c->name, c->id, reason);
+    else
+        snprintf(msg, sizeof(msg), "*** %s (id %d) di-kick.", c->name, c->id);
+    chat_broadcast(CHAT_SERVER, KIND_SYS, msg);
+    c->dead = 1;
+    c->kick_reason = LEAVE_KICK;
+    log_msg("Kicked %s (id %d)", c->name, c->id);
 }
 
 /* ---------------- Handler paket ---------------- */
@@ -450,6 +398,9 @@ static void handle_chat(Client *c, const uint8_t *p, size_t n) {
 
     if (msg[0] == '/') { handle_chat_cmd(c, msg); return; }
 
+    /* event Lua dulu; kalau di-handle, lewati broadcast default */
+    if (lua_on_player_chat(c->id, c->name, msg)) return;
+
     char full[256];
     snprintf(full, sizeof(full), "%s (%d): %s", c->name, c->id, msg);
     chat_broadcast((uint16_t)c->id, KIND_CHAT, full);
@@ -458,6 +409,13 @@ static void handle_chat(Client *c, const uint8_t *p, size_t n) {
 static void handle_chat_cmd(Client *c, const char *msg) {
     char cmd[16];
     if (sscanf(msg, "/%15s", cmd) != 1) return;
+
+    /* pisahkan args (teks setelah command) */
+    const char *args = msg + 1 + strlen(cmd);
+    while (*args == ' ') args++;
+
+    /* event Lua dulu; kalau di-handle, lewati command default */
+    if (lua_on_player_command(c->id, c->name, cmd, args)) return;
 
     if (!strcmp(cmd, "q")) {
         c->dead = 1; c->kick_reason = LEAVE_QUIT;
@@ -620,16 +578,8 @@ static void console_cmd(const char *line) {
         if (sscanf(line, "kick %d %127[^\n]", &id, reason) < 1) {
             printf("Pakai: kick <id> [alasan]\n"); return;
         }
-        Client *c = client_by_id(id);
-        if (!c) { printf("Pemain id %d tidak ditemukan.\n", id); return; }
-        char msg[256];
-        if (reason[0])
-            snprintf(msg, sizeof(msg), "*** %s (id %d) di-kick (%s).", c->name, c->id, reason);
-        else
-            snprintf(msg, sizeof(msg), "*** %s (id %d) di-kick.", c->name, c->id);
-        chat_broadcast(CHAT_SERVER, KIND_SYS, msg);
-        c->dead = 1; c->kick_reason = LEAVE_KICK;
-        log_msg("Kicked %s (id %d)", c->name, c->id);
+        if (!client_by_id(id)) { printf("Pemain id %d tidak ditemukan.\n", id); return; }
+        server_kick(id, reason);
     } else if (!strcmp(cmd, "stop")) {
         g_running = 0;
     } else {
@@ -732,17 +682,22 @@ int main(int argc, char **argv) {
     if (listen(lsock, 16) == SOCKET_ERROR) { fprintf(stderr, "listen gagal\n"); return 1; }
 
     log_msg("===========================================");
-    log_msg(" RO-MP Dedicated Server v1");
+    log_msg(" RO-MP Dedicated Server v1 (Lua gamemode)");
     log_msg(" Hostname : %s", g_cfg.hostname);
     log_msg(" Port     : %d", g_cfg.port);
     log_msg(" Max pemain: %d%s", g_cfg.maxplayers, g_cfg.password[0] ? " (password ON)" : "");
     log_msg(" MOTD     : %s", g_cfg.motd);
+    log_msg(" Gamemode : %s", g_cfg.gamemode);
     log_msg(" Ketik 'help' untuk command console.");
     log_msg("===========================================");
+
+    if (lua_init(g_cfg.gamemode) != 0)
+        log_msg("WARNING: jalan tanpa gamemode Lua (pakai default C).");
 
     pthread_t cthread;
     pthread_create(&cthread, NULL, console_thread, NULL);
 
+    uint64_t last_lua_tick = now_ms();
     while (g_running) {
         fd_set rfds;
         FD_ZERO(&rfds);
@@ -775,10 +730,18 @@ int main(int argc, char **argv) {
         char line[256];
         while (console_dequeue(line)) console_cmd(line);
 
+        /* tick Lua tiap 1 detik */
+        uint64_t tnow = now_ms();
+        if (tnow - last_lua_tick >= 1000) {
+            last_lua_tick = tnow;
+            lua_on_tick();
+        }
+
         sweep_dead();
     }
 
     log_msg("Server dimatikan...");
+    lua_shutdown();
     for (Client *c = g_clients; c; c = c->next) CLOSESOCK(c->sock);
     CLOSESOCK(lsock);
     if (g_logf) fclose(g_logf);
