@@ -11,7 +11,13 @@
 
 static lua_State *L = NULL;
 
+/* Registry untuk handler romp.onNUICallback(name, fn). */
+static int nui_cb_ref = LUA_NOREF;
+
 int lua_active(void) { return L != NULL; }
+
+/* Helper frame kecil untuk romp_lua.c */
+static void lput_u16(uint8_t *b, uint16_t v) { b[0] = v & 0xFF; b[1] = (v >> 8) & 0xFF; }
 
 /* ---------------- API romp.* untuk gamemode ---------------- */
 
@@ -89,6 +95,45 @@ static int l_romp_get_config(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- API NUI (ala FiveM) ---------------- */
+
+/* romp.sendNUIMessage(id, jsonString) -> true/false */
+static int l_romp_send_nui_message(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    size_t jl = 0;
+    const char *json = luaL_checklstring(Ls, 2, &jl);
+    Client *c = client_by_id(id);
+    if (!c || jl == 0 || jl > 4000) { lua_pushboolean(Ls, 0); return 1; }
+    uint8_t b[4096];
+    b[0] = P_NUI_MSG;
+    lput_u16(b + 1, (uint16_t)jl);
+    memcpy(b + 3, json, jl);
+    lua_pushboolean(Ls, client_send_frame(c, b, 3 + jl) == 0);
+    return 1;
+}
+
+/* romp.onNUICallback(name, fn) — fn dipanggil sebagai fn(id, name, dataJson) */
+static int l_romp_on_nui_callback(lua_State *Ls) {
+    const char *name = luaL_checkstring(Ls, 1);
+    luaL_checktype(Ls, 2, LUA_TFUNCTION);
+    lua_rawgeti(Ls, LUA_REGISTRYINDEX, nui_cb_ref);
+    lua_pushvalue(Ls, 2);
+    lua_setfield(Ls, -2, name);
+    lua_pop(Ls, 1);
+    return 0;
+}
+
+/* romp.setNUIFocus(id, bool) -> true/false */
+static int l_romp_set_nui_focus(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    int focus = lua_toboolean(Ls, 2);
+    Client *c = client_by_id(id);
+    if (!c) { lua_pushboolean(Ls, 0); return 1; }
+    uint8_t b[2] = { P_NUI_FOCUS, (uint8_t)(focus ? 1 : 0) };
+    lua_pushboolean(Ls, client_send_frame(c, b, 2) == 0);
+    return 1;
+}
+
 /* ---------------- Init ---------------- */
 
 int lua_init(const char *script_path) {
@@ -107,6 +152,9 @@ int lua_init(const char *script_path) {
     lua_pushcfunction(L, l_romp_kick_player);      lua_setfield(L, -2, "kickPlayer");
     lua_pushcfunction(L, l_romp_get_tick);         lua_setfield(L, -2, "getTick");
     lua_pushcfunction(L, l_romp_get_config);       lua_setfield(L, -2, "getConfig");
+    lua_pushcfunction(L, l_romp_send_nui_message); lua_setfield(L, -2, "sendNUIMessage");
+    lua_pushcfunction(L, l_romp_on_nui_callback);  lua_setfield(L, -2, "onNUICallback");
+    lua_pushcfunction(L, l_romp_set_nui_focus);    lua_setfield(L, -2, "setNUIFocus");
     /* konstanta kind chat */
     lua_pushinteger(L, KIND_CHAT); lua_setfield(L, -2, "KIND_CHAT");
     lua_pushinteger(L, KIND_INFO); lua_setfield(L, -2, "KIND_INFO");
@@ -114,6 +162,10 @@ int lua_init(const char *script_path) {
     lua_pushinteger(L, KIND_PM);   lua_setfield(L, -2, "KIND_PM");
     lua_pushinteger(L, KIND_SYS);  lua_setfield(L, -2, "KIND_SYS");
     lua_setglobal(L, "romp");
+
+    /* tabel registry untuk NUI callback */
+    lua_newtable(L);
+    nui_cb_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
     if (luaL_loadfile(L, script_path) != LUA_OK ||
         lua_pcall(L, 0, 0, 0) != LUA_OK) {
@@ -129,6 +181,7 @@ int lua_init(const char *script_path) {
 
 void lua_shutdown(void) {
     if (L) { lua_close(L); L = NULL; }
+    nui_cb_ref = LUA_NOREF;
 }
 
 /* ---------------- Dispatch event ---------------- */
@@ -218,6 +271,24 @@ int lua_on_player_chat(int id, const char *name, const char *text) {
 int lua_on_player_command(int id, const char *name, const char *cmd, const char *args) {
     EvCmd e = { id, name, cmd, args };
     return call_event("onPlayerCommand", push_cmd, &e);
+}
+
+/* Dispatch NUI callback dari client ke handler Lua terdaftar. */
+int lua_on_nui_callback(int id, const char *name, const char *data) {
+    if (!L) return 0;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, nui_cb_ref);
+    lua_getfield(L, -1, name);
+    lua_remove(L, -2); /* sisakan fn */
+    if (!lua_isfunction(L, -1)) { lua_pop(L, 1); return 0; }
+    lua_pushinteger(L, id);
+    lua_pushstring(L, name);
+    lua_pushstring(L, data);
+    if (lua_pcall(L, 3, 0, 0) != LUA_OK) {
+        log_msg("[lua] error di nui callback '%s': %s", name,
+                lua_tostring(L, -1) ? lua_tostring(L, -1) : "?");
+        lua_pop(L, 1);
+    }
+    return 1;
 }
 
 void lua_on_tick(void) {

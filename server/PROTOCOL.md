@@ -141,6 +141,42 @@ char name[namelen]
 u32 client_tick  // echo dari PING
 ```
 
+## NUI — UI ala FiveM (HTML/JS)
+
+Pola seperti FiveM: Lua server mengirim pesan JSON ke UI (WebView di client),
+dan JavaScript di UI memanggil callback balik ke Lua. Contoh: inventory ala
+ox_inventory.
+
+### 0x40 NUI_MESSAGE (Server -> Client)
+
+```
+u16 jsonlen
+char json[jsonlen]  // UTF-8 JSON, maks 4000 byte. Contoh:
+                    // {"action":"openInv","items":[{"slot":1,"name":"Roti","count":2}]}
+```
+
+Client meneruskan JSON apa adanya ke WebView (`onRomMessage(json)`).
+`action` adalah konvensi antara gamemode Lua dan halaman HTML-nya.
+
+### 0x41 NUI_CALLBACK (Client -> Server)
+
+```
+u8  namelen
+char name[namelen]   // nama callback, mis. "nui_inv_use"
+u16 datalen
+char data[datalen]   // UTF-8 JSON, maks 4000 byte. Contoh: {"slot":1}
+```
+
+Diteruskan ke handler yang didaftarkan Lua via `romp.onNUICallback(name, fn)`.
+
+### 0x42 NUI_FOCUS (Server -> Client)
+
+```
+u8 focus  // 1 = UI ambil alih sentuhan (WebView fokus), 0 = lepas ke game
+```
+
+Mirip `SetNuiFocus` di FiveM. Lua: `romp.setNUIFocus(id, true/false)`.
+
 ## Alur koneksi tipikal
 
 ```

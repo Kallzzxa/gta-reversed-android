@@ -17,5 +17,7 @@ int  lua_on_player_join(int id, const char *name);
 int  lua_on_player_leave(int id, const char *name, int reason);
 int  lua_on_player_chat(int id, const char *name, const char *text);
 int  lua_on_player_command(int id, const char *name, const char *cmd, const char *args);
+/* Callback NUI dari client (selalu dianggap handled, tak ada default C). */
+int  lua_on_nui_callback(int id, const char *name, const char *data);
 /* Dipanggil tiap 1 detik. */
 void lua_on_tick(void);

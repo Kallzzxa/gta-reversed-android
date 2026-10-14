@@ -37,3 +37,6 @@ output.json
 
 # Private ReversibleHooks
 ReversibleHooks.h
+
+# Build artifacts (MSVC/Zig debug info)
+*.pdb

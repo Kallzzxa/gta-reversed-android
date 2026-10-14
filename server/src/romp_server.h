@@ -44,6 +44,9 @@ typedef int SOCKET;
 #define P_LIST        0x24
 #define P_PING        0x30
 #define P_PONG        0x31
+#define P_NUI_MSG     0x40
+#define P_NUI_CB      0x41
+#define P_NUI_FOCUS   0x42
 
 #define CHAT_SERVER   0xFFFF
 #define KIND_CHAT 0
@@ -97,6 +100,8 @@ Client *client_by_name(const char *name);
 void chat_broadcast(uint16_t pid, uint8_t kind, const char *msg);
 void chat_to(Client *c, uint16_t pid, uint8_t kind, const char *msg);
 void server_say(const char *msg);
+/* Kirim frame mentah ke client (dipakai scripting layer). 0 = sukses. */
+int client_send_frame(Client *c, const uint8_t *payload, size_t n);
 /* Kick pemain + umumkan. Dipakai console & Lua. */
 void server_kick(int id, const char *reason);
 uint64_t now_ms(void);

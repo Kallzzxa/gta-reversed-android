@@ -17,7 +17,51 @@
 --   romp.getTick() -> ms sejak server nyala
 --   romp.getConfig("hostname"|"motd"|"port"|"maxplayers")
 --   romp.KIND_CHAT / KIND_INFO / KIND_ME / KIND_PM / KIND_SYS
+--   NUI (UI ala FiveM):
+--   romp.sendNUIMessage(id, jsonString) -> true/false
+--   romp.onNUICallback(name, fn) — fn dipanggil sebagai fn(id, name, dataJson)
+--   romp.setNUIFocus(id, true/false) -> true/false
 -- ============================================================
+
+-- Helper JSON untuk pesan NUI (server dijalankan dari folder server/,
+-- jadi json.lua ada di sebelah gamemode.lua).
+local json = dofile("json.lua")
+
+-- ============================================================
+-- DEMO NUI: inventory ala ox_inventory. Ketik /inv di dalam game.
+-- Halaman UI: android/.../assets/romp/nui/inventory.html
+-- ============================================================
+local demoItems = {
+    { id = "roti", name = "Roti",        count = 3 },
+    { id = "air",  name = "Air Mineral", count = 2 },
+    { id = "kopi", name = "Kopi",        count = 1 },
+    { id = "obat", name = "Obat",        count = 1 },
+    { id = "kunci", name = "Kunci",      count = 1 },
+}
+
+local function bukaInventory(id)
+    romp.sendNUIMessage(id, json.encode({
+        action = "openInv",
+        items = demoItems,
+    }))
+    romp.setNUIFocus(id, true)
+    romp.sendChatToPlayer(id, romp.KIND_INFO,
+        "*** Inventory terbuka (demo NUI).")
+end
+
+-- JS -> Lua: pemain memakai item dari UI.
+romp.onNUICallback("nui_inv_use", function(pid, name, data)
+    local ok, d = pcall(json.decode, data)
+    local itemName = (ok and d and d.name) or data
+    romp.sendChatToPlayer(pid, romp.KIND_INFO,
+        "*** Kamu memakai: " .. tostring(itemName))
+    romp.log(name .. " memakai item NUI: " .. tostring(itemName))
+end)
+
+-- JS -> Lua: pemain menutup UI.
+romp.onNUICallback("nui_inv_close", function(pid, name, data)
+    romp.setNUIFocus(pid, false)
+end)
 
 romp.log("Gamemode dimuat untuk server: " .. romp.getConfig("hostname"))
 
@@ -49,6 +93,9 @@ function onPlayerCommand(id, name, cmd, args)
             "*** " .. romp.getConfig("hostname")
             .. " | Online: " .. romp.playerCount()
             .. "/" .. romp.getConfig("maxplayers"))
+        return true
+    elseif cmd == "inv" then
+        bukaInventory(id)
         return true
     elseif cmd == "kick" then
         -- contoh command admin sederhana: /kick <id> <alasan>

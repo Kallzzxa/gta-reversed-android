@@ -107,6 +107,12 @@ bool Client::SendChat(const std::string& text) {
     return net_.SendFrame(build_chat(text));
 }
 
+bool Client::SendNuiCallback(const std::string& name, const std::string& dataJson) {
+    if (state_ != ConnState::Connected) return false;
+    if (name.empty()) return false;
+    return net_.SendFrame(build_nui_callback(name, dataJson));
+}
+
 void Client::Update() {
     if (state_ != ConnState::Connected) return;
 
@@ -232,6 +238,18 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
         }
         case PacketType::PONG: {
             // TODO(GAME, opsional): hitung RTT dari tick untuk ditampilkan.
+            break;
+        }
+        case PacketType::NUI_MESSAGE: {
+            std::string json;
+            if (parse_nui_message(payload, len, json))
+                platform_->OnNuiMessage(json);
+            break;
+        }
+        case PacketType::NUI_FOCUS: {
+            bool focused = false;
+            if (parse_nui_focus(payload, len, focused))
+                platform_->OnNuiFocus(focused);
             break;
         }
         default:

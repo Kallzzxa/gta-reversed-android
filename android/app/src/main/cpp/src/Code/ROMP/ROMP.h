@@ -53,6 +53,13 @@ public:
 
     // Log ke konsol game / logcat.
     virtual void Log(const std::string& msg) = 0;
+
+    // Teruskan pesan NUI (JSON) dari server ke UI (WebView).
+    // Implementasi nyata: panggil JS onRomMessage(json) di WebView.
+    virtual void OnNuiMessage(const std::string& json) = 0;
+
+    // UI minta fokus sentuhan (mirip SetNuiFocus di FiveM).
+    virtual void OnNuiFocus(bool focused) = 0;
 };
 
 // ------------------------------------------------------------
@@ -85,6 +92,17 @@ public:
     void Log(const std::string& msg) override {
         std::printf("[ROMP] %s\n", msg.c_str());
     }
+    void OnNuiMessage(const std::string& json) override {
+        std::printf("[NullPlatform] NUI message: %s\n", json.c_str());
+        last_nui_ = json;  // untuk assert di test harness
+    }
+    void OnNuiFocus(bool focused) override {
+        std::printf("[NullPlatform] NUI focus: %s\n",
+                    focused ? "true" : "false");
+        last_focus_ = focused;
+    }
+    std::string last_nui_;
+    bool last_focus_ = false;
 };
 
 enum class ConnState {
@@ -114,6 +132,10 @@ public:
     // Kirim pesan chat ke server (maks 128 byte, dipotong otomatis).
     // Mengembalikan false jika tidak tersambung.
     bool SendChat(const std::string& text);
+
+    // Kirim callback NUI (JS -> Lua) ke server. Dipanggil platform saat
+    // JavaScript memanggil window.romp.postMessage(name, dataJson).
+    bool SendNuiCallback(const std::string& name, const std::string& dataJson);
 
     // Dipanggil TIAP FRAME game. Menangani: Pump net, kirim POS tiap
     // 100 ms, interpolasi + MoveRemotePlayer, PING tiap 15 detik.

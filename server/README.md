@@ -59,6 +59,31 @@ function onTick() ... end                         -- tiap 1 detik
 | `romp.getConfig(key)` | `hostname`/`motd`/`port`/`maxplayers` |
 | `romp.KIND_CHAT/INFO/ME/PM/SYS` | Konstanta jenis chat |
 
+**NUI — UI ala FiveM (HTML/JS).** Lua bisa mengirim pesan JSON ke WebView di
+client, dan JavaScript bisa callback balik ke Lua. Demo bawaan: ketik `/inv`
+di dalam game untuk membuka inventory ala ox_inventory.
+
+```lua
+local json = dofile("json.lua")
+
+-- Server -> UI (paket 0x40). JSON bebas, 'action' = konvensi dengan halaman HTML.
+romp.sendNUIMessage(id, json.encode({ action = "openInv", items = {...} }))
+-- Minta UI ambil alih sentuhan (paket 0x42), mirip SetNuiFocus di FiveM.
+romp.setNUIFocus(id, true)
+
+-- UI -> server (paket 0x41). Dipanggil saat JS memanggil
+-- window.romp.postMessage("nui_inv_use", JSON.stringify({...})).
+romp.onNUICallback("nui_inv_use", function(pid, name, dataJson)
+    local d = json.decode(dataJson)
+    romp.sendChatToPlayer(pid, romp.KIND_INFO, "*** Kamu memakai: " .. d.name)
+end)
+```
+
+Halaman UI: `android/app/src/main/assets/romp/nui/inventory.html`
+(contoh; dibundle ke APK). Jembatan WebView: contoh
+`android/.../java/com/regta/romp/ROMPWebView.java` (JS `onRomMessage`,
+bridge `window.romp.postMessage`, fokus sentuhan; JNI TODO seperti chat).
+
 Command bawaan server (`/me` `/pm` `/players` `/help` `/q`) tetap jalan sebagai
 fallback kalau gamemode tidak meng-handle-nya. Error di script Lua hanya
 dicatat di log — server tidak crash.

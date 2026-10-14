@@ -41,6 +41,9 @@ enum class PacketType : uint8_t {
     PLAYER_LIST = 0x24,
     PING        = 0x30,
     PONG        = 0x31,
+    NUI_MESSAGE = 0x40,  // Server -> Client: pesan JSON untuk UI (WebView)
+    NUI_CALLBACK= 0x41,  // Client -> Server: callback JS -> Lua
+    NUI_FOCUS   = 0x42,  // Server -> Client: UI ambil/lepas fokus sentuhan
 };
 
 // Alasan PLAYER_LEAVE (u8 reason).
@@ -327,6 +330,38 @@ inline bool parse_player_list(const uint8_t* data, size_t len, std::vector<Playe
 inline bool parse_pong(const uint8_t* data, size_t len, uint32_t& out_tick) {
     Reader r(data, len);
     return r.get_u32(out_tick);
+}
+
+// 0x40 NUI_MESSAGE (S->C): jsonlen(u16) + json. Maks 4000 byte.
+inline bool parse_nui_message(const uint8_t* data, size_t len, std::string& out_json) {
+    Reader r(data, len);
+    uint16_t jlen = 0;
+    if (!r.get_u16(jlen)) return false;
+    if (jlen > 4000) return false;
+    return r.get_str(out_json, jlen);
+}
+
+// 0x41 NUI_CALLBACK (C->S): namelen(u8) + name + datalen(u16) + data(JSON).
+inline std::vector<uint8_t> build_nui_callback(const std::string& name,
+                                              const std::string& data_json) {
+    std::string n = name.substr(0, 64);
+    std::string d = data_json.substr(0, 4000);
+    std::vector<uint8_t> p;
+    p.reserve(3 + n.size() + d.size());
+    p.push_back(static_cast<uint8_t>(n.size()));
+    p.insert(p.end(), n.begin(), n.end());
+    put_u16(p, static_cast<uint16_t>(d.size()));
+    p.insert(p.end(), d.begin(), d.end());
+    return make_frame(PacketType::NUI_CALLBACK, p);
+}
+
+// 0x42 NUI_FOCUS (S->C): focus(u8).
+inline bool parse_nui_focus(const uint8_t* data, size_t len, bool& out_focus) {
+    Reader r(data, len);
+    uint8_t f = 0;
+    if (!r.get_u8(f)) return false;
+    out_focus = (f != 0);
+    return true;
 }
 
 }  // namespace ROMP

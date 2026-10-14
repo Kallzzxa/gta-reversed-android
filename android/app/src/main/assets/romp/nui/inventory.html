@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>RO-MP Inventory</title>
+<style>
+  /* Tema ala FiveM / ox_inventory: gelap transparan + aksen teal. */
+  * { box-sizing: border-box; margin: 0; padding: 0;
+      -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden;
+      background: transparent; font-family: system-ui, sans-serif; }
+  #wrap { position: absolute; inset: 0; display: none;
+      align-items: center; justify-content: center;
+      background: rgba(0,0,0,.55); }
+  #wrap.open { display: flex; }
+  #panel { width: min(92vw, 420px); max-height: 80vh; overflow-y: auto;
+      background: rgba(12,14,18,.96); border: 1px solid rgba(0,200,180,.35);
+      border-radius: 12px; padding: 14px; color: #eee;
+      box-shadow: 0 8px 40px rgba(0,0,0,.6); }
+  #panel h2 { font-size: 15px; letter-spacing: 2px; text-transform: uppercase;
+      color: #4de3c8; margin-bottom: 10px; text-align: center; }
+  #grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .slot { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12);
+      border-radius: 8px; padding: 10px 6px; text-align: center; cursor: pointer;
+      transition: transform .08s, border-color .08s; position: relative; }
+  .slot:active { transform: scale(.96); border-color: #4de3c8; }
+  .slot .ico { font-size: 30px; line-height: 1.2; }
+  .slot .nm { font-size: 12px; margin-top: 4px; color: #ddd; }
+  .slot .ct { position: absolute; top: 4px; right: 7px; font-size: 11px;
+      color: #4de3c8; font-weight: bold; }
+  #close { display: block; width: 100%; margin-top: 12px; padding: 10px;
+      background: rgba(0,200,180,.15); border: 1px solid rgba(0,200,180,.5);
+      color: #4de3c8; border-radius: 8px; font-size: 14px; cursor: pointer; }
+  #close:active { background: rgba(0,200,180,.3); }
+  #hint { text-align: center; font-size: 11px; color: #888; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="panel">
+    <h2>Inventory</h2>
+    <div id="grid"></div>
+    <button id="close">Tutup</button>
+    <div id="hint">Ketuk item untuk memakai</div>
+  </div>
+</div>
+<script>
+// Dipanggil native (ROMPWebView.postToUI) setiap ada NUI_MESSAGE dari server.
+window.onRomMessage = function (json) {
+  var msg;
+  try { msg = JSON.parse(json); } catch (e) { return; }
+  if (msg.action === "openInv") {
+    render(msg.items || []);
+    document.getElementById("wrap").classList.add("open");
+  } else if (msg.action === "closeInv") {
+    document.getElementById("wrap").classList.remove("open");
+  }
+};
+
+var ICONS = { roti: "🍞", air: "💧", kopi: "☕", obat: "💊", kunci: "🔑" };
+
+function render(items) {
+  var grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  items.forEach(function (it) {
+    var d = document.createElement("div");
+    d.className = "slot";
+    d.innerHTML = '<div class="ct">x' + it.count + '</div>' +
+      '<div class="ico">' + (ICONS[it.id] || "📦") + "</div>" +
+      '<div class="nm">' + it.name + "</div>";
+    d.onclick = function () { useItem(it); };
+    grid.appendChild(d);
+  });
+}
+
+function bridge(name, data) {
+  if (window.romp && window.romp.postMessage) {
+    window.romp.postMessage(name, JSON.stringify(data));
+  }
+}
+
+function useItem(it) {
+  bridge("nui_inv_use", { id: it.id, name: it.name });
+}
+
+document.getElementById("close").onclick = function () {
+  document.getElementById("wrap").classList.remove("open");
+  bridge("nui_inv_close", {});
+};
+</script>
+</body>
+</html>

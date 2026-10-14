@@ -191,6 +191,11 @@ static int send_frame(Client *c, const uint8_t *payload, size_t n) {
     return send_all(c->sock, payload, n);
 }
 
+/* Wrapper non-static untuk scripting layer. */
+int client_send_frame(Client *c, const uint8_t *payload, size_t n) {
+    return send_frame(c, payload, n);
+}
+
 static void send_reject(Client *c, const char *reason) {
     uint8_t b[256];
     size_t rl = strlen(reason);
@@ -422,7 +427,7 @@ static void handle_chat_cmd(Client *c, const char *msg) {
         return;
     }
     if (!strcmp(cmd, "help")) {
-        chat_to(c, CHAT_SERVER, KIND_INFO, "*** Command: /me /pm /players /help /q");
+        chat_to(c, CHAT_SERVER, KIND_INFO, "*** Command: /me /pm /players /help /q /inv (Lua: /waktu /info /kick)");
         return;
     }
     if (!strcmp(cmd, "players")) {
@@ -471,6 +476,19 @@ static void handle_ping(Client *c, const uint8_t *p, size_t n) {
     send_frame(c, b, 5);
 }
 
+static void handle_nui_callback(Client *c, const uint8_t *p, size_t n) {
+    if (!c->handshaked || n < 3) return;
+    uint8_t nl = p[0];
+    if (nl == 0 || nl > 64 || n < (size_t)(1 + nl + 2)) return;
+    char name[65];
+    memcpy(name, p + 1, nl); name[nl] = '\0';
+    uint16_t dl = get_u16(p + 1 + nl);
+    if (dl > 4000 || n < (size_t)(1 + nl + 2 + dl)) return;
+    char data[4001];
+    memcpy(data, p + 1 + nl + 2, dl); data[dl] = '\0';
+    lua_on_nui_callback(c->id, name, data);
+}
+
 static void dispatch(Client *c, uint8_t type, const uint8_t *p, size_t n) {
     c->last_activity = now_ms();
     switch (type) {
@@ -478,6 +496,7 @@ static void dispatch(Client *c, uint8_t type, const uint8_t *p, size_t n) {
         case P_POS:   handle_pos(c, p, n); break;
         case P_CHAT:  handle_chat(c, p, n); break;
         case P_PING:  handle_ping(c, p, n); break;
+        case P_NUI_CB: handle_nui_callback(c, p, n); break;
         default: break;
     }
 }
