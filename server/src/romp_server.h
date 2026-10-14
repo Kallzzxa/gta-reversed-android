@@ -69,6 +69,15 @@ typedef int SOCKET;
 #define Q_PLAYERS       0x03  /* client -> server: minta daftar pemain */
 #define Q_PLAYERS_REPLY 0x04  /* server -> client: daftar pemain */
 
+/* ---- RCON (remote console ala SA-MP), UDP di port game ----
+ * 0x05 RCON (client -> server):
+ *   "ROMP" 0x05 pwlen(u8) pw cmdlen(u16 LE) cmd
+ * 0x06 RCON_REPLY (server -> client):
+ *   "ROMP" 0x06 status(u8: 0=OK, 1=password salah/RCON mati)
+ *   outlen(u16 LE) out (teks output, baris dipisah '\n') */
+#define R_RCON        0x05
+#define R_RCON_REPLY  0x06
+
 /* ---- LAN discovery: server broadcast beacon tiap 3 detik ---- */
 #define LAN_BEACON_PORT 7779  /* port UDP tetap untuk beacon & listen client */
 #define LAN_BEACON      0x11  /* server -> broadcast: info + gameport */
@@ -105,6 +114,8 @@ typedef struct {
     char master_host[128];/* host master server (kosong = tidak announce) */
     int  master_port;     /* port master server (default 7778) */
     int  lan_discovery;   /* 1 = broadcast beacon LAN tiap 3 dtk (default 1) */
+    int  rcon;           /* 1 = RCON via UDP aktif (default 1) */
+    char rcon_password[64]; /* password RCON; kosong = RCON mati (ala SA-MP) */
 } Config;
 
 extern Config g_cfg;
@@ -179,5 +190,7 @@ void ban_add(const char *ip);
 void ban_remove(const char *ip);
 void ban_clear(void);
 int  ban_check(const char *ip);
+/* Ambil IP ban ke-idx (0-based). 1 = ada, 0 = habis. Dipakai `bans`. */
+int  ban_get(int idx, char *ip_out, size_t n);
 /* Minta announce thread segera kirim announce ke master. Dipakai Lua. */
 void trigger_announce(void);

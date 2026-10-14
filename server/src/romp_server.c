@@ -41,7 +41,9 @@ Config g_cfg = {
     0,      /* announce */
     "",     /* master_host */
     7778,   /* master_port */
-    1       /* lan_discovery */
+    1,      /* lan_discovery */
+    1,      /* rcon */
+    ""      /* rcon_password */
 };
 
 static void cfg_load(const char *path) {
@@ -73,6 +75,8 @@ static void cfg_load(const char *path) {
         else if (!strcmp(key, "master_host")) { strncpy(g_cfg.master_host, val, sizeof(g_cfg.master_host)-1); }
         else if (!strcmp(key, "master_port")) g_cfg.master_port = atoi(val);
         else if (!strcmp(key, "lan_discovery")) g_cfg.lan_discovery = atoi(val) ? 1 : 0;
+        else if (!strcmp(key, "rcon")) g_cfg.rcon = atoi(val) ? 1 : 0;
+        else if (!strcmp(key, "rcon_password")) { strncpy(g_cfg.rcon_password, val, sizeof(g_cfg.rcon_password)-1); }
     }
     fclose(f);
 }
@@ -108,6 +112,18 @@ void ban_clear(void) {
 int ban_check(const char *ip) {
     for (BanEntry *b = g_bans; b; b = b->next)
         if (!strcmp(b->ip, ip)) return 1;
+    return 0;
+}
+
+int ban_get(int idx, char *ip_out, size_t n) {
+    int i = 0;
+    for (BanEntry *b = g_bans; b; b = b->next, i++) {
+        if (i == idx) {
+            strncpy(ip_out, b->ip, n - 1);
+            ip_out[n - 1] = '\0';
+            return 1;
+        }
+    }
     return 0;
 }
 
@@ -787,7 +803,29 @@ static void *console_thread(void *arg) {
     return NULL;
 }
 
-static void console_cmd(const char *line) {
+/* ---------------- Console & RCON ---------------- */
+/* Output satu baris command: ke stdout bila o==NULL (console lokal),
+ * atau di-append (+ '\n') ke buffer bila dipakai RCON. */
+typedef struct { char *buf; size_t cap, len; } OutBuf;
+
+static void emit_line(OutBuf *o, const char *fmt, ...) {
+    char tmp[256];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(tmp, sizeof(tmp), fmt, ap);
+    va_end(ap);
+    if (!o || !o->buf) { printf("%s\n", tmp); fflush(stdout); return; }
+    size_t tl = strlen(tmp);
+    if (o->len + tl + 1 >= o->cap) return; /* buffer penuh: sisa dibuang */
+    memcpy(o->buf + o->len, tmp, tl);
+    o->len += tl;
+    o->buf[o->len++] = '\n';
+    o->buf[o->len] = '\0';
+}
+
+/* Jalankan satu baris command console. Dipakai console lokal & RCON
+ * (RCON menangkap output lewat OutBuf). */
+static void console_run(const char *line, OutBuf *o) {
     char cmd[16];
     if (sscanf(line, "%15s", cmd) != 1) return;
     /* Lua dulu: onConsoleCommand(cmd, args) -> true = di-handle gamemode */
@@ -797,20 +835,23 @@ static void console_cmd(const char *line) {
         if (lua_on_console_command(cmd, args)) return;
     }
     if (!strcmp(cmd, "help")) {
-        printf("  help              - daftar command\n");
-        printf("  say <pesan>       - kirim pengumuman ke semua pemain\n");
-        printf("  players           - daftar pemain online\n");
-        printf("  vehicles          - daftar kendaraan aktif\n");
-        printf("  kick <id> [alasan]- kick pemain\n");
-        printf("  stop              - matikan server\n");
+        emit_line(o, "  help              - daftar command");
+        emit_line(o, "  say <pesan>       - kirim pengumuman ke semua pemain");
+        emit_line(o, "  players           - daftar pemain online");
+        emit_line(o, "  vehicles          - daftar kendaraan aktif");
+        emit_line(o, "  kick <id> [alasan]- kick pemain");
+        emit_line(o, "  ban <ip>          - ban IP (tidak bisa join)");
+        emit_line(o, "  unban <ip>        - cabut ban IP");
+        emit_line(o, "  bans              - daftar IP yang di-ban");
+        emit_line(o, "  stop              - matikan server");
     } else if (!strcmp(cmd, "players")) {
-        printf("Online (%d/%d):\n", client_count(), g_cfg.maxplayers);
+        emit_line(o, "Online (%d/%d):", client_count(), g_cfg.maxplayers);
         for (Client *c = g_clients; c; c = c->next)
-            if (c->handshaked) printf("  [%d] %s\n", c->id, c->name);
+            if (c->handshaked) emit_line(o, "  [%d] %s", c->id, c->name);
     } else if (!strcmp(cmd, "vehicles")) {
-        printf("Kendaraan (%d):\n", vehicle_count());
+        emit_line(o, "Kendaraan (%d):", vehicle_count());
         for (Vehicle *v = vehicle_first(); v; v = vehicle_next(v))
-            printf("  [vid %d] model %u pos %.1f,%.1f,%.1f hp %u%s driver %d\n",
+            emit_line(o, "  [vid %d] model %u pos %.1f,%.1f,%.1f hp %u%s driver %d",
                    v->id, v->model, v->x, v->y, v->z, v->health,
                    v->destroyed ? " (HANCUR)" : "", v->driver);
     } else if (!strcmp(cmd, "say")) {
@@ -820,22 +861,150 @@ static void console_cmd(const char *line) {
     } else if (!strcmp(cmd, "kick")) {
         int id; char reason[128] = "";
         if (sscanf(line, "kick %d %127[^\n]", &id, reason) < 1) {
-            printf("Pakai: kick <id> [alasan]\n"); return;
+            emit_line(o, "Pakai: kick <id> [alasan]"); return;
         }
-        if (!client_by_id(id)) { printf("Pemain id %d tidak ditemukan.\n", id); return; }
+        Client *t = client_by_id(id);
+        if (!t) { emit_line(o, "Pemain id %d tidak ditemukan.", id); return; }
+        char nm[25];
+        strncpy(nm, t->name, sizeof(nm) - 1); nm[sizeof(nm) - 1] = '\0';
         server_kick(id, reason);
+        emit_line(o, "*** %s (id %d) di-kick.", nm, id);
+    } else if (!strcmp(cmd, "ban")) {
+        char ip[48] = "";
+        if (sscanf(line, "ban %47s", ip) != 1) {
+            emit_line(o, "Pakai: ban <ip>"); return;
+        }
+        if (ban_check(ip)) { emit_line(o, "IP %s sudah di-ban.", ip); return; }
+        ban_add(ip);
+        emit_line(o, "*** IP %s di-ban.", ip);
+    } else if (!strcmp(cmd, "unban")) {
+        char ip[48] = "";
+        if (sscanf(line, "unban %47s", ip) != 1) {
+            emit_line(o, "Pakai: unban <ip>"); return;
+        }
+        if (!ban_check(ip)) { emit_line(o, "IP %s tidak ada di daftar ban.", ip); return; }
+        ban_remove(ip);
+        emit_line(o, "*** IP %s di-unban.", ip);
+    } else if (!strcmp(cmd, "bans")) {
+        emit_line(o, "Daftar ban IP:");
+        int n = 0;
+        char ip[48];
+        for (int i = 0; ban_get(i, ip, sizeof(ip)); i++) {
+            emit_line(o, "  %s", ip);
+            n++;
+        }
+        if (!n) emit_line(o, "  (kosong)");
     } else if (!strcmp(cmd, "stop")) {
+        emit_line(o, "*** Server dimatikan...");
         g_running = 0;
     } else {
-        printf("Command tidak dikenal: %s (ketik 'help')\n", cmd);
+        emit_line(o, "Command tidak dikenal: %s (ketik 'help')", cmd);
     }
-    fflush(stdout);
+}
+
+static void console_cmd(const char *line) {
+    console_run(line, NULL);
+}
+
+/* ---------------- RCON (remote console ala SA-MP) ---------------- */
+/* UDP di port game. Request:  "ROMP" 0x05 pwlen(u8) pw cmdlen(u16 LE) cmd
+ * Reply:    "ROMP" 0x06 status(u8) outlen(u16 LE) out
+ * status 0 = OK, 1 = password salah / RCON mati.
+ * Anti brute-force: maks 2 request/detik per IP; 5x password salah dalam
+ * waktu singkat = IP diblokir 60 detik (request berikutnya diabaikan diam). */
+#define RCON_TRACK 32
+typedef struct {
+    char ip[48];
+    uint64_t last_ms;
+    int fails;
+    uint64_t blocked_until;
+} RconTrack;
+static RconTrack g_rcon_track[RCON_TRACK];
+
+static void rcon_reply(SOCKET usock, const struct sockaddr_in *from,
+                       socklen_t flen, uint8_t status, const char *out, size_t outlen) {
+    uint8_t b[1400];
+    size_t o = 0;
+    memcpy(b, QUERY_MAGIC, QUERY_MAGIC_LEN); o += QUERY_MAGIC_LEN;
+    b[o++] = R_RCON_REPLY;
+    b[o++] = status;
+    if (outlen > 1000) outlen = 1000; /* muat di satu datagram UDP */
+    put_u16(b + o, (uint16_t)outlen); o += 2;
+    if (outlen) memcpy(b + o, out, outlen);
+    o += outlen;
+    sendto(usock, (char*)b, (int)o, 0, (struct sockaddr*)from, flen);
+}
+
+static void handle_rcon(SOCKET usock, const uint8_t *buf, size_t n,
+                        const struct sockaddr_in *from, socklen_t flen) {
+    char ip[48];
+    inet_ntop(AF_INET, &from->sin_addr, ip, sizeof(ip));
+    uint64_t now = now_ms();
+
+    /* cari slot tracking IP ini, atau slot paling lama tak dipakai */
+    int ti = -1;
+    for (int i = 0; i < RCON_TRACK; i++)
+        if (g_rcon_track[i].ip[0] && !strcmp(g_rcon_track[i].ip, ip)) { ti = i; break; }
+    if (ti < 0) {
+        ti = 0;
+        for (int i = 1; i < RCON_TRACK; i++)
+            if (!g_rcon_track[i].ip[0] ||
+                g_rcon_track[i].last_ms < g_rcon_track[ti].last_ms) ti = i;
+        strncpy(g_rcon_track[ti].ip, ip, sizeof(g_rcon_track[ti].ip) - 1);
+        g_rcon_track[ti].ip[sizeof(g_rcon_track[ti].ip) - 1] = '\0';
+        g_rcon_track[ti].last_ms = 0;
+        g_rcon_track[ti].fails = 0;
+        g_rcon_track[ti].blocked_until = 0;
+    }
+    RconTrack *t = &g_rcon_track[ti];
+    if (now < t->blocked_until) return;       /* sedang diblokir: diam */
+    if (now - t->last_ms < 500) return;        /* rate limit 2/detik per IP */
+    t->last_ms = now;
+
+    /* parse: pwlen pw cmdlen cmd */
+    size_t o = QUERY_MAGIC_LEN + 1;
+    if (n < o + 1) return;
+    uint8_t pwl = buf[o++];
+    if (pwl > 63 || n < o + pwl + 2) return;
+    char pw[64];
+    memcpy(pw, buf + o, pwl); pw[pwl] = '\0'; o += pwl;
+    uint16_t cl = get_u16(buf + o); o += 2;
+    if (cl == 0 || cl > 1023 || n < o + cl) return;
+    char cmd[1024];
+    memcpy(cmd, buf + o, cl); cmd[cl] = '\0';
+
+    int enabled = g_cfg.rcon && g_cfg.rcon_password[0];
+    int ok = enabled && pwl == strlen(g_cfg.rcon_password) &&
+             !memcmp(pw, g_cfg.rcon_password, pwl);
+    if (!ok) {
+        t->fails++;
+        if (t->fails >= 5) {
+            t->blocked_until = now + 60000;
+            t->fails = 0;
+            log_msg("[rcon] brute-force dari %s: IP diblokir 60 dtk.", ip);
+            return;
+        }
+        const char *msg = !enabled
+            ? "RCON mati (set rcon_password di server.cfg)."
+            : "Password RCON salah.";
+        log_msg("[rcon] auth gagal dari %s.", ip);
+        rcon_reply(usock, from, flen, 1, msg, strlen(msg));
+        return;
+    }
+    t->fails = 0;
+
+    log_msg("[rcon] %s: %s", ip, cmd);
+    char obuf[1024];
+    obuf[0] = '\0';
+    OutBuf ob = { obuf, sizeof(obuf), 0 };
+    console_run(cmd, &ob);
+    rcon_reply(usock, from, flen, 0, obuf, ob.len);
 }
 
 /* ---------------- UDP query (server browser) ---------------- */
 /* Format: "ROMP" + type(u8). Jawaban: "ROMP" + reply_type(u8) + payload. */
 static void handle_query(SOCKET usock) {
-    uint8_t buf[64];
+    uint8_t buf[2048];
     struct sockaddr_in from;
     socklen_t flen = sizeof(from);
     ssize_t n = recvfrom(usock, (char*)buf, sizeof(buf), 0,
@@ -843,6 +1012,10 @@ static void handle_query(SOCKET usock) {
     if (n < (ssize_t)(QUERY_MAGIC_LEN + 1)) return;
     if (memcmp(buf, QUERY_MAGIC, QUERY_MAGIC_LEN)) return;
     uint8_t q = buf[QUERY_MAGIC_LEN];
+
+    /* RCON jalan di socket UDP yang sama (butuh socket-nya ada; lihat main). */
+    if (q == R_RCON) { handle_rcon(usock, buf, (size_t)n, &from, flen); return; }
+    if (!g_cfg.query) return; /* query browser mati, tapi RCON tetap jalan */
 
     uint8_t out[1024];
     size_t o = 0;
@@ -1113,9 +1286,10 @@ int main(int argc, char **argv) {
     }
     if (listen(lsock, 16) == SOCKET_ERROR) { fprintf(stderr, "listen gagal\n"); return 1; }
 
-    /* socket UDP untuk server browser query (port yang sama) */
+    /* socket UDP untuk server browser query + RCON (port yang sama) */
     SOCKET usock = INVALID_SOCKET;
-    if (g_cfg.query) {
+    int need_udp = g_cfg.query || (g_cfg.rcon && g_cfg.rcon_password[0]);
+    if (need_udp) {
         usock = socket(AF_INET, SOCK_DGRAM, 0);
         if (usock != INVALID_SOCKET) {
             struct sockaddr_in uaddr;
@@ -1125,7 +1299,7 @@ int main(int argc, char **argv) {
             uaddr.sin_port = htons((uint16_t)g_cfg.port);
             if (bind(usock, (struct sockaddr*)&uaddr, sizeof(uaddr)) == SOCKET_ERROR) {
                 CLOSESOCK(usock); usock = INVALID_SOCKET;
-                log_msg("WARNING: bind UDP query gagal, server browser query mati.");
+                log_msg("WARNING: bind UDP query gagal, server browser query & RCON mati.");
             } else {
                 sock_nonblock(usock);
             }
@@ -1143,9 +1317,12 @@ int main(int argc, char **argv) {
         log_msg(" Announce : ke master %s:%d tiap 60 dtk",
                 g_cfg.master_host, g_cfg.master_port);
     if (g_cfg.query) log_msg(" UDP query: aktif (server browser)");
+    if (g_cfg.rcon && g_cfg.rcon_password[0])
+        log_msg(" RCON     : aktif via UDP (rcon_password diset)");
+    else
+        log_msg(" RCON     : mati (set rcon_password di server.cfg untuk mengaktifkan)");
     if (g_cfg.lan_discovery) log_msg(" LAN beacon: broadcast tiap %d dtk (port %d)",
                                      LAN_BEACON_MS / 1000, LAN_BEACON_PORT);
-    log_msg(" Ketik 'help' untuk command console.");
     log_msg(" Ketik 'help' untuk command console.");
     log_msg("===========================================");
 

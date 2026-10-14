@@ -518,6 +518,39 @@ u8  count
 per pemain: u16 playerid, u8 namelen, name
 ```
 
+## RCON — remote console ala SA-MP
+
+Admin bisa menjalankan command console server dari jauh (mis. dari PC
+rumah) tanpa akses ke mesin server, lewat **UDP di port game yang sama**.
+Butuh `rcon 1` + `rcon_password <password>` di server.cfg — tanpa password,
+RCON mati total (tidak dijawab). Command yang tersedia sama persis dengan
+console lokal: `help`, `say`, `players`, `vehicles`, `kick`, `ban`,
+`unban`, `bans`, `stop` (plus command custom gamemode via
+`onConsoleCommand`). Tool siap pakai: `server/rcon.py`.
+
+### 0x05 RCON (Client -> Server)
+
+```
+"ROMP" 0x05
+u8  pwlen
+char pw[pwlen]       // password RCON (plain, seperti SA-MP)
+u16 cmdlen           // little-endian
+char cmd[cmdlen]     // baris command, mis. "kick 3 spam"
+```
+
+### 0x06 RCON_REPLY (Server -> Client)
+
+```
+"ROMP" 0x06
+u8  status   // 0 = OK, 1 = password salah / RCON mati
+u16 outlen   // little-endian
+char out[outlen]  // output teks command, baris dipisah '\n'
+```
+
+Anti brute-force: maks 2 request/detik per IP (lebihnya diabaikan diam);
+5x password salah beruntun = IP diblokir 60 detik. Setiap command yang
+dieksekusi dicatat di log server (`[rcon] <ip>: <command>`).
+
 ## Master Server (daftar server publik)
 
 `romp-master` (lihat `server/src/romp_master.c`, default port 7778) menyimpan
