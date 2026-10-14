@@ -52,6 +52,25 @@ Recomended:
 * **[Everything](https://www.voidtools.com/downloads/)** (Search engine)
 * **[Github Desktop](https://desktop.github.com/download/)** (Disable Analytics in Options)
 
+### RO-MP — Multiplayer ala SA-MP 🎮
+
+Project gabut: bikin SA-MP versi sendiri di atas game ini, namanya **RO-MP**.
+
+- **Server dedicated** di [`server/`](server/) — satu binari kecil tanpa dependency,
+  tinggal jalanin. Tersedia untuk **Windows** (`bin/windows/romp-server.exe`) dan
+  **Linux** (`bin/linux/romp-server`), plus `server.cfg`, script start, dan
+  dokumentasi protokol ([`server/PROTOCOL.md`](server/PROTOCOL.md)).
+  Cara jalanin: `./start-server.sh` (Linux) atau klik `start-server.bat` (Windows).
+- **Modul client** di `android/app/src/main/cpp/src/Code/ROMP/` — network client
+  (TCP), chat buffer, sync posisi pemain remote + interpolasi. 100% portable
+  (POSIX + C++20), otomatis ke-build oleh CMake. Titik integrasi ke fungsi game
+  asli ditandai `TODO(GAME)` — modul sudah dites end-to-end melawan server asli.
+- Contoh dialog input chat Android: `android/app/src/main/java/com/regta/romp/ROMPChatInput.java`.
+
+Fitur v1: join/leave, chat global + `/me` `/pm` `/players` `/help` `/q`,
+broadcast posisi 10 Hz, password server, anti-spam, console admin
+(`say`/`kick`/`players`/`stop`).
+
 ### Community 
 
 [![Discord](https://dcbadge.limes.pink/api/server/Nr4MfSEGXd)](https://discord.gg/Nr4MfSEGXd)
