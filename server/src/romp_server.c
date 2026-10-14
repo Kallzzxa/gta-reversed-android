@@ -12,6 +12,7 @@
 #include "romp_server.h"
 #include "romp_lua.h"
 #include "romp_vehicle.h"
+#include "romp_weapon.h"
 
 #include <time.h>
 #include <pthread.h>
@@ -576,6 +577,7 @@ static void dispatch(Client *c, uint8_t type, const uint8_t *p, size_t n) {
         case P_PING:  handle_ping(c, p, n); break;
         case P_NUI_CB: handle_nui_callback(c, p, n); break;
         case P_VEH:   vehicle_on_packet(c, p, n); break;
+        case P_WPN:   weapon_on_packet(c, p, n); break;
         default: break;
     }
 }

@@ -205,6 +205,61 @@ u8  namelen
 char name[namelen]
 ```
 
+### 0x17 WPN_SHOT (Client -> Server)
+Event tembakan dari pemain. Server bersifat otoritatif untuk inventory:
+tembakan hanya diterima bila `weaponid` ada di inventory server pemain
+(hasil `romp.giveWeapon`). Rate limit ~25 tembakan/detik; titik kena tidak
+boleh lebih dari 400 unit dari posisi terakhir pemain (anti teleport-bullet).
+Tembakan yang lolos di-relay sebagai `0x18 WPN_SYNC`.
+
+```
+u16 weaponid  // id senjata SA-MP 1..46
+u8  hittype   // 0 = tidak kena, 1 = pemain, 2 = kendaraan, 3 = objek/dunia
+u16 hitid     // playerid / vehicleid target, 0 bila hittype 0
+float x, y, z // titik kena di dunia
+```
+
+Validasi target: `hittype=1` butuh playerid valid & bukan diri sendiri,
+`hittype=2` butuh vehicleid valid.
+
+### 0x18 WPN_SYNC (Server -> Client)
+Broadcast tembakan (tidak di-echo ke penembak).
+
+```
+u16 shooterid
+u16 weaponid
+u8  hittype   // 0 = tidak kena, 1 = pemain, 2 = kendaraan, 3 = objek/dunia
+u16 hitid
+float x, y, z // titik kena di dunia
+```
+
+### 0x19 WPN_SET (Server -> Client)
+Set slot senjata pemain (inventory otoritatif server). Dikirim ke pemain
+itu saja saat `romp.giveWeapon` / `romp.removePlayerWeapon` /
+`romp.resetPlayerWeapons`.
+
+```
+u8  slot      // 0..12, mapping ala SA-MP (lihat bawah)
+u16 weaponid  // 0 = slot dikosongkan
+u16 ammo
+```
+
+API Lua (di-register C): `romp.giveWeapon(pid, weaponid, ammo)` /
+`romp.removePlayerWeapon(pid, weaponid)` / `romp.resetPlayerWeapons(pid)` /
+`romp.getPlayerWeapon(pid)` (kembalikan weaponid, ammo, slot aktif) /
+`romp.getPlayerWeaponData(pid, slot)` (kembalikan weaponid, ammo) /
+`romp.weaponSlot(weaponid)` (kembalikan slot 0..12 atau -1).
+Konstanta: `romp.WPN_HIT_NONE/PLAYER/VEHICLE/OBJECT` (0..3).
+Event: `onPlayerWeaponShot(pid, weaponid, hittype, hitid, x, y, z)`
+(mirip `OnPlayerWeaponShot` SA-MP; damage tidak dihitung server —
+gamemode yang memutuskan).
+
+Slot senjata ala SA-MP:
+0: 0,1 (tangan/knuckle) | 1: 2-9 (melee) | 2: 22-24 (pistol) |
+3: 25-27 (shotgun) | 4: 28,29,32 (smg) | 5: 30,31 (rifle) |
+6: 33,34 (sniper) | 7: 35-38 (heavy) | 8: 16-18,39 (projectile) |
+9: 14 (spraycan) | 10: 42-44 | 11: 45 | 12: 40 (detonator)
+
 ### 0x31 PONG
 
 ```

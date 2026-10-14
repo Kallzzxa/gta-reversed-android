@@ -55,6 +55,11 @@ typedef int SOCKET;
 #define P_VEH_DESPAWN 0x15  /* server -> client: kendaraan hilang */
 #define P_VEH_SEAT    0x16  /* server -> client: perubahan penumpang */
 
+/* ---- Sinkronisasi senjata & tembakan ala SA-MP (lihat PROTOCOL.md) ---- */
+#define P_WPN         0x17  /* client -> server: event tembakan */
+#define P_WPN_SYNC    0x18  /* server -> client: broadcast tembakan */
+#define P_WPN_SET     0x19  /* server -> client: set slot senjata pemain */
+
 /* ---- Protokol UDP query (server browser), port sama dengan TCP ---- */
 #define QUERY_MAGIC   "ROMP"
 #define QUERY_MAGIC_LEN 4
@@ -126,6 +131,11 @@ typedef struct Client {
     /* Kendaraan yang ditumpangi (-1 = tidak di kendaraan; seat 0 = sopir). */
     int    vehicle_id;
     int    vehicle_seat;
+    /* Inventory senjata ala SA-MP (otoritatif server; lihat romp_weapon.h). */
+    uint16_t wpn[13];      /* weaponid per slot, 0 = kosong */
+    uint16_t wpn_ammo[13]; /* ammo per slot */
+    int    wpn_slot;       /* slot senjata aktif terakhir */
+    uint64_t last_shot_ms; /* anti-spam tembakan */
     struct Client *next;
 } Client;
 

@@ -5,6 +5,7 @@
 #include "romp_lua.h"
 #include "romp_server.h"
 #include "romp_vehicle.h"
+#include "romp_weapon.h"
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -509,6 +510,65 @@ static int l_romp_get_vehicles(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- Senjata ala SA-MP ---------------- */
+
+static int l_romp_give_weapon(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int wid = (int)luaL_checkinteger(Ls, 2);
+    int ammo = (int)luaL_checkinteger(Ls, 3);
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && weapon_give(c, wid, ammo));
+    return 1;
+}
+
+static int l_romp_remove_player_weapon(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int wid = (int)luaL_checkinteger(Ls, 2);
+    Client *c = client_by_id(pid);
+    int ok = 0;
+    if (c) {
+        int slot = weapon_slot(wid);
+        if (slot >= 0 && c->wpn[slot] == (uint16_t)wid)
+            ok = weapon_remove_slot(c, slot);
+    }
+    lua_pushboolean(Ls, ok);
+    return 1;
+}
+
+static int l_romp_reset_player_weapons(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(pid);
+    if (c) weapon_reset(c);
+    lua_pushboolean(Ls, c != NULL);
+    return 1;
+}
+
+static int l_romp_get_player_weapon(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(pid);
+    if (!c) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, c->wpn[c->wpn_slot]);
+    lua_pushinteger(Ls, c->wpn_ammo[c->wpn_slot]);
+    lua_pushinteger(Ls, c->wpn_slot);
+    return 3;
+}
+
+static int l_romp_get_player_weapon_data(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int slot = (int)luaL_checkinteger(Ls, 2);
+    Client *c = client_by_id(pid);
+    if (!c || slot < 0 || slot >= WPN_SLOTS) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, c->wpn[slot]);
+    lua_pushinteger(Ls, c->wpn_ammo[slot]);
+    return 2;
+}
+
+static int l_romp_weapon_slot(lua_State *Ls) {
+    int wid = (int)luaL_checkinteger(Ls, 1);
+    lua_pushinteger(Ls, weapon_slot(wid));
+    return 1;
+}
+
 /* ---------------- Init ---------------- */
 
 /* Dipakai lua_init sebelum definisinya (di bawah). */
@@ -594,6 +654,18 @@ int lua_init(const char *script_path) {
     lua_pushcfunction(L, l_romp_get_vehicle_passenger); lua_setfield(L, -2, "getVehiclePassenger");
     lua_pushcfunction(L, l_romp_respawn_vehicle);  lua_setfield(L, -2, "respawnVehicle");
     lua_pushcfunction(L, l_romp_get_vehicles);      lua_setfield(L, -2, "getVehicles");
+    /* senjata ala SA-MP */
+    lua_pushcfunction(L, l_romp_give_weapon);       lua_setfield(L, -2, "giveWeapon");
+    lua_pushcfunction(L, l_romp_remove_player_weapon); lua_setfield(L, -2, "removePlayerWeapon");
+    lua_pushcfunction(L, l_romp_reset_player_weapons); lua_setfield(L, -2, "resetPlayerWeapons");
+    lua_pushcfunction(L, l_romp_get_player_weapon);  lua_setfield(L, -2, "getPlayerWeapon");
+    lua_pushcfunction(L, l_romp_get_player_weapon_data); lua_setfield(L, -2, "getPlayerWeaponData");
+    lua_pushcfunction(L, l_romp_weapon_slot);        lua_setfield(L, -2, "weaponSlot");
+    /* konstanta hittype tembakan ala SA-MP */
+    lua_pushinteger(L, 0); lua_setfield(L, -2, "WPN_HIT_NONE");
+    lua_pushinteger(L, 1); lua_setfield(L, -2, "WPN_HIT_PLAYER");
+    lua_pushinteger(L, 2); lua_setfield(L, -2, "WPN_HIT_VEHICLE");
+    lua_pushinteger(L, 3); lua_setfield(L, -2, "WPN_HIT_OBJECT");
     /* konstanta kind chat */
     lua_pushinteger(L, KIND_CHAT); lua_setfield(L, -2, "KIND_CHAT");
     lua_pushinteger(L, KIND_INFO); lua_setfield(L, -2, "KIND_INFO");
@@ -825,6 +897,27 @@ void lua_on_vehicle_death(int vid, int killerid) {
 
 void lua_on_vehicle_spawn(int vid) {
     call_event("onVehicleSpawn", push_veh_vid, &vid);
+}
+
+/* ---------------- Event senjata ala SA-MP ---------------- */
+
+typedef struct { int pid, wid, ht, hid; float x, y, z; } EvShot;
+static int push_shot(lua_State *Ls, void *ud) {
+    EvShot *e = (EvShot *)ud;
+    lua_pushinteger(Ls, e->pid);
+    lua_pushinteger(Ls, e->wid);
+    lua_pushinteger(Ls, e->ht);
+    lua_pushinteger(Ls, e->hid);
+    lua_pushnumber(Ls, (lua_Number)e->x);
+    lua_pushnumber(Ls, (lua_Number)e->y);
+    lua_pushnumber(Ls, (lua_Number)e->z);
+    return 7;
+}
+
+void lua_on_player_weapon_shot(int pid, int weaponid, int hittype, int hitid,
+                               float x, float y, float z) {
+    EvShot e = { pid, weaponid, hittype, hitid, x, y, z };
+    call_event("onPlayerWeaponShot", push_shot, &e);
 }
 
 /* Dispatch NUI callback dari client ke handler Lua terdaftar. */int lua_on_nui_callback(int id, const char *name, const char *data) {

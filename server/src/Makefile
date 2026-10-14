@@ -16,7 +16,7 @@ CC_LINUX   = gcc
 CC_WINDOWS = x86_64-w64-mingw32-gcc
 
 CFLAGS   = -O2 -Wall -Wextra
-SRC      = romp_server.c romp_lua.c romp_vehicle.c
+SRC      = romp_server.c romp_lua.c romp_vehicle.c romp_weapon.c
 LUA_SRC  = $(wildcard ../vendor/lua/*.c)
 LUA_INC  = -I../vendor/lua
 

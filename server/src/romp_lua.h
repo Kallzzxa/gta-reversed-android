@@ -32,5 +32,10 @@ void lua_on_player_exit_vehicle(int pid, int vid);
 void lua_on_vehicle_damage(int vid, int damagerid, int newhealth);
 void lua_on_vehicle_death(int vid, int killerid);
 void lua_on_vehicle_spawn(int vid);
+/* Event senjata ala SA-MP (tidak ada default C; gamemode opsional).
+ * Mirip OnPlayerWeaponShot: onPlayerWeaponShot(pid, weaponid, hittype,
+ * hitid, x, y, z). */
+void lua_on_player_weapon_shot(int pid, int weaponid, int hittype, int hitid,
+                               float x, float y, float z);
 /* Dipanggil tiap 1 detik. */
 void lua_on_tick(void);
