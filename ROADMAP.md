@@ -6,7 +6,7 @@ Setiap fitur: implementasi → compile/test → commit (English) → push.
 ## Server (dedicated)
 
 - [x] Sistem dialog ala SA-MP (DIALOG_STYLE_MSGBOX/LIST/INPUT/PASSWORD) via Lua + NUI — DONE 2026-10-14 (romp.showDialog/hideDialog, event onDialogResponse, dialog.html)
-- [ ] Textdraw global & per-pemain (teks 2D di layar) via Lua API
+- [x] Textdraw global & per-pemain (teks 2D di layar) via Lua API — DONE 2026-10-14 (server/textdraw.lua auto-load: create/show/hide/setString/setStyle/destroy ala TextDraw* & PlayerTextDraw*, resync saat join; textdraw.html; demo /td /tdstr /tdhide /ptd; test 21/21)
 - [ ] Checkpoint & race checkpoint (masuk/keluar event Lua)
 - [ ] Pickup (senjata, health, custom) dengan event onPlayerPickup
 - [ ] Map icon / radar blip per pemain via Lua
@@ -49,5 +49,5 @@ Setiap fitur: implementasi → compile/test → commit (English) → push.
 - [x] Event: onGamemodeInit, onConsoleCommand, onPlayerRequestConnect — DONE
 - [ ] API pemain: setPos, getPos, setHealth, setArmour, giveWeapon
 - [ ] API kendaraan: createVehicle, destroyVehicle, setVehiclePos
-- [ ] API textdraw & dialog
+- [x] API textdraw & dialog — DONE 2026-10-14 (dialog: commit 5615807; textdraw: server/textdraw.lua + textdraw.html)
 - [ ] Timer Lua: setTimer / killTimer

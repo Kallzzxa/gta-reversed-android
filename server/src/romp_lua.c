@@ -285,9 +285,10 @@ static int l_romp_hide_dialog(lua_State *Ls) {
 /* Dipakai lua_init sebelum definisinya (di bawah). */
 static void call_event_noret(const char *ev);
 
-/* Muat dialog.lua (router event onDialogResponse) dari folder yang sama
+/* Muat helper Lua (dialog.lua, textdraw.lua, ...) dari folder yang sama
  * dengan file gamemode. Tidak fatal kalau file tidak ada. */
-static void lua_load_dialog(const char *script_path) {
+static void lua_load_helper(const char *script_path, const char *file,
+                            const char *desc) {
     char dir[512];
     const char *slash = strrchr(script_path, '/');
 #ifdef _WIN32
@@ -303,13 +304,13 @@ static void lua_load_dialog(const char *script_path) {
         dir[0] = '.'; dir[1] = '\0';
     }
     char path[528];
-    snprintf(path, sizeof path, "%s/dialog.lua", dir);
+    snprintf(path, sizeof path, "%s/%s", dir, file);
     if (luaL_loadfile(L, path) != LUA_OK || lua_pcall(L, 0, 0, 0) != LUA_OK) {
-        log_msg("[lua] dialog.lua tidak dimuat (%s): %s", path,
+        log_msg("[lua] %s tidak dimuat (%s): %s", file, path,
                 lua_tostring(L, -1) ? lua_tostring(L, -1) : "?");
         lua_pop(L, 1);
     } else {
-        log_msg("[lua] dialog.lua dimuat (event onDialogResponse aktif)");
+        log_msg("[lua] %s dimuat (%s)", file, desc);
     }
 }
 
@@ -369,8 +370,9 @@ int lua_init(const char *script_path) {
         return -1;
     }
     log_msg("[lua] gamemode dimuat: %s", script_path);
-    /* router dialog ala SA-MP (event onDialogResponse) */
-    lua_load_dialog(script_path);
+    /* helper ala SA-MP: router dialog + API textdraw */
+    lua_load_helper(script_path, "dialog.lua", "event onDialogResponse aktif");
+    lua_load_helper(script_path, "textdraw.lua", "API textdraw aktif");
     /* event init: onGamemodeInit() */
     call_event_noret("onGamemodeInit");
     return 0;

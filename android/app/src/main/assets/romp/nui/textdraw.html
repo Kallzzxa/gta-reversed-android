@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>RO-MP TextDraw</title>
+<style>
+  /* Overlay textdraw ala SA-MP: teks 2D di atas game, sentuhan tembus.
+     Satu WebView transparan; halaman ini khusus textdraw (dialog pakai
+     dialog.html, inventory pakai inventory.html). Client game yang
+     sesungguhnya bisa menggabungkan ketiganya dalam satu halaman. */
+  * { box-sizing: border-box; margin: 0; padding: 0;
+      -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden;
+      background: transparent; }
+  #td-layer { position: absolute; inset: 0; pointer-events: none; }
+  .td { position: absolute; white-space: nowrap; line-height: 1.15;
+      pointer-events: none; }
+  .td.box { padding: 4px 8px; border-radius: 2px; }
+</style>
+</head>
+<body>
+<div id="td-layer"></div>
+<script>
+// Server -> UI: romp.createTextDraw / showTextDraw / ... (via 0x40 NUI_MESSAGE).
+window.onRomMessage = function (json) {
+  var msg;
+  try { msg = JSON.parse(json); } catch (e) { return; }
+  if (msg.action === "showTextDraw") render(msg);
+  else if (msg.action === "hideTextDraw") remove(msg.id);
+  else if (msg.action === "setTextDrawString") setText(msg.id, msg.text);
+  else if (msg.action === "hideAllTextDraws") clearAll();
+};
+
+var layer = document.getElementById("td-layer");
+var FONTS = ["Arial, sans-serif", "'Trebuchet MS', sans-serif",
+             "'Courier New', monospace", "Impact, sans-serif"];
+
+// 0xRRGGBBAA -> css rgba()
+function cssColor(c) {
+  c = Math.floor(Number(c) || 0) >>> 0;
+  var r = (c >>> 24) & 255, g = (c >>> 16) & 255,
+      b = (c >>> 8) & 255, a = (c & 255) / 255;
+  return "rgba(" + r + "," + g + "," + b + "," + a.toFixed(3) + ")";
+}
+
+function esc(s) {
+  return String(s === undefined || s === null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function el(id) { return document.getElementById("td-" + id); }
+
+function render(m) {
+  var d = el(m.id);
+  if (!d) { d = document.createElement("div"); d.id = "td-" + m.id;
+            d.className = "td"; layer.appendChild(d); }
+  // Koordinat SA-MP 640x480 -> persen layar.
+  d.style.left = (Number(m.x) / 640 * 100) + "%";
+  d.style.top  = (Number(m.y) / 480 * 100) + "%";
+  var size = Math.max(0.2, Number(m.size) || 1);
+  d.style.fontSize = (size * 18).toFixed(1) + "px";
+  d.style.color = cssColor(m.color);
+  d.style.fontFamily = FONTS[Math.min(3, Math.max(0, Number(m.font) | 0))] || FONTS[0];
+  d.style.fontWeight = "bold";
+  // align: 1 kiri, 2 tengah, 3 kanan (jangkar di titik x).
+  var al = Number(m.align) || 1;
+  d.style.transform = al === 2 ? "translateX(-50%)"
+                    : al === 3 ? "translateX(-100%)" : "none";
+  if (Number(m.box)) { d.classList.add("box");
+    d.style.background = cssColor(m.boxColor); }
+  else { d.classList.remove("box"); d.style.background = "transparent"; }
+  var sh = [];
+  var px = Math.max(1, Math.round(size));
+  if (Number(m.outline)) {
+    sh.push(-px + "px 0 0 #000", px + "px 0 0 #000",
+            "0 " + -px + "px 0 #000", "0 " + px + "px 0 #000");
+  }
+  if (Number(m.shadow)) sh.push("2px 2px 0 rgba(0,0,0,.7)");
+  d.style.textShadow = sh.join(", ");
+  setText(m.id, m.text);
+}
+
+function setText(id, text) {
+  var d = el(id);
+  if (d) d.innerHTML = esc(text).replace(/\n/g, "<br>");
+}
+
+function remove(id) { var d = el(id); if (d) d.remove(); }
+function clearAll() { layer.innerHTML = ""; }
+</script>
+</body>
+</html>

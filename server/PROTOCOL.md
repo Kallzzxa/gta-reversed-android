@@ -209,6 +209,31 @@ Server me-routing otomatis ke event Lua
 (lihat `server/dialog.lua`). Halaman UI referensi:
 `android/app/src/main/assets/romp/nui/dialog.html`.
 
+### Textdraw ala SA-MP (via NUI)
+
+API Lua di `server/textdraw.lua` (dimuat otomatis seperti `dialog.lua`):
+global ala `TextDraw*` (`romp.createTextDraw/showTextDraw/hideTextDraw/`
+`showTextDrawForPlayer/hideTextDrawForPlayer/setTextDrawString/`
+`setTextDrawStyle/destroyTextDraw/isTextDrawVisible`) dan per-pemain ala
+`PlayerTextDraw*` (`romp.createPlayerTextDraw/showPlayerTextDraw/`
+`hidePlayerTextDraw/setPlayerTextDrawString/setPlayerTextDrawStyle/`
+`destroyPlayerTextDraw`). Koordinat SA-MP 640x480.
+
+Pesan 0x40 yang dikirim (id `"g1"` = global, `"p0_1"` = pemain 0):
+
+```json
+{"action":"showTextDraw","id":"g1","text":"RO-MP SERVER","x":320,"y":16,
+ "color":4294967295,"size":2.2,"align":2,"font":1,
+ "box":1,"boxColor":136,"outline":1,"shadow":0}
+{"action":"setTextDrawString","id":"g1","text":"Teks baru"}
+{"action":"hideTextDraw","id":"g1"}
+```
+
+`color`/`boxColor`: 0xRRGGBBAA. `align`: 1=kiri, 2=tengah, 3=kanan.
+Textdraw global yang sedang tampil otomatis dikirim ulang ke pemain yang
+baru join; textdraw per-pemain dibersihkan saat pemain leave.
+Halaman UI referensi: `android/app/src/main/assets/romp/nui/textdraw.html`.
+
 ## Server Browser — UDP Query
 
 Server menjawab query UDP di **port yang sama** dengan TCP (bisa dimatikan

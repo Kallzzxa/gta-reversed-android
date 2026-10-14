@@ -101,6 +101,36 @@ function onDialogResponse(id, name, dialogId, response, listitem, inputtext)
     end
 end
 
+-- ============================================================
+-- DEMO TEXTDRAW ala SA-MP. Ketik /td, /tdstr, /tdhide, /ptd di game.
+-- Halaman UI: android/.../assets/romp/nui/textdraw.html
+-- ============================================================
+local demoTds = {}  -- id textdraw global demo
+
+local function hapusDemoTd()
+    for _, tdid in ipairs(demoTds) do romp.destroyTextDraw(tdid) end
+    demoTds = {}
+end
+
+local function tampilDemoTd()
+    hapusDemoTd()
+    local banner = romp.createTextDraw(320, 16, "RO-MP SERVER")
+    romp.setTextDrawStyle(banner,
+        { color = 0xFFD700FF, size = 2.2, align = 2, box = 1 })
+    romp.showTextDraw(banner)
+    demoTds[#demoTds + 1] = banner
+
+    local sub = romp.createTextDraw(320, 64, "textdraw demo ala SA-MP\n/global & per-pemain")
+    romp.setTextDrawStyle(sub, { color = 0xFFFFFFFF, size = 1.0, align = 2 })
+    romp.showTextDraw(sub)
+    demoTds[#demoTds + 1] = sub
+
+    local hint = romp.createTextDraw(8, 448, "/tdstr <teks> ganti banner | /tdhide sembunyikan")
+    romp.setTextDrawStyle(hint, { color = 0xAAAAAAFF, size = 0.8 })
+    romp.showTextDraw(hint)
+    demoTds[#demoTds + 1] = hint
+end
+
 -- JS -> Lua: pemain memakai item dari UI.
 romp.onNUICallback("nui_inv_use", function(pid, name, data)
     local ok, d = pcall(json.decode, data)
@@ -173,6 +203,36 @@ function onPlayerCommand(id, name, cmd, args)
             romp.sendChatToPlayer(id, romp.KIND_INFO,
                 "*** Pakai: /sethost <nama baru>")
         end
+        return true
+    elseif cmd == "td" then
+        tampilDemoTd()
+        romp.sendChatToPlayer(id, romp.KIND_INFO,
+            "*** 3 textdraw global ditampilkan untuk semua pemain.")
+        return true
+    elseif cmd == "tdstr" then
+        if args ~= "" and demoTds[1] then
+            romp.setTextDrawString(demoTds[1], args)
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Banner diganti jadi: " .. args)
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Pakai: /td dulu, lalu /tdstr <teks>")
+        end
+        return true
+    elseif cmd == "tdhide" then
+        for _, tdid in ipairs(demoTds) do romp.hideTextDraw(tdid) end
+        romp.sendChatToPlayer(id, romp.KIND_INFO,
+            "*** Textdraw demo disembunyikan.")
+        return true
+    elseif cmd == "ptd" then
+        -- Textdraw per-pemain: hanya yang mengetik yang melihat.
+        local pt = romp.createPlayerTextDraw(id, 320, 400,
+            "Halo, " .. name .. "! (hanya kamu yang lihat ini)")
+        romp.setPlayerTextDrawStyle(pt,
+            { color = 0x7CFC00FF, size = 1.1, align = 2, box = 1 })
+        romp.showPlayerTextDraw(id, pt)
+        romp.sendChatToPlayer(id, romp.KIND_INFO,
+            "*** Textdraw per-pemain ditampilkan (id " .. pt .. ").")
         return true
     elseif cmd == "kick" then
         -- contoh command admin sederhana: /kick <id> <alasan>
