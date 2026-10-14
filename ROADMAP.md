@@ -35,6 +35,8 @@ Setiap fitur: implementasi → compile/test → commit (English) → push.
 
 ## Client PC (RO-MP-PC)
 
+- [x] Game 3D standalone `pc-game/` (Godot 4, dibuat sendiri, fase 1 single-player) — DONE 2026-10-14: kota prosedural 5x5 blok (jalan, gedung, lampu, pohon), karakter third-person (WASD/Shift/Space), mobil arcade dikendarai (E/F), kamera orbit + SpringArm, HUD, langit & bayangan. Cara main: `godot --path pc-game`.
+- [ ] Klien multiplayer Godot: sambungkan `pc-game/` ke protokol RO-MP (posisi 10Hz, chat, pemain & kendaraan remote).
 - [ ] romp.exe: PLAY stabil, deteksi GTA otomatis — DONE (v1.1.0)
 - [ ] romp.dll: build & test in-game pertama kali
 - [ ] romp-setup.exe: build & test installer NSIS
