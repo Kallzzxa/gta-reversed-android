@@ -1,0 +1,442 @@
+package com.regta.romp;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.res.ColorStateList;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.Gravity;
+import android.view.View;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import org.json.JSONObject;
+
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.Enumeration;
+import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+
+/**
+ * In-game game-data downloader for RO-MP.
+ *
+ * Before the game starts, this checks whether the reGTA data folders
+ * (anim, audio, data, models, texdb) exist in the app's external files dir.
+ * If not, it fetches {@code romp_data.json} (bundled in assets, also mirrored
+ * at the raw GitHub URL so the link can be updated without rebuilding),
+ * downloads the data ZIP (MediaFire page or direct link), extracts it with
+ * progress UI, and version-pins the install. Download once, play forever.
+ */
+public final class ROMPDataManager {
+    private static final String CONFIG_URL =
+            "https://raw.githubusercontent.com/Kallzzxa/gta-reversed-android/main/android/app/src/main/assets/romp_data.json";
+    private static final String ASSET_CONFIG = "romp_data.json";
+
+    private static final String PREFS = "romp_game_data";
+    private static final String KEY_DATA_VERSION = "data_version";
+    private static final String MARKER = ".romp_data_ready";
+
+    /** Folders the reGTA engine expects in the game base directory. */
+    private static final String[] REQUIRED_FOLDERS = {"anim", "audio", "data", "models", "texdb"};
+
+    private static final int ACCENT = Color.rgb(240, 180, 41);
+    private static final int CARD = Color.rgb(29, 35, 52);
+    private static final int WHITE = Color.rgb(245, 247, 255);
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    private static final ExecutorService IO = Executors.newSingleThreadExecutor();
+
+    public interface ReadyCallback { void onReady(); }
+
+    private static final class DataInfo {
+        String url;
+        String version;
+        long size;
+        String sentinel;
+    }
+
+    private ROMPDataManager() {}
+
+    public static void checkAndPrepare(Activity activity, ReadyCallback callback) {
+        showLoading(activity, "RO-MP", "Memeriksa game data...");
+        IO.execute(() -> {
+            try {
+                DataInfo info = loadConfig(activity);
+                String installed = activity.getSharedPreferences(PREFS, Activity.MODE_PRIVATE)
+                        .getString(KEY_DATA_VERSION, "");
+                if (info.version.equals(installed) && isInstalled(activity, info)) {
+                    MAIN.post(() -> { dismissLoading(); if (!activity.isFinishing()) callback.onReady(); });
+                    return;
+                }
+                final DataInfo fi = info;
+                MAIN.post(() -> showDownloadOffer(activity, fi, callback));
+            } catch (Exception e) {
+                android.util.Log.e("ROMPDataManager", "Config check failed", e);
+                MAIN.post(() -> showNetworkError(activity, e.getMessage(), callback));
+            }
+        });
+    }
+
+    /** Bundled asset first (works offline for the URL), remote override when reachable. */
+    private static DataInfo loadConfig(Activity a) throws Exception {
+        String json = null;
+        try {
+            json = getText(CONFIG_URL);
+        } catch (Exception e) {
+            android.util.Log.w("ROMPDataManager", "Remote config unreachable, using asset: " + e.getMessage());
+        }
+        if (json == null) {
+            try (InputStream in = a.getAssets().open(ASSET_CONFIG);
+                 BufferedReader r = new BufferedReader(new InputStreamReader(in, "UTF-8"))) {
+                StringBuilder b = new StringBuilder();
+                char[] buf = new char[8192]; int n;
+                while ((n = r.read(buf)) != -1) b.append(buf, 0, n);
+                json = b.toString();
+            }
+        }
+        JSONObject config = new JSONObject(json);
+        DataInfo info = new DataInfo();
+        info.url = config.optString("data_url", "");
+        info.version = config.optString("data_version", "1");
+        info.size = config.optLong("data_size", 0);
+        info.sentinel = config.optString("data_sentinel", "data/gta.dat");
+        if (info.url.isEmpty() || info.url.contains("REPLACE_WITH_YOUR_FILE")) {
+            throw new Exception("Link download game data belum dikonfigurasi.\nIsi data_url di android/app/src/main/assets/romp_data.json");
+        }
+        return info;
+    }
+
+    /** All required folders + marker + version must be present. */
+    private static boolean isInstalled(Activity a, DataInfo info) {
+        try {
+            File root = a.getExternalFilesDir(null);
+            if (root == null) return false;
+            if (!new File(root, MARKER).isFile()) return false;
+            for (String folder : REQUIRED_FOLDERS) {
+                File d = new File(root, folder);
+                if (!d.isDirectory()) return false;
+                String[] list = d.list();
+                if (list == null || list.length == 0) return false;
+            }
+            if (info.sentinel != null && !info.sentinel.isEmpty()
+                    && !new File(root, info.sentinel).exists()) return false;
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static void markInstalled(Activity a, DataInfo info) {
+        try {
+            File root = a.getExternalFilesDir(null);
+            if (root == null) return;
+            try (OutputStream os = new FileOutputStream(new File(root, MARKER))) {
+                os.write(info.version.getBytes("UTF-8"));
+            }
+            a.getSharedPreferences(PREFS, Activity.MODE_PRIVATE)
+                    .edit().putString(KEY_DATA_VERSION, info.version).apply();
+        } catch (Exception e) {
+            android.util.Log.e("ROMPDataManager", "markInstalled failed", e);
+        }
+    }
+
+    private static String resolveDownloadUrl(String url) throws Exception {
+        if (url.contains("mediafire.com/file/")) {
+            String html = getText(url);
+            Matcher m = Pattern.compile("https://download\\d*\\.mediafire\\.com/[^\\s\"'<>]+").matcher(html);
+            if (m.find()) return m.group(0);
+            throw new Exception("Tidak bisa menemukan link download langsung dari MediaFire.");
+        }
+        return url;
+    }
+
+    // ---------------------------------------------------------- UI ----
+    private static volatile AlertDialog loadingDialog;
+
+    private static void showLoading(Activity a, String title, String message) {
+        if (a.isFinishing()) return;
+        LinearLayout root = panel(a); root.setPadding(dp(a,24),dp(a,22),dp(a,24),dp(a,22));
+        TextView h = text(a,title,21,true); TextView m = text(a,message,14,false); m.setTextColor(Color.LTGRAY);
+        ProgressBar p = new ProgressBar(a); p.setIndeterminate(true);
+        root.addView(h); addGap(a,root,8); root.addView(m); addGap(a,root,18); root.addView(p);
+        AlertDialog d = new AlertDialog.Builder(a).setView(root).setCancelable(false).create();
+        d.setOnShowListener(v -> styleWindow(a,d)); loadingDialog=d; d.show(); styleWindow(a,d);
+    }
+    private static void dismissLoading() { try { if (loadingDialog != null && loadingDialog.isShowing()) loadingDialog.dismiss(); } catch(Exception ignored) {} loadingDialog=null; }
+
+    private static void showNetworkError(Activity a, String detail, ReadyCallback cb) {
+        if (a.isFinishing()) return; dismissLoading();
+        new AlertDialog.Builder(a).setTitle("Gagal memuat konfigurasi")
+                .setMessage("Tidak bisa membaca romp_data.json. Periksa internet lalu coba lagi.\n\n" + (detail == null ? "" : detail))
+                .setCancelable(false).setPositiveButton("COBA LAGI", (d,w) -> checkAndPrepare(a,cb))
+                .setNegativeButton("KELUAR", (d,w) -> a.finishAffinity()).show();
+    }
+
+    private static void showDownloadOffer(Activity a, DataInfo info, ReadyCallback cb) {
+        if (a.isFinishing()) return; dismissLoading();
+        LinearLayout root=panel(a); root.setPadding(dp(a,22),dp(a,22),dp(a,22),dp(a,20));
+        TextView title=text(a,"Download Game Data",22,true); title.setGravity(Gravity.CENTER);
+        String sizeTxt = info.size > 0 ? " • " + fmtBytes(info.size) : "";
+        TextView sub=text(a,"Paket data GTA:SA (anim, audio, data, models, texdb)" + sizeTxt + "\nVersi " + info.version + " — cukup download sekali.",14,false);
+        sub.setTextColor(Color.LTGRAY); sub.setGravity(Gravity.CENTER);
+        Button dl=button(a,"DOWNLOAD SEKARANG");
+        root.addView(title); addGap(a,root,8); root.addView(sub); addGap(a,root,18); root.addView(dl);
+        AlertDialog d=new AlertDialog.Builder(a).setView(root).setCancelable(false).create(); d.show(); styleWindow(a,d);
+        dl.setOnClickListener(v -> { d.dismiss(); startInstall(a, info, cb); });
+    }
+
+    private static final class ProgressUi {
+        AlertDialog dialog;
+        TextView phase, detail, speed;
+        ProgressBar bar;
+    }
+
+    private static ProgressUi showProgress(Activity a) {
+        LinearLayout root=panel(a); root.setPadding(dp(a,22),dp(a,22),dp(a,24),dp(a,20));
+        TextView title=text(a,"Menyiapkan Game Data",21,true); title.setGravity(Gravity.CENTER);
+        TextView phase=text(a,"Menghubungkan...",14,false); phase.setTextColor(Color.LTGRAY);
+        ProgressBar bar=new ProgressBar(a,null,android.R.attr.progressBarStyleHorizontal);
+        bar.setMax(1000); bar.setProgress(0);
+        bar.setProgressTintList(ColorStateList.valueOf(ACCENT));
+        TextView detail=text(a,"",13,false); detail.setTextColor(Color.LTGRAY);
+        TextView speed=text(a,"",13,false); speed.setTextColor(Color.LTGRAY);
+        root.addView(title); addGap(a,root,10); root.addView(phase); addGap(a,root,12);
+        root.addView(bar); addGap(a,root,8); root.addView(detail); addGap(a,root,2); root.addView(speed);
+        AlertDialog d=new AlertDialog.Builder(a).setView(root).setCancelable(false).create();
+        d.show(); styleWindow(a,d);
+        ProgressUi ui=new ProgressUi(); ui.dialog=d; ui.phase=phase; ui.detail=detail; ui.speed=speed; ui.bar=bar;
+        return ui;
+    }
+
+    // ---------------------------------------------------------- install ----
+    private static void startInstall(Activity a, DataInfo info, ReadyCallback cb) {
+        if (a.isFinishing()) return;
+        ProgressUi ui = showProgress(a);
+        IO.execute(() -> {
+            File zipFile = null;
+            try {
+                postPhase(ui, "Mencari link download...", "");
+                String directUrl = resolveDownloadUrl(info.url);
+                android.util.Log.i("ROMPDataManager", "direct url resolved");
+
+                File cacheDir = a.getExternalCacheDir();
+                if (cacheDir == null) cacheDir = a.getCacheDir();
+                zipFile = new File(cacheDir, "romp_data_" + info.version + ".zip");
+                if (zipFile.exists()) zipFile.delete();
+
+                downloadWithProgress(directUrl, zipFile, info.size, ui);
+                if (info.size > 0 && zipFile.length() != info.size)
+                    throw new Exception("Ukuran file tidak sesuai, download mungkin corrupt. Coba lagi.");
+
+                postPhase(ui, "Mengekstrak data...", "");
+                extractWithProgress(a, zipFile, ui);
+
+                File root = a.getExternalFilesDir(null);
+                if (root == null) throw new Exception("Penyimpanan tidak tersedia.");
+                // verify required folders landed
+                for (String folder : REQUIRED_FOLDERS) {
+                    if (!new File(root, folder).isDirectory())
+                        throw new Exception("Data tidak lengkap setelah ekstrak (folder " + folder + " hilang).");
+                }
+                if (info.sentinel != null && !info.sentinel.isEmpty()
+                        && !new File(root, info.sentinel).exists())
+                    throw new Exception("Data tidak lengkap setelah ekstrak (sentinel hilang).");
+
+                markInstalled(a, info);
+                try { if (zipFile.exists()) zipFile.delete(); } catch (Exception ignored) {}
+
+                MAIN.post(() -> {
+                    if (ui.dialog.isShowing()) ui.dialog.dismiss();
+                    Toast.makeText(a, "Game data siap dimainkan", Toast.LENGTH_SHORT).show();
+                    if (!a.isFinishing()) cb.onReady();
+                });
+            } catch (Exception e) {
+                android.util.Log.e("ROMPDataManager", "Install failed", e);
+                final File zf = zipFile;
+                MAIN.post(() -> {
+                    if (ui.dialog.isShowing()) ui.dialog.dismiss();
+                    if (a.isFinishing()) return;
+                    new AlertDialog.Builder(a).setTitle("Download gagal")
+                            .setMessage(e.getMessage() == null ? "Silakan coba lagi." : e.getMessage())
+                            .setCancelable(false)
+                            .setPositiveButton("COBA LAGI", (x, w) -> startInstall(a, info, cb))
+                            .setNegativeButton("KELUAR", (x, w) -> a.finishAffinity())
+                            .show();
+                    try { if (zf != null && zf.exists()) zf.delete(); } catch (Exception ignored) {}
+                });
+            }
+        });
+    }
+
+    private static void downloadWithProgress(String url, File out, long expectedSize, ProgressUi ui) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        c.setConnectTimeout(20000); c.setReadTimeout(60000);
+        c.setRequestProperty("User-Agent", "RO-MP-Launcher");
+        c.setInstanceFollowRedirects(true);
+        int code = c.getResponseCode();
+        if (code / 100 != 2) throw new Exception("Server menolak download (HTTP " + code + ").");
+        long total = c.getContentLengthLong();
+        if (total <= 0) total = expectedSize;
+
+        final long totalF = total;
+        postPhase(ui, "Mengunduh game data...", totalF > 0 ? "0 / " + fmtBytes(totalF) : "");
+        long lastUi = 0, startNs = System.nanoTime();
+        byte[] buf = new byte[128 * 1024];
+        try (InputStream in = new BufferedInputStream(c.getInputStream());
+             OutputStream fos = new BufferedOutputStream(new FileOutputStream(out))) {
+            long done = 0; int n;
+            while ((n = in.read(buf)) != -1) {
+                fos.write(buf, 0, n);
+                done += n;
+                long now = System.currentTimeMillis();
+                if (now - lastUi > 300) {
+                    lastUi = now;
+                    long elapsed = Math.max(1, (System.nanoTime() - startNs) / 1_000_000_000L);
+                    long speed = done / elapsed;
+                    final long d = done;
+                    final int permille = totalF > 0 ? (int) Math.min(1000, (d * 1000) / totalF) : 0;
+                    MAIN.post(() -> {
+                        if (!ui.dialog.isShowing()) return;
+                        ui.bar.setProgress(permille);
+                        ui.detail.setText(fmtBytes(d) + (totalF > 0 ? " / " + fmtBytes(totalF) : "") + "  •  " + (permille / 10) + "%");
+                        ui.speed.setText(fmtBytes(speed) + "/dtk");
+                    });
+                }
+            }
+        } finally {
+            c.disconnect();
+        }
+        MAIN.post(() -> { if (ui.dialog.isShowing()) { ui.bar.setProgress(1000); ui.detail.setText("Download selesai"); ui.speed.setText(""); } });
+    }
+
+    private static void extractWithProgress(Activity a, File zipFile, ProgressUi ui) throws Exception {
+        File root = a.getExternalFilesDir(null);
+        if (root == null) throw new Exception("Penyimpanan tidak tersedia.");
+        final String rootCanon = root.getCanonicalPath() + File.separator;
+        try (ZipFile zip = new ZipFile(zipFile)) {
+            int totalEntries = zip.size();
+            if (totalEntries <= 0) throw new Exception("File zip kosong / rusak.");
+            java.util.ArrayList<String> names = new java.util.ArrayList<>(totalEntries);
+            Enumeration<? extends ZipEntry> scan = zip.entries();
+            while (scan.hasMoreElements()) names.add(scan.nextElement().getName());
+            final String stripPrefix = detectStripPrefix(names);
+
+            postPhase(ui, "Mengekstrak data...", "0 / " + totalEntries + " file");
+            Enumeration<? extends ZipEntry> en = zip.entries();
+            int done = 0; long lastUi = 0;
+            byte[] buf = new byte[128 * 1024];
+            while (en.hasMoreElements()) {
+                ZipEntry e = en.nextElement();
+                String name = e.getName();
+                if (!stripPrefix.isEmpty()) {
+                    if (!name.startsWith(stripPrefix)) continue;
+                    name = name.substring(stripPrefix.length());
+                }
+                if (name.isEmpty()) { done++; continue; }
+                File target = new File(root, name);
+                String canon = target.getCanonicalPath();
+                if (!canon.startsWith(rootCanon) && !canon.equals(root.getCanonicalPath()))
+                    throw new Exception("Entri zip tidak valid: " + name);
+                if (e.isDirectory()) {
+                    target.mkdirs();
+                } else {
+                    File parent = target.getParentFile();
+                    if (parent != null && !parent.exists()) parent.mkdirs();
+                    try (InputStream in = new BufferedInputStream(zip.getInputStream(e));
+                         OutputStream os = new BufferedOutputStream(new FileOutputStream(target))) {
+                        int n;
+                        while ((n = in.read(buf)) != -1) os.write(buf, 0, n);
+                    }
+                }
+                done++;
+                long now = System.currentTimeMillis();
+                if (now - lastUi > 300 || done == totalEntries) {
+                    lastUi = now;
+                    final int d = done; final String nm = name;
+                    final int permille = (int) Math.min(1000, (d * 1000L) / totalEntries);
+                    MAIN.post(() -> {
+                        if (!ui.dialog.isShowing()) return;
+                        ui.bar.setProgress(permille);
+                        ui.detail.setText(d + " / " + totalEntries + " file  •  " + (permille / 10) + "%");
+                        String shortName = nm.length() > 42 ? "..." + nm.substring(nm.length() - 39) : nm;
+                        ui.speed.setText(shortName);
+                    });
+                }
+            }
+        }
+        MAIN.post(() -> { if (ui.dialog.isShowing()) { ui.bar.setProgress(1000); ui.detail.setText("Ekstrak selesai"); ui.speed.setText(""); } });
+    }
+
+    private static String detectStripPrefix(java.util.List<String> names) {
+        String firstSeg = null;
+        for (String n : names) {
+            int slash = n.indexOf('/');
+            if (slash <= 0) return "";
+            String seg = n.substring(0, slash + 1);
+            if (firstSeg == null) firstSeg = seg;
+            else if (!firstSeg.equals(seg)) return "";
+        }
+        return firstSeg == null ? "" : firstSeg;
+    }
+
+    private static void postPhase(ProgressUi ui, String phase, String detail) {
+        MAIN.post(() -> {
+            if (!ui.dialog.isShowing()) return;
+            ui.phase.setText(phase);
+            ui.detail.setText(detail);
+            ui.speed.setText("");
+        });
+    }
+
+    // ---------------------------------------------------------- helpers ----
+    private static String fmtBytes(long n) {
+        if (n < 1024) return n + " B";
+        String[] u = {"B", "KB", "MB", "GB"};
+        int i = 0; double v = n;
+        while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+        return String.format(Locale.US, i == 0 ? "%.0f %s" : "%.2f %s", v, u[i]);
+    }
+
+    private static String getText(String address) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(address).openConnection();
+        c.setConnectTimeout(15000); c.setReadTimeout(30000);
+        c.setRequestProperty("User-Agent", "RO-MP-Launcher");
+        c.setInstanceFollowRedirects(true);
+        try (InputStream in = new BufferedInputStream(c.getInputStream());
+             BufferedReader r = new BufferedReader(new InputStreamReader(in, "UTF-8"))) {
+            StringBuilder b = new StringBuilder();
+            char[] buf = new char[8192]; int n;
+            while ((n = r.read(buf)) != -1) b.append(buf, 0, n);
+            return b.toString();
+        } finally {
+            c.disconnect();
+        }
+    }
+
+    private static LinearLayout panel(Activity a) { LinearLayout l=new LinearLayout(a); l.setOrientation(LinearLayout.VERTICAL); l.setGravity(Gravity.CENTER_HORIZONTAL); l.setBackground(shape(CARD,22)); return l; }
+    private static TextView text(Activity a,String s,int size,boolean bold) { TextView t=new TextView(a); t.setText(s); t.setTextColor(WHITE); t.setTextSize(size); if(bold)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD); return t; }
+    private static Button button(Activity a,String s) { Button b=new Button(a); b.setText(s); b.setTextColor(Color.rgb(20,24,31)); b.setTextSize(15); b.setAllCaps(false); b.setTypeface(Typeface.DEFAULT,Typeface.BOLD); b.setBackground(shape(ACCENT,14)); b.setPadding(dp(a,12),dp(a,10),dp(a,12),dp(a,10)); b.setMinHeight(dp(a,52)); return b; }
+    private static GradientDrawable shape(int color,int radius) { GradientDrawable d=new GradientDrawable(); d.setColor(color); d.setCornerRadius(radius); return d; }
+    private static void addGap(Activity a,LinearLayout l,int h) { View v=new View(a); l.addView(v,new LinearLayout.LayoutParams(1,dp(a,h))); }
+    private static int dp(Activity a,int n) { return (int)(n*a.getResources().getDisplayMetrics().density+0.5f); }
+    private static void styleWindow(Activity a,AlertDialog d) { if(d.getWindow()!=null){ d.getWindow().setBackgroundDrawableResource(android.R.color.transparent); d.getWindow().setLayout(Math.min(a.getResources().getDisplayMetrics().widthPixels-dp(a,40),dp(a,440)),-2); } }
+}

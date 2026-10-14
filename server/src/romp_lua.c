@@ -11,12 +11,17 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
-static lua_State *L = NULL;
+static Script g_gm;              /* gamemode: state Lua utama */
+static Script g_fs[MAX_FILTERSCRIPTS]; /* filterscript ala SA-MP */
+static char g_gm_dir[512] = "";  /* folder gamemode (tempat helper utama) */
+static char g_fs_dir[512] = "";  /* folder filterscripts = <gm_dir>/filterscripts */
 
-/* Registry untuk handler romp.onNUICallback(name, fn). */
-static int nui_cb_ref = LUA_NOREF;
+/* State yang menunggu di-close (unload dari dalam event sendiri aman:
+ * close ditunda sampai tick berikutnya, di luar pcall). */
+static lua_State *g_pending_close[MAX_FILTERSCRIPTS];
+static int g_pending_n = 0;
 
-int lua_active(void) { return L != NULL; }
+int lua_active(void) { return g_gm.L != NULL; }
 
 /* Helper frame kecil untuk romp_lua.c */
 static void lput_u16(uint8_t *b, uint16_t v) { b[0] = v & 0xFF; b[1] = (v >> 8) & 0xFF; }
@@ -224,11 +229,15 @@ static int l_romp_send_nui_message(lua_State *Ls) {
     return 1;
 }
 
-/* romp.onNUICallback(name, fn) — fn dipanggil sebagai fn(id, name, dataJson) */
+/* romp.onNUICallback(name, fn) — fn dipanggil sebagai fn(id, name, dataJson).
+ * Tabel handler disimpan per-state (tiap modul punya registry sendiri). */
 static int l_romp_on_nui_callback(lua_State *Ls) {
     const char *name = luaL_checkstring(Ls, 1);
     luaL_checktype(Ls, 2, LUA_TFUNCTION);
-    lua_rawgeti(Ls, LUA_REGISTRYINDEX, nui_cb_ref);
+    lua_getfield(Ls, LUA_REGISTRYINDEX, "romp.nui_cb_ref");
+    int ref = (int)lua_tointeger(Ls, -1);
+    lua_pop(Ls, 1);
+    lua_rawgeti(Ls, LUA_REGISTRYINDEX, ref);
     lua_pushvalue(Ls, 2);
     lua_setfield(Ls, -2, name);
     lua_pop(Ls, 1);
@@ -628,184 +637,371 @@ static int l_romp_set_vehicle_vw(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- API Filterscript ala SA-MP ----------------
+ * romp.loadFilterScript(name) -> bool   (true = dimuat / sudah dimuat)
+ * romp.unloadFilterScript(name) -> bool (true = berhasil di-unload)
+ * romp.getFilterScripts() -> tabel array berisi nama filterscript aktif */
+static int l_romp_load_fs(lua_State *Ls) {
+    const char *name = luaL_checkstring(Ls, 1);
+    int r = fs_load(name);
+    lua_pushboolean(Ls, r == 0 || r == 1);
+    return 1;
+}
+
+static int l_romp_unload_fs(lua_State *Ls) {
+    const char *name = luaL_checkstring(Ls, 1);
+    lua_pushboolean(Ls, fs_unload(name) == 0);
+    return 1;
+}
+
+static int l_romp_get_fs(lua_State *Ls) {
+    lua_newtable(Ls);
+    int n = fs_count();
+    for (int k = 0; k < n; k++) {
+        lua_pushstring(Ls, fs_get_name(k));
+        lua_rawseti(Ls, -2, k + 1);
+    }
+    return 1;
+}
+
 /* ---------------- Init ---------------- */
 
-/* Dipakai lua_init sebelum definisinya (di bawah). */
+/* Dipakai script_setup sebelum definisinya (di bawah). */
 static void call_event_noret(const char *ev);
+static void call_event_noret_s(lua_State *Ls, const char *ev);
 
-/* Muat helper Lua (dialog.lua, textdraw.lua, ...) dari folder yang sama
- * dengan file gamemode. Tidak fatal kalau file tidak ada. */
-static void lua_load_helper(const char *script_path, const char *file,
-                            const char *desc) {
-    char dir[512];
-    const char *slash = strrchr(script_path, '/');
+/* Ambil folder dari path script ("a/b/c.lua" -> "a/b"). */
+static void script_dir_of(const char *path, char *out, size_t out_sz) {
+    const char *slash = strrchr(path, '/');
 #ifdef _WIN32
-    const char *bs = strrchr(script_path, '\\');
+    const char *bs = strrchr(path, '\\');
     if (bs && (!slash || bs > slash)) slash = bs;
 #endif
-    if (slash) {
-        size_t dl = (size_t)(slash - script_path);
-        if (dl > sizeof dir - 16) dl = sizeof dir - 16;
-        memcpy(dir, script_path, dl);
-        dir[dl] = '\0';
-    } else {
-        dir[0] = '.'; dir[1] = '\0';
-    }
-    char path[528];
+    size_t dl = slash ? (size_t)(slash - path) : 0;
+    if (dl > out_sz - 1) dl = out_sz - 1;
+    if (dl == 0) { out[0] = '.'; out[1] = '\0'; return; }
+    memcpy(out, path, dl);
+    out[dl] = '\0';
+}
+
+/* Daftarkan tabel romp.* + tabel registry NUI callback ke satu state Lua. */
+static void script_register_api(lua_State *Ls) {
+    /* tabel romp */
+    lua_newtable(Ls);
+    lua_pushcfunction(Ls, l_romp_log);              lua_setfield(Ls, -2, "log");
+    lua_pushcfunction(Ls, l_romp_player_count);     lua_setfield(Ls, -2, "playerCount");
+    lua_pushcfunction(Ls, l_romp_get_player_name);  lua_setfield(Ls, -2, "getPlayerName");
+    lua_pushcfunction(Ls, l_romp_get_players);      lua_setfield(Ls, -2, "getPlayers");
+    lua_pushcfunction(Ls, l_romp_get_player_pos);  lua_setfield(Ls, -2, "getPlayerPos");
+    lua_pushcfunction(Ls, l_romp_send_chat_to_all); lua_setfield(Ls, -2, "sendChatToAll");
+    lua_pushcfunction(Ls, l_romp_send_chat_to_player); lua_setfield(Ls, -2, "sendChatToPlayer");
+    lua_pushcfunction(Ls, l_romp_kick_player);      lua_setfield(Ls, -2, "kickPlayer");
+    lua_pushcfunction(Ls, l_romp_get_tick);         lua_setfield(Ls, -2, "getTick");
+    lua_pushcfunction(Ls, l_romp_get_config);       lua_setfield(Ls, -2, "getConfig");
+    lua_pushcfunction(Ls, l_romp_send_nui_message); lua_setfield(Ls, -2, "sendNUIMessage");
+    lua_pushcfunction(Ls, l_romp_on_nui_callback);  lua_setfield(Ls, -2, "onNUICallback");
+    lua_pushcfunction(Ls, l_romp_set_nui_focus);    lua_setfield(Ls, -2, "setNUIFocus");
+    lua_pushcfunction(Ls, l_romp_show_dialog);      lua_setfield(Ls, -2, "showDialog");
+    lua_pushcfunction(Ls, l_romp_hide_dialog);      lua_setfield(Ls, -2, "hideDialog");
+    lua_pushcfunction(Ls, l_romp_get_player_ip);   lua_setfield(Ls, -2, "getPlayerIP");
+    lua_pushcfunction(Ls, l_romp_set_hostname);    lua_setfield(Ls, -2, "setHostname");
+    lua_pushcfunction(Ls, l_romp_set_motd);        lua_setfield(Ls, -2, "setMOTD");
+    lua_pushcfunction(Ls, l_romp_set_password);    lua_setfield(Ls, -2, "setPassword");
+    lua_pushcfunction(Ls, l_romp_get_server_info); lua_setfield(Ls, -2, "getServerInfo");
+    lua_pushcfunction(Ls, l_romp_ban_ip);          lua_setfield(Ls, -2, "banIP");
+    lua_pushcfunction(Ls, l_romp_unban_ip);        lua_setfield(Ls, -2, "unbanIP");
+    lua_pushcfunction(Ls, l_romp_is_ip_banned);    lua_setfield(Ls, -2, "isIPBanned");
+    lua_pushcfunction(Ls, l_romp_announce_now);    lua_setfield(Ls, -2, "announceNow");
+    /* API kendaraan ala SA-MP */
+    lua_pushcfunction(Ls, l_romp_create_vehicle);   lua_setfield(Ls, -2, "createVehicle");
+    lua_pushcfunction(Ls, l_romp_destroy_vehicle);  lua_setfield(Ls, -2, "destroyVehicle");
+    lua_pushcfunction(Ls, l_romp_set_vehicle_pos);  lua_setfield(Ls, -2, "setVehiclePos");
+    lua_pushcfunction(Ls, l_romp_get_vehicle_pos);  lua_setfield(Ls, -2, "getVehiclePos");
+    lua_pushcfunction(Ls, l_romp_set_vehicle_health); lua_setfield(Ls, -2, "setVehicleHealth");
+    lua_pushcfunction(Ls, l_romp_get_vehicle_health); lua_setfield(Ls, -2, "getVehicleHealth");
+    lua_pushcfunction(Ls, l_romp_damage_vehicle);   lua_setfield(Ls, -2, "damageVehicle");
+    lua_pushcfunction(Ls, l_romp_put_player_in_vehicle); lua_setfield(Ls, -2, "putPlayerInVehicle");
+    lua_pushcfunction(Ls, l_romp_remove_player_from_vehicle); lua_setfield(Ls, -2, "removePlayerFromVehicle");
+    lua_pushcfunction(Ls, l_romp_is_player_in_vehicle); lua_setfield(Ls, -2, "isPlayerInVehicle");
+    lua_pushcfunction(Ls, l_romp_get_player_vehicle); lua_setfield(Ls, -2, "getPlayerVehicle");
+    lua_pushcfunction(Ls, l_romp_get_player_vehicle_seat); lua_setfield(Ls, -2, "getPlayerVehicleSeat");
+    lua_pushcfunction(Ls, l_romp_get_vehicle_model); lua_setfield(Ls, -2, "getVehicleModel");
+    lua_pushcfunction(Ls, l_romp_get_vehicle_colors); lua_setfield(Ls, -2, "getVehicleColors");
+    lua_pushcfunction(Ls, l_romp_set_vehicle_colors); lua_setfield(Ls, -2, "setVehicleColors");
+    lua_pushcfunction(Ls, l_romp_get_vehicle_driver); lua_setfield(Ls, -2, "getVehicleDriver");
+    lua_pushcfunction(Ls, l_romp_get_vehicle_passenger); lua_setfield(Ls, -2, "getVehiclePassenger");
+    lua_pushcfunction(Ls, l_romp_respawn_vehicle);  lua_setfield(Ls, -2, "respawnVehicle");
+    lua_pushcfunction(Ls, l_romp_get_vehicles);      lua_setfield(Ls, -2, "getVehicles");
+    /* senjata ala SA-MP */
+    lua_pushcfunction(Ls, l_romp_give_weapon);       lua_setfield(Ls, -2, "giveWeapon");
+    lua_pushcfunction(Ls, l_romp_remove_player_weapon); lua_setfield(Ls, -2, "removePlayerWeapon");
+    lua_pushcfunction(Ls, l_romp_reset_player_weapons); lua_setfield(Ls, -2, "resetPlayerWeapons");
+    lua_pushcfunction(Ls, l_romp_get_player_weapon);  lua_setfield(Ls, -2, "getPlayerWeapon");
+    lua_pushcfunction(Ls, l_romp_get_player_weapon_data); lua_setfield(Ls, -2, "getPlayerWeaponData");
+    lua_pushcfunction(Ls, l_romp_weapon_slot);        lua_setfield(Ls, -2, "weaponSlot");
+    /* interior & virtual world ala SA-MP */
+    lua_pushcfunction(Ls, l_romp_get_player_interior); lua_setfield(Ls, -2, "getPlayerInterior");
+    lua_pushcfunction(Ls, l_romp_set_player_interior); lua_setfield(Ls, -2, "setPlayerInterior");
+    lua_pushcfunction(Ls, l_romp_get_player_vw); lua_setfield(Ls, -2, "getPlayerVirtualWorld");
+    lua_pushcfunction(Ls, l_romp_set_player_vw); lua_setfield(Ls, -2, "setPlayerVirtualWorld");
+    lua_pushcfunction(Ls, l_romp_get_vehicle_vw); lua_setfield(Ls, -2, "getVehicleVirtualWorld");
+    lua_pushcfunction(Ls, l_romp_set_vehicle_vw); lua_setfield(Ls, -2, "setVehicleVirtualWorld");
+    /* filterscript ala SA-MP */
+    lua_pushcfunction(Ls, l_romp_load_fs);        lua_setfield(Ls, -2, "loadFilterScript");
+    lua_pushcfunction(Ls, l_romp_unload_fs);      lua_setfield(Ls, -2, "unloadFilterScript");
+    lua_pushcfunction(Ls, l_romp_get_fs);         lua_setfield(Ls, -2, "getFilterScripts");
+    /* konstanta hittype tembakan ala SA-MP */
+    lua_pushinteger(Ls, 0); lua_setfield(Ls, -2, "WPN_HIT_NONE");
+    lua_pushinteger(Ls, 1); lua_setfield(Ls, -2, "WPN_HIT_PLAYER");
+    lua_pushinteger(Ls, 2); lua_setfield(Ls, -2, "WPN_HIT_VEHICLE");
+    lua_pushinteger(Ls, 3); lua_setfield(Ls, -2, "WPN_HIT_OBJECT");
+    /* konstanta kind chat */
+    lua_pushinteger(Ls, KIND_CHAT); lua_setfield(Ls, -2, "KIND_CHAT");
+    lua_pushinteger(Ls, KIND_INFO); lua_setfield(Ls, -2, "KIND_INFO");
+    lua_pushinteger(Ls, KIND_ME);   lua_setfield(Ls, -2, "KIND_ME");
+    lua_pushinteger(Ls, KIND_PM);   lua_setfield(Ls, -2, "KIND_PM");
+    lua_pushinteger(Ls, KIND_SYS);  lua_setfield(Ls, -2, "KIND_SYS");
+    /* konstanta style dialog ala SA-MP */
+    lua_pushinteger(Ls, 0); lua_setfield(Ls, -2, "DIALOG_MSGBOX");
+    lua_pushinteger(Ls, 1); lua_setfield(Ls, -2, "DIALOG_INPUT");
+    lua_pushinteger(Ls, 2); lua_setfield(Ls, -2, "DIALOG_LIST");
+    lua_pushinteger(Ls, 3); lua_setfield(Ls, -2, "DIALOG_PASSWORD");
+    lua_setglobal(Ls, "romp");
+
+    /* tabel registry untuk NUI callback — disimpan per-state */
+    lua_newtable(Ls);
+    int ref = luaL_ref(Ls, LUA_REGISTRYINDEX);
+    lua_pushinteger(Ls, ref);
+    lua_setfield(Ls, LUA_REGISTRYINDEX, "romp.nui_cb_ref");
+}
+
+/* Muat helper Lua (dialog.lua, textdraw.lua, ...) untuk satu modul script.
+ * Dicari di folder modul dulu, lalu fallback ke folder gamemode. */
+static void script_load_helper(Script *s, const char *dir,
+                               const char *fallback_dir, const char *file,
+                               const char *desc) {
+    char path[600];
     snprintf(path, sizeof path, "%s/%s", dir, file);
-    if (luaL_loadfile(L, path) != LUA_OK || lua_pcall(L, 0, 0, 0) != LUA_OK) {
-        log_msg("[lua] %s tidak dimuat (%s): %s", file, path,
-                lua_tostring(L, -1) ? lua_tostring(L, -1) : "?");
-        lua_pop(L, 1);
+    FILE *f = fopen(path, "r");
+    if (!f && fallback_dir && fallback_dir[0] && strcmp(fallback_dir, dir) != 0) {
+        snprintf(path, sizeof path, "%s/%s", fallback_dir, file);
+        f = fopen(path, "r");
+    }
+    if (!f) {
+        log_msg("[lua] helper %s tidak ditemukan untuk '%s', dilewati", file, s->name);
+        return;
+    }
+    fclose(f);
+    if (luaL_loadfile(s->L, path) != LUA_OK ||
+        lua_pcall(s->L, 0, 0, 0) != LUA_OK) {
+        log_msg("[lua] %s gagal dimuat untuk '%s' (%s): %s", file, s->name, path,
+                lua_tostring(s->L, -1) ? lua_tostring(s->L, -1) : "?");
+        lua_pop(s->L, 1);
     } else {
-        log_msg("[lua] %s dimuat (%s)", file, desc);
+        log_msg("[lua] %s dimuat untuk '%s' (%s)", file, s->name, desc);
     }
 }
 
-int lua_init(const char *script_path) {
-    L = luaL_newstate();
-    if (!L) return -1;
-    luaL_openlibs(L);
+static const struct { const char *file; const char *desc; } g_helpers[] = {
+    { "dialog.lua",     "event onDialogResponse aktif" },
+    { "textdraw.lua",   "API textdraw aktif" },
+    { "checkpoint.lua", "API checkpoint aktif" },
+    { "pickup.lua",     "API pickup aktif" },
+    { "mapicon.lua",    "API map icon aktif" },
+    { "vehicle.lua",    "API kendaraan aktif" },
+};
 
-    /* tabel romp */
-    lua_newtable(L);
-    lua_pushcfunction(L, l_romp_log);              lua_setfield(L, -2, "log");
-    lua_pushcfunction(L, l_romp_player_count);     lua_setfield(L, -2, "playerCount");
-    lua_pushcfunction(L, l_romp_get_player_name);  lua_setfield(L, -2, "getPlayerName");
-    lua_pushcfunction(L, l_romp_get_players);      lua_setfield(L, -2, "getPlayers");
-    lua_pushcfunction(L, l_romp_get_player_pos);  lua_setfield(L, -2, "getPlayerPos");
-    lua_pushcfunction(L, l_romp_send_chat_to_all); lua_setfield(L, -2, "sendChatToAll");
-    lua_pushcfunction(L, l_romp_send_chat_to_player); lua_setfield(L, -2, "sendChatToPlayer");
-    lua_pushcfunction(L, l_romp_kick_player);      lua_setfield(L, -2, "kickPlayer");
-    lua_pushcfunction(L, l_romp_get_tick);         lua_setfield(L, -2, "getTick");
-    lua_pushcfunction(L, l_romp_get_config);       lua_setfield(L, -2, "getConfig");
-    lua_pushcfunction(L, l_romp_send_nui_message); lua_setfield(L, -2, "sendNUIMessage");
-    lua_pushcfunction(L, l_romp_on_nui_callback);  lua_setfield(L, -2, "onNUICallback");
-    lua_pushcfunction(L, l_romp_set_nui_focus);    lua_setfield(L, -2, "setNUIFocus");
-    lua_pushcfunction(L, l_romp_show_dialog);      lua_setfield(L, -2, "showDialog");
-    lua_pushcfunction(L, l_romp_hide_dialog);      lua_setfield(L, -2, "hideDialog");
-    lua_pushcfunction(L, l_romp_get_player_ip);   lua_setfield(L, -2, "getPlayerIP");
-    lua_pushcfunction(L, l_romp_set_hostname);    lua_setfield(L, -2, "setHostname");
-    lua_pushcfunction(L, l_romp_set_motd);        lua_setfield(L, -2, "setMOTD");
-    lua_pushcfunction(L, l_romp_set_password);    lua_setfield(L, -2, "setPassword");
-    lua_pushcfunction(L, l_romp_get_server_info); lua_setfield(L, -2, "getServerInfo");
-    lua_pushcfunction(L, l_romp_ban_ip);          lua_setfield(L, -2, "banIP");
-    lua_pushcfunction(L, l_romp_unban_ip);        lua_setfield(L, -2, "unbanIP");
-    lua_pushcfunction(L, l_romp_is_ip_banned);    lua_setfield(L, -2, "isIPBanned");
-    lua_pushcfunction(L, l_romp_announce_now);    lua_setfield(L, -2, "announceNow");
-    /* API kendaraan ala SA-MP */
-    lua_pushcfunction(L, l_romp_create_vehicle);   lua_setfield(L, -2, "createVehicle");
-    lua_pushcfunction(L, l_romp_destroy_vehicle);  lua_setfield(L, -2, "destroyVehicle");
-    lua_pushcfunction(L, l_romp_set_vehicle_pos);  lua_setfield(L, -2, "setVehiclePos");
-    lua_pushcfunction(L, l_romp_get_vehicle_pos);  lua_setfield(L, -2, "getVehiclePos");
-    lua_pushcfunction(L, l_romp_set_vehicle_health); lua_setfield(L, -2, "setVehicleHealth");
-    lua_pushcfunction(L, l_romp_get_vehicle_health); lua_setfield(L, -2, "getVehicleHealth");
-    lua_pushcfunction(L, l_romp_damage_vehicle);   lua_setfield(L, -2, "damageVehicle");
-    lua_pushcfunction(L, l_romp_put_player_in_vehicle); lua_setfield(L, -2, "putPlayerInVehicle");
-    lua_pushcfunction(L, l_romp_remove_player_from_vehicle); lua_setfield(L, -2, "removePlayerFromVehicle");
-    lua_pushcfunction(L, l_romp_is_player_in_vehicle); lua_setfield(L, -2, "isPlayerInVehicle");
-    lua_pushcfunction(L, l_romp_get_player_vehicle); lua_setfield(L, -2, "getPlayerVehicle");
-    lua_pushcfunction(L, l_romp_get_player_vehicle_seat); lua_setfield(L, -2, "getPlayerVehicleSeat");
-    lua_pushcfunction(L, l_romp_get_vehicle_model); lua_setfield(L, -2, "getVehicleModel");
-    lua_pushcfunction(L, l_romp_get_vehicle_colors); lua_setfield(L, -2, "getVehicleColors");
-    lua_pushcfunction(L, l_romp_set_vehicle_colors); lua_setfield(L, -2, "setVehicleColors");
-    lua_pushcfunction(L, l_romp_get_vehicle_driver); lua_setfield(L, -2, "getVehicleDriver");
-    lua_pushcfunction(L, l_romp_get_vehicle_passenger); lua_setfield(L, -2, "getVehiclePassenger");
-    lua_pushcfunction(L, l_romp_respawn_vehicle);  lua_setfield(L, -2, "respawnVehicle");
-    lua_pushcfunction(L, l_romp_get_vehicles);      lua_setfield(L, -2, "getVehicles");
-    /* senjata ala SA-MP */
-    lua_pushcfunction(L, l_romp_give_weapon);       lua_setfield(L, -2, "giveWeapon");
-    lua_pushcfunction(L, l_romp_remove_player_weapon); lua_setfield(L, -2, "removePlayerWeapon");
-    lua_pushcfunction(L, l_romp_reset_player_weapons); lua_setfield(L, -2, "resetPlayerWeapons");
-    lua_pushcfunction(L, l_romp_get_player_weapon);  lua_setfield(L, -2, "getPlayerWeapon");
-    lua_pushcfunction(L, l_romp_get_player_weapon_data); lua_setfield(L, -2, "getPlayerWeaponData");
-    lua_pushcfunction(L, l_romp_weapon_slot);        lua_setfield(L, -2, "weaponSlot");
-    /* interior & virtual world ala SA-MP */
-    lua_pushcfunction(L, l_romp_get_player_interior); lua_setfield(L, -2, "getPlayerInterior");
-    lua_pushcfunction(L, l_romp_set_player_interior); lua_setfield(L, -2, "setPlayerInterior");
-    lua_pushcfunction(L, l_romp_get_player_vw); lua_setfield(L, -2, "getPlayerVirtualWorld");
-    lua_pushcfunction(L, l_romp_set_player_vw); lua_setfield(L, -2, "setPlayerVirtualWorld");
-    lua_pushcfunction(L, l_romp_get_vehicle_vw); lua_setfield(L, -2, "getVehicleVirtualWorld");
-    lua_pushcfunction(L, l_romp_set_vehicle_vw); lua_setfield(L, -2, "setVehicleVirtualWorld");
-    /* konstanta hittype tembakan ala SA-MP */
-    lua_pushinteger(L, 0); lua_setfield(L, -2, "WPN_HIT_NONE");
-    lua_pushinteger(L, 1); lua_setfield(L, -2, "WPN_HIT_PLAYER");
-    lua_pushinteger(L, 2); lua_setfield(L, -2, "WPN_HIT_VEHICLE");
-    lua_pushinteger(L, 3); lua_setfield(L, -2, "WPN_HIT_OBJECT");
-    /* konstanta kind chat */
-    lua_pushinteger(L, KIND_CHAT); lua_setfield(L, -2, "KIND_CHAT");
-    lua_pushinteger(L, KIND_INFO); lua_setfield(L, -2, "KIND_INFO");
-    lua_pushinteger(L, KIND_ME);   lua_setfield(L, -2, "KIND_ME");
-    lua_pushinteger(L, KIND_PM);   lua_setfield(L, -2, "KIND_PM");
-    lua_pushinteger(L, KIND_SYS);  lua_setfield(L, -2, "KIND_SYS");
-    /* konstanta style dialog ala SA-MP */
-    lua_pushinteger(L, 0); lua_setfield(L, -2, "DIALOG_MSGBOX");
-    lua_pushinteger(L, 1); lua_setfield(L, -2, "DIALOG_INPUT");
-    lua_pushinteger(L, 2); lua_setfield(L, -2, "DIALOG_LIST");
-    lua_pushinteger(L, 3); lua_setfield(L, -2, "DIALOG_PASSWORD");
-    lua_setglobal(L, "romp");
+/* Siapkan satu modul script: state baru + API + file + helper.
+ * fallback_dir = folder gamemode (untuk helper), NULL kalau modul ini gamemode. */
+static int script_setup(Script *s, const char *path, const char *name,
+                        const char *fallback_dir) {
+    memset(s, 0, sizeof *s);
+    s->L = luaL_newstate();
+    if (!s->L) return -1;
+    luaL_openlibs(s->L);
+    script_register_api(s->L);
+    strncpy(s->name, name, sizeof s->name - 1);
 
-    /* tabel registry untuk NUI callback */
-    lua_newtable(L);
-    nui_cb_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-
-    if (luaL_loadfile(L, script_path) != LUA_OK ||
-        lua_pcall(L, 0, 0, 0) != LUA_OK) {
-        log_msg("[lua] gagal load '%s': %s", script_path,
-                lua_tostring(L, -1) ? lua_tostring(L, -1) : "?");
-        lua_close(L);
-        L = NULL;
+    if (luaL_loadfile(s->L, path) != LUA_OK ||
+        lua_pcall(s->L, 0, 0, 0) != LUA_OK) {
+        log_msg("[lua] gagal load '%s': %s", path,
+                lua_tostring(s->L, -1) ? lua_tostring(s->L, -1) : "?");
+        lua_close(s->L);
+        s->L = NULL;
         return -1;
     }
+    char dir[512];
+    script_dir_of(path, dir, sizeof dir);
+    for (size_t i = 0; i < sizeof g_helpers / sizeof g_helpers[0]; i++)
+        script_load_helper(s, dir, fallback_dir,
+                           g_helpers[i].file, g_helpers[i].desc);
+    return 0;
+}
+
+/* Close state yang ditunda (dipanggil di luar event: onTick / shutdown). */
+static void script_flush_pending(void) {
+    for (int i = 0; i < g_pending_n; i++)
+        if (g_pending_close[i]) lua_close(g_pending_close[i]);
+    g_pending_n = 0;
+}
+
+static void script_teardown(Script *s) {
+    if (s->L) { lua_close(s->L); s->L = NULL; }
+    s->active = 0;
+}
+
+/* ---------------- Filterscript ala SA-MP ---------------- */
+
+static Script *fs_find(const char *name) {
+    for (int i = 0; i < MAX_FILTERSCRIPTS; i++)
+        if (g_fs[i].active && !strcmp(g_fs[i].name, name)) return &g_fs[i];
+    return NULL;
+}
+
+/* 0 = dimuat, 1 = sudah dimuat, -1 = slot penuh, -2 = file tidak ada/gagal */
+int fs_load(const char *name) {
+    if (!name || !name[0] || strlen(name) > 48) return -2;
+    /* cegah path traversal: nama polos saja, file = <fs_dir>/<name>.lua */
+    if (strchr(name, '/') || strchr(name, '\\') || strstr(name, "..")) return -2;
+    if (!g_fs_dir[0]) return -2; /* lua_init belum jalan */
+    if (fs_find(name)) return 1;
+    Script *s = NULL;
+    for (int i = 0; i < MAX_FILTERSCRIPTS; i++)
+        if (!g_fs[i].active) { s = &g_fs[i]; break; }
+    if (!s) {
+        log_msg("[lua] filterscript '%s': slot penuh (maks %d)", name, MAX_FILTERSCRIPTS);
+        return -1;
+    }
+    char path[600];
+    snprintf(path, sizeof path, "%s/%s.lua", g_fs_dir, name);
+    if (script_setup(s, path, name, g_gm_dir) != 0) return -2;
+    s->active = 1;
+    log_msg("[lua] filterscript '%s' dimuat", name);
+    call_event_noret_s(s->L, "onFilterScriptInit");
+    return 0;
+}
+
+int fs_unload(const char *name) {
+    Script *s = fs_find(name);
+    if (!s) return -1;
+    call_event_noret_s(s->L, "onFilterScriptExit");
+    /* Tunda lua_close: unload bisa dipicu dari dalam event modul itu sendiri. */
+    if (g_pending_n < MAX_FILTERSCRIPTS)
+        g_pending_close[g_pending_n++] = s->L;
+    else
+        lua_close(s->L);
+    s->L = NULL;
+    s->active = 0;
+    log_msg("[lua] filterscript '%s' di-unload", name);
+    return 0;
+}
+
+int fs_reload(const char *name) {
+    if (fs_find(name)) fs_unload(name);
+    return fs_load(name);
+}
+
+/* Muat daftar "fs1 fs2 fs3" dari server.cfg. */
+void fs_load_configured(const char *list) {
+    if (!list || !list[0]) return;
+    char buf[512];
+    strncpy(buf, list, sizeof buf - 1);
+    buf[sizeof buf - 1] = '\0';
+    for (char *tok = strtok(buf, " \t"); tok; tok = strtok(NULL, " \t")) {
+        int r = fs_load(tok);
+        if (r == -2)
+            log_msg("[lua] filterscript '%s' gagal: file %s/%s.lua tidak ditemukan",
+                    tok, g_fs_dir, tok);
+    }
+}
+
+int fs_count(void) {
+    int n = 0;
+    for (int i = 0; i < MAX_FILTERSCRIPTS; i++)
+        if (g_fs[i].active) n++;
+    return n;
+}
+
+const char *fs_get_name(int idx) {
+    int n = 0;
+    for (int i = 0; i < MAX_FILTERSCRIPTS; i++)
+        if (g_fs[i].active) { if (n++ == idx) return g_fs[i].name; }
+    return NULL;
+}
+
+int lua_init(const char *script_path) {
+    if (script_setup(&g_gm, script_path, "gamemode", NULL) != 0) return -1;
+    g_gm.active = 1;
+    script_dir_of(script_path, g_gm_dir, sizeof g_gm_dir);
+    g_gm_dir[sizeof g_gm_dir - 15] = '\0'; /* sisakan ruang untuk "/filterscripts" */
+    snprintf(g_fs_dir, sizeof g_fs_dir, "%s/filterscripts", g_gm_dir);
     log_msg("[lua] gamemode dimuat: %s", script_path);
-    /* helper ala SA-MP: router dialog + API textdraw */
-    lua_load_helper(script_path, "dialog.lua", "event onDialogResponse aktif");
-    lua_load_helper(script_path, "textdraw.lua", "API textdraw aktif");
-    lua_load_helper(script_path, "checkpoint.lua", "API checkpoint aktif");
-    lua_load_helper(script_path, "pickup.lua", "API pickup aktif");
-    lua_load_helper(script_path, "mapicon.lua", "API map icon aktif");
-    lua_load_helper(script_path, "vehicle.lua", "API kendaraan aktif");
+    log_msg("[lua] folder filterscripts: %s", g_fs_dir);
     /* event init: onGamemodeInit() */
     call_event_noret("onGamemodeInit");
     return 0;
 }
 
 void lua_shutdown(void) {
-    if (L) { lua_close(L); L = NULL; }
-    nui_cb_ref = LUA_NOREF;
+    for (int i = 0; i < MAX_FILTERSCRIPTS; i++)
+        if (g_fs[i].active) script_teardown(&g_fs[i]);
+    script_teardown(&g_gm);
+    script_flush_pending();
 }
 
 /* ---------------- Dispatch event ---------------- */
 
-/* Panggil fungsi global Lua `ev`. push_args mendorong argumen & mengembalikan
- * jumlahnya. Kembalikan 1 jika fungsi ada & return true (handled). */
+/* Panggil fungsi global Lua `ev` di state Ls. push_args mendorong argumen &
+ * mengembalikan jumlahnya. Kembalikan 1 jika fungsi ada & return true. */
 typedef int (*push_args_fn)(lua_State *Ls, void *ud);
 
-static int call_event(const char *ev, push_args_fn push, void *ud) {
-    if (!L) return 0;
-    lua_getglobal(L, ev);
-    if (!lua_isfunction(L, -1)) { lua_pop(L, 1); return 0; }
-    int nargs = push(L, ud);
-    if (lua_pcall(L, nargs, 1, 0) != LUA_OK) {
+static int call_event_s(lua_State *Ls, const char *ev, push_args_fn push, void *ud) {
+    lua_getglobal(Ls, ev);
+    if (!lua_isfunction(Ls, -1)) { lua_pop(Ls, 1); return 0; }
+    int nargs = push(Ls, ud);
+    if (lua_pcall(Ls, nargs, 1, 0) != LUA_OK) {
         log_msg("[lua] error di %s: %s", ev,
-                lua_tostring(L, -1) ? lua_tostring(L, -1) : "?");
-        lua_pop(L, 1);
+                lua_tostring(Ls, -1) ? lua_tostring(Ls, -1) : "?");
+        lua_pop(Ls, 1);
         return 0;
     }
-    int handled = lua_toboolean(L, -1);
-    lua_pop(L, 1);
+    int handled = lua_toboolean(Ls, -1);
+    lua_pop(Ls, 1);
     return handled;
 }
 
-static void call_event_noret(const char *ev) {
-    if (!L) return;
-    lua_getglobal(L, ev);
-    if (!lua_isfunction(L, -1)) { lua_pop(L, 1); return; }
-    if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+static int call_event(const char *ev, push_args_fn push, void *ud) {
+    if (!g_gm.L) return 0;
+    return call_event_s(g_gm.L, ev, push, ud);
+}
+
+static void call_event_noret_s(lua_State *Ls, const char *ev) {
+    lua_getglobal(Ls, ev);
+    if (!lua_isfunction(Ls, -1)) { lua_pop(Ls, 1); return; }
+    if (lua_pcall(Ls, 0, 0, 0) != LUA_OK) {
         log_msg("[lua] error di %s: %s", ev,
-                lua_tostring(L, -1) ? lua_tostring(L, -1) : "?");
-        lua_pop(L, 1);
+                lua_tostring(Ls, -1) ? lua_tostring(Ls, -1) : "?");
+        lua_pop(Ls, 1);
     }
+}
+
+static void call_event_noret(const char *ev) {
+    if (g_gm.L) call_event_noret_s(g_gm.L, ev);
+}
+
+/* Dispatch event ke semua filterscript aktif (urutan load). Ala SA-MP:
+ * filterscript dipanggil DULU, baru gamemode; true dari mana pun = handled. */
+static int fs_event(const char *ev, push_args_fn push, void *ud) {
+    int handled = 0;
+    for (int i = 0; i < MAX_FILTERSCRIPTS; i++)
+        if (g_fs[i].active && g_fs[i].L)
+            if (call_event_s(g_fs[i].L, ev, push, ud)) handled = 1;
+    return handled;
+}
+
+static void fs_event_noret(const char *ev) {
+    for (int i = 0; i < MAX_FILTERSCRIPTS; i++)
+        if (g_fs[i].active && g_fs[i].L) call_event_noret_s(g_fs[i].L, ev);
 }
 
 typedef struct { int id; const char *name; } EvJoin;
@@ -846,21 +1042,25 @@ static int push_cmd(lua_State *Ls, void *ud) {
 
 int lua_on_player_join(int id, const char *name) {
     EvJoin e = { id, name };
+    if (fs_event("onPlayerJoin", push_join, &e)) return 1;
     return call_event("onPlayerJoin", push_join, &e);
 }
 
 int lua_on_player_leave(int id, const char *name, int reason) {
     EvLeave e = { id, name, reason };
+    if (fs_event("onPlayerLeave", push_leave, &e)) return 1;
     return call_event("onPlayerLeave", push_leave, &e);
 }
 
 int lua_on_player_chat(int id, const char *name, const char *text) {
     EvChat e = { id, name, text };
+    if (fs_event("onPlayerChat", push_chat, &e)) return 1;
     return call_event("onPlayerChat", push_chat, &e);
 }
 
 int lua_on_player_command(int id, const char *name, const char *cmd, const char *args) {
     EvCmd e = { id, name, cmd, args };
+    if (fs_event("onPlayerCommand", push_cmd, &e)) return 1;
     return call_event("onPlayerCommand", push_cmd, &e);
 }
 
@@ -874,30 +1074,40 @@ static int push_con(lua_State *Ls, void *ud) {
 }
 int lua_on_console_command(const char *cmd, const char *args) {
     EvCon e = { cmd, args };
+    if (fs_event("onConsoleCommand", push_con, &e)) return 1;
     return call_event("onConsoleCommand", push_con, &e);
 }
 
 /* onPlayerRequestConnect(name, ip) -> true, "alasan" = tolak koneksi. */
-int lua_on_player_request(const char *name, const char *ip,
-                          char *reason_out, size_t reason_sz) {
-    if (!L) return 0;
-    lua_getglobal(L, "onPlayerRequestConnect");
-    if (!lua_isfunction(L, -1)) { lua_pop(L, 1); return 0; }
-    lua_pushstring(L, name);
-    lua_pushstring(L, ip);
-    if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
-        log_msg("[lua] error di onPlayerRequestConnect: %s",
-                lua_tostring(L, -1) ? lua_tostring(L, -1) : "?");
-        lua_pop(L, 1);
+static int player_request_s(Script *s, const char *name, const char *ip,
+                            char *reason_out, size_t reason_sz) {
+    lua_State *Ls = s->L;
+    if (!Ls) return 0;
+    lua_getglobal(Ls, "onPlayerRequestConnect");
+    if (!lua_isfunction(Ls, -1)) { lua_pop(Ls, 1); return 0; }
+    lua_pushstring(Ls, name);
+    lua_pushstring(Ls, ip);
+    if (lua_pcall(Ls, 2, 2, 0) != LUA_OK) {
+        log_msg("[lua] error di onPlayerRequestConnect (%s): %s", s->name,
+                lua_tostring(Ls, -1) ? lua_tostring(Ls, -1) : "?");
+        lua_pop(Ls, 1);
         return 0;
     }
-    int reject = lua_toboolean(L, -2);
-    if (reject && lua_isstring(L, -1) && reason_out && reason_sz > 0) {
-        strncpy(reason_out, lua_tostring(L, -1), reason_sz - 1);
+    int reject = lua_toboolean(Ls, -2);
+    if (reject && lua_isstring(Ls, -1) && reason_out && reason_sz > 0) {
+        strncpy(reason_out, lua_tostring(Ls, -1), reason_sz - 1);
         reason_out[reason_sz - 1] = '\0';
     }
-    lua_pop(L, 2);
+    lua_pop(Ls, 2);
     return reject;
+}
+int lua_on_player_request(const char *name, const char *ip,
+                          char *reason_out, size_t reason_sz) {
+    for (int i = 0; i < MAX_FILTERSCRIPTS; i++)
+        if (g_fs[i].active &&
+            player_request_s(&g_fs[i], name, ip, reason_out, reason_sz))
+            return 1;
+    return player_request_s(&g_gm, name, ip, reason_out, reason_sz);
 }
 
 /* ---------------- Event kendaraan ala SA-MP ---------------- */
@@ -943,25 +1153,30 @@ static int push_veh_vid(lua_State *Ls, void *ud) {
 
 void lua_on_player_enter_vehicle(int pid, int vid, int seat) {
     EvVehSeat e = { pid, vid, seat };
+    fs_event("onPlayerEnterVehicle", push_veh_seat, &e);
     call_event("onPlayerEnterVehicle", push_veh_seat, &e);
 }
 
 void lua_on_player_exit_vehicle(int pid, int vid) {
     EvVehPidVid e = { pid, vid };
+    fs_event("onPlayerExitVehicle", push_veh_pidvid, &e);
     call_event("onPlayerExitVehicle", push_veh_pidvid, &e);
 }
 
 void lua_on_vehicle_damage(int vid, int damagerid, int newhealth) {
     EvVehVAB e = { vid, damagerid, newhealth };
+    fs_event("onVehicleDamage", push_veh_vab, &e);
     call_event("onVehicleDamage", push_veh_vab, &e);
 }
 
 void lua_on_vehicle_death(int vid, int killerid) {
     EvVehDeath e = { vid, killerid };
+    fs_event("onVehicleDeath", push_veh_death, &e);
     call_event("onVehicleDeath", push_veh_death, &e);
 }
 
 void lua_on_vehicle_spawn(int vid) {
+    fs_event("onVehicleSpawn", push_veh_vid, &vid);
     call_event("onVehicleSpawn", push_veh_vid, &vid);
 }
 
@@ -983,6 +1198,7 @@ static int push_shot(lua_State *Ls, void *ud) {
 void lua_on_player_weapon_shot(int pid, int weaponid, int hittype, int hitid,
                                float x, float y, float z) {
     EvShot e = { pid, weaponid, hittype, hitid, x, y, z };
+    fs_event("onPlayerWeaponShot", push_shot, &e);
     call_event("onPlayerWeaponShot", push_shot, &e);
 }
 
@@ -997,6 +1213,7 @@ static int push_int(lua_State *Ls, void *ud) {
 
 void lua_on_player_interior_change(int pid, int old_int, int new_int) {
     EvInt e = { pid, old_int, new_int };
+    fs_event("onPlayerInteriorChange", push_int, &e);
     call_event("onPlayerInteriorChange", push_int, &e);
 }
 
@@ -1011,26 +1228,47 @@ static int push_vw(lua_State *Ls, void *ud) {
 
 void lua_on_player_vw_change(int pid, uint32_t old_vw, uint32_t new_vw) {
     EvVw e = { pid, old_vw, new_vw };
+    fs_event("onPlayerVirtualWorldChange", push_vw, &e);
     call_event("onPlayerVirtualWorldChange", push_vw, &e);
 }
 
-/* Dispatch NUI callback dari client ke handler Lua terdaftar. */int lua_on_nui_callback(int id, const char *name, const char *data) {
-    if (!L) return 0;
-    lua_rawgeti(L, LUA_REGISTRYINDEX, nui_cb_ref);
-    lua_getfield(L, -1, name);
-    lua_remove(L, -2); /* sisakan fn */
-    if (!lua_isfunction(L, -1)) { lua_pop(L, 1); return 0; }
-    lua_pushinteger(L, id);
-    lua_pushstring(L, name);
-    lua_pushstring(L, data);
-    if (lua_pcall(L, 3, 0, 0) != LUA_OK) {
-        log_msg("[lua] error di nui callback '%s': %s", name,
-                lua_tostring(L, -1) ? lua_tostring(L, -1) : "?");
-        lua_pop(L, 1);
+/* Dispatch NUI callback ke handler terdaftar di satu modul script. */
+static int nui_dispatch_s(Script *s, int id, const char *name, const char *data) {
+    lua_State *Ls = s->L;
+    if (!Ls) return 0;
+    lua_getfield(Ls, LUA_REGISTRYINDEX, "romp.nui_cb_ref");
+    int ref = (int)lua_tointeger(Ls, -1);
+    lua_pop(Ls, 1);
+    lua_rawgeti(Ls, LUA_REGISTRYINDEX, ref);
+    lua_getfield(Ls, -1, name);
+    lua_remove(Ls, -2); /* sisakan fn */
+    if (!lua_isfunction(Ls, -1)) { lua_pop(Ls, 1); return 0; }
+    lua_pushinteger(Ls, id);
+    lua_pushstring(Ls, name);
+    lua_pushstring(Ls, data);
+    if (lua_pcall(Ls, 3, 0, 0) != LUA_OK) {
+        log_msg("[lua] error di nui callback '%s' (%s): %s", name, s->name,
+                lua_tostring(Ls, -1) ? lua_tostring(Ls, -1) : "?");
+        lua_pop(Ls, 1);
     }
     return 1;
 }
 
+/* Dispatch NUI callback dari client ke handler Lua terdaftar.
+ * Ala SA-MP: semua modul yang mendaftarkan nama callback itu dipanggil
+ * (filterscript dulu, lalu gamemode) — mirip OnDialogResponse yang
+ * dipanggil di tiap script dan tiap script cek id-nya sendiri. */
+int lua_on_nui_callback(int id, const char *name, const char *data) {
+    int handled = 0;
+    for (int i = 0; i < MAX_FILTERSCRIPTS; i++)
+        if (g_fs[i].active && nui_dispatch_s(&g_fs[i], id, name, data))
+            handled = 1;
+    if (nui_dispatch_s(&g_gm, id, name, data)) handled = 1;
+    return handled;
+}
+
 void lua_on_tick(void) {
+    fs_event_noret("onTick");
     call_event_noret("onTick");
+    script_flush_pending();
 }

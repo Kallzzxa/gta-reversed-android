@@ -28,6 +28,7 @@ Setiap fitur: implementasi → compile/test → commit (English) → push.
 
 ## Client Android
 
+- [x] Download game data in-game (ROMPDataManager) — DONE 2026-10-14 (cek folder anim/audio/data/models/texdb di external files dir sebelum game start; kalau belum ada → baca romp_data.json dari assets/remote GitHub → tawarkan download ZIP (MediaFire/direct) dengan progress bar MB/detik + tahap ekstrak → verifikasi folder + sentinel → version-pinned, cukup sekali; MainActivity panggil checkAndPrepare sebelum launch REGTA; link data_url wajib diisi di android/app/src/main/assets/romp_data.json)
 - [ ] JNI penuh: chat, NUI WebView, browser (saat ini contoh saja)
 - [ ] Render pemain remote (ped) di game
 - [ ] Nametag + chat bubble 3D

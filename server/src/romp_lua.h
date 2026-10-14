@@ -10,10 +10,33 @@
 #include <stddef.h> /* size_t untuk lua_on_player_request */
 #include <stdint.h> /* uint32_t untuk event virtual world */
 
+/* Satu modul script: gamemode atau satu filterscript. Tiap modul punya
+ * lua_State sendiri (scope global terpisah ala SA-MP) tapi API romp.*
+ * yang sama. */
+#define MAX_FILTERSCRIPTS 16
+typedef struct Script {
+    struct lua_State *L;
+    char name[64];
+    int active;
+} Script;
+
 /* Muat & jalankan file gamemode. 0 = sukses, -1 = gagal (server tetap jalan tanpa Lua). */
 int  lua_init(const char *script_path);
 void lua_shutdown(void);
 int  lua_active(void);
+
+/* ---------------- Filterscript ala SA-MP ----------------
+ * Tiap filterscript = modul Lua terpisah di <folder gamemode>/filterscripts/
+ * <nama>.lua, dengan state Lua sendiri. Event dikirim ke filterscript DULU
+ * (urutan load), baru gamemode; kalau ada yang return true (= handled),
+ * gamemode dilewati. Lifecycle per modul: onFilterScriptInit() saat load,
+ * onFilterScriptExit() saat unload. */
+int  fs_load(const char *name);   /* 0 ok, 1 sudah dimuat, -1 slot penuh, -2 file/gagal */
+int  fs_unload(const char *name); /* 0 ok, -1 tidak ditemukan */
+int  fs_reload(const char *name); /* unload (kalau ada) + load */
+void fs_load_configured(const char *list); /* "fs1 fs2" dari server.cfg */
+int  fs_count(void);
+const char *fs_get_name(int idx); /* idx 0..fs_count()-1 */
 
 /* Event gamemode. Kembalikan 1 = handled (lewati default C), 0 = pakai default. */
 int  lua_on_player_join(int id, const char *name);

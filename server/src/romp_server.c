@@ -37,6 +37,7 @@ Config g_cfg = {
     50,
     "",
     "gamemode.lua",
+    "",     /* filterscripts (kosong = tidak ada yang di-load otomatis) */
     1,      /* query */
     0,      /* announce */
     "",     /* master_host */
@@ -70,6 +71,7 @@ static void cfg_load(const char *path) {
         }
         else if (!strcmp(key, "password")) { strncpy(g_cfg.password, val, sizeof(g_cfg.password)-1); }
         else if (!strcmp(key, "gamemode")) { strncpy(g_cfg.gamemode, val, sizeof(g_cfg.gamemode)-1); }
+        else if (!strcmp(key, "filterscripts")) { strncpy(g_cfg.filterscripts, val, sizeof(g_cfg.filterscripts)-1); }
         else if (!strcmp(key, "query")) g_cfg.query = atoi(val) ? 1 : 0;
         else if (!strcmp(key, "announce")) g_cfg.announce = atoi(val) ? 1 : 0;
         else if (!strcmp(key, "master_host")) { strncpy(g_cfg.master_host, val, sizeof(g_cfg.master_host)-1); }
@@ -843,6 +845,10 @@ static void console_run(const char *line, OutBuf *o) {
         emit_line(o, "  ban <ip>          - ban IP (tidak bisa join)");
         emit_line(o, "  unban <ip>        - cabut ban IP");
         emit_line(o, "  bans              - daftar IP yang di-ban");
+        emit_line(o, "  loadfs <nama>     - load filterscript (filterscripts/<nama>.lua)");
+        emit_line(o, "  unloadfs <nama>   - unload filterscript");
+        emit_line(o, "  reloadfs <nama>   - reload filterscript");
+        emit_line(o, "  filterscripts     - daftar filterscript yang aktif");
         emit_line(o, "  stop              - matikan server");
     } else if (!strcmp(cmd, "players")) {
         emit_line(o, "Online (%d/%d):", client_count(), g_cfg.maxplayers);
@@ -894,6 +900,36 @@ static void console_run(const char *line, OutBuf *o) {
             n++;
         }
         if (!n) emit_line(o, "  (kosong)");
+    } else if (!strcmp(cmd, "loadfs")) {
+        char nm[64] = "";
+        if (sscanf(line, "loadfs %63s", nm) != 1) {
+            emit_line(o, "Pakai: loadfs <nama>"); return;
+        }
+        int r = fs_load(nm);
+        if (r == 0) emit_line(o, "*** Filterscript '%s' dimuat.", nm);
+        else if (r == 1) emit_line(o, "Filterscript '%s' sudah dimuat.", nm);
+        else emit_line(o, "Gagal memuat '%s' (cek filterscripts/%s.lua).", nm, nm);
+    } else if (!strcmp(cmd, "unloadfs")) {
+        char nm[64] = "";
+        if (sscanf(line, "unloadfs %63s", nm) != 1) {
+            emit_line(o, "Pakai: unloadfs <nama>"); return;
+        }
+        if (fs_unload(nm) == 0) emit_line(o, "*** Filterscript '%s' di-unload.", nm);
+        else emit_line(o, "Filterscript '%s' tidak sedang dimuat.", nm);
+    } else if (!strcmp(cmd, "reloadfs")) {
+        char nm[64] = "";
+        if (sscanf(line, "reloadfs %63s", nm) != 1) {
+            emit_line(o, "Pakai: reloadfs <nama>"); return;
+        }
+        int r = fs_reload(nm);
+        if (r == 0) emit_line(o, "*** Filterscript '%s' di-reload.", nm);
+        else if (r == 1) emit_line(o, "Filterscript '%s' sudah dimuat.", nm);
+        else emit_line(o, "Gagal me-reload '%s' (cek filterscripts/%s.lua).", nm, nm);
+    } else if (!strcmp(cmd, "filterscripts")) {
+        emit_line(o, "Filterscript aktif (%d/%d):", fs_count(), MAX_FILTERSCRIPTS);
+        for (int i = 0; i < fs_count(); i++)
+            emit_line(o, "  %s", fs_get_name(i));
+        if (!fs_count()) emit_line(o, "  (kosong)");
     } else if (!strcmp(cmd, "stop")) {
         emit_line(o, "*** Server dimatikan...");
         g_running = 0;
@@ -1328,6 +1364,8 @@ int main(int argc, char **argv) {
 
     if (lua_init(g_cfg.gamemode) != 0)
         log_msg("WARNING: jalan tanpa gamemode Lua (pakai default C).");
+    else
+        fs_load_configured(g_cfg.filterscripts); /* ala SA-MP: filterscripts a b c */
 
     pthread_t cthread;
     pthread_create(&cthread, NULL, console_thread, NULL);

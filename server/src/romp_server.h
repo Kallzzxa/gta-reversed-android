@@ -109,6 +109,7 @@ typedef struct {
     int  maxplayers;
     char password[64];
     char gamemode[256];   /* path file gamemode.lua */
+    char filterscripts[512]; /* daftar nama filterscript ala SA-MP, dipisah spasi */
     int  query;           /* 1 = jawab UDP query server browser (default 1) */
     int  announce;        /* 1 = announce periodik ke master server */
     char master_host[128];/* host master server (kosong = tidak announce) */

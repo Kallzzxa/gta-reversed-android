@@ -10,6 +10,7 @@ import androidx.annotation.NonNull;
 
 import com.regta.core.R;
 import com.regta.core.REGTA;
+import com.regta.romp.ROMPDataManager;
 
 import java.util.List;
 
@@ -23,13 +24,20 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
             Manifest.permission.READ_EXTERNAL_STORAGE
     };
 
+    private void launchGame() {
+        // Download game data first if missing, then start the game.
+        ROMPDataManager.checkAndPrepare(this, () -> {
+            startActivity(new Intent(this, REGTA.class));
+            this.finish();
+        });
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.loadingscreen);
         if (EasyPermissions.hasPermissions(this, main_permissions)) {
-            startActivity(new Intent(this, REGTA.class));
-            this.finish();
+            launchGame();
         } else {
             EasyPermissions.requestPermissions(this,
                     "The application needs permission to write to memory",
@@ -45,8 +53,7 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
 
     public void onPermissionsGranted(int requestCode, @NonNull List<String> list) {
         if (requestCode == MAIN_PERMISSIONS_REQUEST_CODE) {
-            startActivity(new Intent(this, REGTA.class));
-            this.finish();
+            launchGame();
         }
     }
 
