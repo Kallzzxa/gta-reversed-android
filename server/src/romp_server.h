@@ -43,6 +43,8 @@ typedef int SOCKET;
 #define P_LEAVE       0x23
 #define P_LIST        0x24
 #define P_INT_VW      0x25  /* server -> client: interior(u8) + vw(u32 LE) pemain */
+#define P_STAT        0x26  /* client -> server: laporan health/armour client
+                             * (u16 health, u16 armour) untuk anti-cheat */
 #define P_PING        0x30
 #define P_PONG        0x31
 #define P_NUI_MSG     0x40
@@ -117,6 +119,8 @@ typedef struct {
     int  lan_discovery;   /* 1 = broadcast beacon LAN tiap 3 dtk (default 1) */
     int  rcon;           /* 1 = RCON via UDP aktif (default 1) */
     char rcon_password[64]; /* password RCON; kosong = RCON mati (ala SA-MP) */
+    int  anticheat;      /* 1 = anti-cheat dasar aktif (default 1) */
+    int  ac_maxwarnings;  /* peringatan sebelum auto-kick, 0 = tidak pernah kick */
 } Config;
 
 extern Config g_cfg;
@@ -157,6 +161,13 @@ typedef struct Client {
     uint16_t wpn_ammo[13]; /* ammo per slot */
     int    wpn_slot;       /* slot senjata aktif terakhir */
     uint64_t last_shot_ms; /* anti-spam tembakan */
+    /* Anti-cheat dasar ala SA-MP (lihat romp_anticheat.h): health/armour
+     * otoritatif server + jumlah peringatan cheat pemain. */
+    float    ac_health;      /* default 100 */
+    float    ac_armour;      /* default 0 */
+    uint64_t ac_set_ms;      /* timestamp terakhir server set health/armour */
+    int      ac_warnings;    /* jumlah peringatan cheat */
+    int      ac_stat_known;  /* 1 = client pernah kirim P_STAT */
     struct Client *next;
 } Client;
 

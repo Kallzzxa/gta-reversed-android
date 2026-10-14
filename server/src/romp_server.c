@@ -13,6 +13,7 @@
 #include "romp_lua.h"
 #include "romp_vehicle.h"
 #include "romp_weapon.h"
+#include "romp_anticheat.h"
 
 #include <time.h>
 #include <pthread.h>
@@ -44,7 +45,9 @@ Config g_cfg = {
     7778,   /* master_port */
     1,      /* lan_discovery */
     1,      /* rcon */
-    ""      /* rcon_password */
+    "",     /* rcon_password */
+    1,      /* anticheat */
+    3       /* ac_maxwarnings (0 = tidak pernah kick otomatis) */
 };
 
 static void cfg_load(const char *path) {
@@ -79,6 +82,11 @@ static void cfg_load(const char *path) {
         else if (!strcmp(key, "lan_discovery")) g_cfg.lan_discovery = atoi(val) ? 1 : 0;
         else if (!strcmp(key, "rcon")) g_cfg.rcon = atoi(val) ? 1 : 0;
         else if (!strcmp(key, "rcon_password")) { strncpy(g_cfg.rcon_password, val, sizeof(g_cfg.rcon_password)-1); }
+        else if (!strcmp(key, "anticheat")) g_cfg.anticheat = atoi(val) ? 1 : 0;
+        else if (!strcmp(key, "ac_maxwarnings")) {
+            g_cfg.ac_maxwarnings = atoi(val);
+            if (g_cfg.ac_maxwarnings < 0) g_cfg.ac_maxwarnings = 0;
+        }
     }
     fclose(f);
 }
@@ -717,6 +725,12 @@ static void handle_hello(Client *c, const uint8_t *p, size_t n) {
     c->handshaked = 1;
     c->interior = 0;
     c->vw = 0;
+    /* Anti-cheat: nilai awal otoritatif server (lihat romp_anticheat.h). */
+    c->ac_health = 100.0f;
+    c->ac_armour = 0.0f;
+    c->ac_set_ms = 0;
+    c->ac_warnings = 0;
+    c->ac_stat_known = 0;
     c->last_activity = now_ms();
     do_join(c);
 }
@@ -725,18 +739,30 @@ static void handle_pos(Client *c, const uint8_t *p, size_t n) {
     if (!c->handshaked || n < 19) return;
     uint64_t t = now_ms();
     if (t - c->last_pos_ms < 30) return; /* rate limit 33 Hz */
-    c->last_pos_ms = t;
     /* Simpan posisi dunia (format paket 0x10: float x,y,z,heading; u8 state;
      * u16 vehicle_model) agar bisa dipakai scripting (checkpoint, dsb). */
-    memcpy(&c->pos_x, p, 4);
-    memcpy(&c->pos_y, p + 4, 4);
-    memcpy(&c->pos_z, p + 8, 4);
+    float nx, ny, nz;
+    memcpy(&nx, p, 4); memcpy(&ny, p + 4, 4); memcpy(&nz, p + 8, 4);
+    /* Anti-cheat: cek teleport/speed sebelum last_pos_ms & posisi diperbarui.
+     * Return 1 = teleport, paket dibuang (posisi curang tak disimpan). */
+    if (ac_check_movement(c, nx, ny, nz, t)) return;
+    c->last_pos_ms = t;
+    c->pos_x = nx; c->pos_y = ny; c->pos_z = nz;
     c->pos_known = 1;
     uint8_t b[24];
     b[0] = P_PPOS;
     put_u16(b + 1, (uint16_t)c->id);
     memcpy(b + 3, p, 19);
     broadcast_scoped(b, 22, c, c); /* hanya ke yang se-vw & se-interior */
+}
+
+/* Laporan health/armour dari client (paket 0x26): dipakai anti-cheat.
+ * Client yang belum mengimplementasikan 0x26 cukup tidak mengirimnya. */
+static void handle_stat(Client *c, const uint8_t *p, size_t n) {
+    if (!c->handshaked || n < 4) return;
+    uint64_t t = now_ms();
+    uint16_t hp = get_u16(p), ap = get_u16(p + 2);
+    ac_check_stat(c, hp, ap, t);
 }
 
 static void handle_chat_cmd(Client *c, const char *msg);
@@ -854,6 +880,7 @@ static void dispatch(Client *c, uint8_t type, const uint8_t *p, size_t n) {
     switch (type) {
         case P_HELLO: handle_hello(c, p, n); break;
         case P_POS:   handle_pos(c, p, n); break;
+        case P_STAT:  handle_stat(c, p, n); break;
         case P_CHAT:  handle_chat(c, p, n); break;
         case P_PING:  handle_ping(c, p, n); break;
         case P_NUI_CB: handle_nui_callback(c, p, n); break;

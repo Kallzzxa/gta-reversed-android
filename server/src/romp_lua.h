@@ -66,5 +66,8 @@ void lua_on_player_weapon_shot(int pid, int weaponid, int hittype, int hitid,
  * onPlayerVirtualWorldChange(pid, old, new). */
 void lua_on_player_interior_change(int pid, int old_int, int new_int);
 void lua_on_player_vw_change(int pid, uint32_t old_vw, uint32_t new_vw);
+/* Event anti-cheat dasar ala SA-MP (tidak ada default C):
+ * onPlayerCheat(pid, type, value) — type: "teleport"|"speed"|"health"|"armour". */
+void lua_on_player_cheat(int pid, const char *type, double value);
 /* Dipanggil tiap 1 detik. */
 void lua_on_tick(void);

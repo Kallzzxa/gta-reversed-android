@@ -6,6 +6,7 @@
 #include "romp_server.h"
 #include "romp_vehicle.h"
 #include "romp_weapon.h"
+#include "romp_anticheat.h"
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -127,7 +128,63 @@ static int l_romp_get_config(lua_State *Ls) {
     else if (!strcmp(key, "motd")) lua_pushstring(Ls, g_cfg.motd);
     else if (!strcmp(key, "port")) lua_pushinteger(Ls, g_cfg.port);
     else if (!strcmp(key, "maxplayers")) lua_pushinteger(Ls, g_cfg.maxplayers);
+    else if (!strcmp(key, "anticheat")) lua_pushboolean(Ls, g_cfg.anticheat);
+    else if (!strcmp(key, "ac_maxwarnings")) lua_pushinteger(Ls, g_cfg.ac_maxwarnings);
     else lua_pushnil(Ls);
+    return 1;
+}
+
+/* ---------------- API anti-cheat dasar ala SA-MP ----------------
+ * Health/armour otoritatif server: gamemode WAJIB mengubahnya lewat
+ * setPlayerHealth/setPlayerArmour (client hanya melapor via paket 0x26;
+ * laporan yang melebihi nilai server = health/armour hack). */
+
+/* romp.getPlayerHealth(id) -> number | nil */
+static int l_romp_get_player_health(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(id);
+    if (!c) { lua_pushnil(Ls); return 1; }
+    lua_pushnumber(Ls, (lua_Number)c->ac_health);
+    return 1;
+}
+
+/* romp.setPlayerHealth(id, hp) -> true/false (clamp 0..100) */
+static int l_romp_set_player_health(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    float hp = (float)luaL_checknumber(Ls, 2);
+    Client *c = client_by_id(id);
+    if (!c) { lua_pushboolean(Ls, 0); return 1; }
+    ac_set_health(c, hp, now_ms());
+    lua_pushboolean(Ls, 1);
+    return 1;
+}
+
+/* romp.getPlayerArmour(id) -> number | nil */
+static int l_romp_get_player_armour(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(id);
+    if (!c) { lua_pushnil(Ls); return 1; }
+    lua_pushnumber(Ls, (lua_Number)c->ac_armour);
+    return 1;
+}
+
+/* romp.setPlayerArmour(id, ap) -> true/false (clamp 0..100) */
+static int l_romp_set_player_armour(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    float ap = (float)luaL_checknumber(Ls, 2);
+    Client *c = client_by_id(id);
+    if (!c) { lua_pushboolean(Ls, 0); return 1; }
+    ac_set_armour(c, ap, now_ms());
+    lua_pushboolean(Ls, 1);
+    return 1;
+}
+
+/* romp.getPlayerWarnings(id) -> integer | nil (jumlah peringatan cheat) */
+static int l_romp_get_player_warnings(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(id);
+    if (!c) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, (lua_Integer)c->ac_warnings);
     return 1;
 }
 
@@ -821,6 +878,12 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_set_npc_pos);    lua_setfield(Ls, -2, "setNPCPos");
     lua_pushcfunction(Ls, l_romp_npc_send_chat);  lua_setfield(Ls, -2, "npcSendChat");
     lua_pushcfunction(Ls, l_romp_get_npcs);       lua_setfield(Ls, -2, "getNPCs");
+    /* anti-cheat dasar ala SA-MP */
+    lua_pushcfunction(Ls, l_romp_get_player_health);  lua_setfield(Ls, -2, "getPlayerHealth");
+    lua_pushcfunction(Ls, l_romp_set_player_health);  lua_setfield(Ls, -2, "setPlayerHealth");
+    lua_pushcfunction(Ls, l_romp_get_player_armour);  lua_setfield(Ls, -2, "getPlayerArmour");
+    lua_pushcfunction(Ls, l_romp_set_player_armour);  lua_setfield(Ls, -2, "setPlayerArmour");
+    lua_pushcfunction(Ls, l_romp_get_player_warnings); lua_setfield(Ls, -2, "getPlayerWarnings");
     /* konstanta hittype tembakan ala SA-MP */
     lua_pushinteger(Ls, 0); lua_setfield(Ls, -2, "WPN_HIT_NONE");
     lua_pushinteger(Ls, 1); lua_setfield(Ls, -2, "WPN_HIT_PLAYER");
@@ -1301,6 +1364,27 @@ void lua_on_player_vw_change(int pid, uint32_t old_vw, uint32_t new_vw) {
     EvVw e = { pid, old_vw, new_vw };
     fs_event("onPlayerVirtualWorldChange", push_vw, &e);
     call_event("onPlayerVirtualWorldChange", push_vw, &e);
+}
+
+/* ---------------- Event anti-cheat dasar ala SA-MP ----------------
+ * Dipicu server C saat deteksi cheat; gamemode opsional menanganinya.
+ * onPlayerCheat(playerid, type, value) dengan type = "teleport" | "speed" |
+ * "health" | "armour", value = jarak (unit) / kecepatan (unit/dtk) /
+ * health / armour yang dilaporkan client. */
+
+typedef struct { int pid; const char *type; double value; } EvCheat;
+static int push_cheat(lua_State *Ls, void *ud) {
+    EvCheat *e = (EvCheat*)ud;
+    lua_pushinteger(Ls, e->pid);
+    lua_pushstring(Ls, e->type);
+    lua_pushnumber(Ls, (lua_Number)e->value);
+    return 3;
+}
+
+void lua_on_player_cheat(int pid, const char *type, double value) {
+    EvCheat e = { pid, type, value };
+    fs_event("onPlayerCheat", push_cheat, &e);
+    call_event("onPlayerCheat", push_cheat, &e);
 }
 
 /* Dispatch NUI callback ke handler terdaftar di satu modul script. */
