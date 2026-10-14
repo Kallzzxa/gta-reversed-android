@@ -7,6 +7,9 @@
 #include "romp_vehicle.h"
 #include "romp_weapon.h"
 #include "romp_anticheat.h"
+#include "romp_sqlite.h"
+
+#include "../vendor/sqlite/sqlite3.h"
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -130,6 +133,7 @@ static int l_romp_get_config(lua_State *Ls) {
     else if (!strcmp(key, "maxplayers")) lua_pushinteger(Ls, g_cfg.maxplayers);
     else if (!strcmp(key, "anticheat")) lua_pushboolean(Ls, g_cfg.anticheat);
     else if (!strcmp(key, "ac_maxwarnings")) lua_pushinteger(Ls, g_cfg.ac_maxwarnings);
+    else if (!strcmp(key, "database")) lua_pushstring(Ls, g_cfg.database);
     else lua_pushnil(Ls);
     return 1;
 }
@@ -186,6 +190,169 @@ static int l_romp_get_player_warnings(lua_State *Ls) {
     if (!c) { lua_pushnil(Ls); return 1; }
     lua_pushinteger(Ls, (lua_Integer)c->ac_warnings);
     return 1;
+}
+
+/* ---------------- API database SQLite ala SA-MP ----------------
+ * Database file lokal untuk gamemode (skor, akun, dsb) — tanpa server
+ * eksternal. Handle = integer; romp.db = handle default dari server.cfg
+ * ("database <path>"). Query pakai placeholder "?" + parameter binding
+ * (aman dari SQL injection), BUKAN string.format.
+ *
+ *   romp.dbOpen(path)            -> dbid | nil, errmsg
+ *   romp.dbClose(db)             -> true
+ *   romp.dbExec(db, sql, ...)    -> jumlah baris berubah | nil, errmsg
+ *   romp.dbQuery(db, sql, ...)  -> { {kolom=nilai, ...}, ... } | nil, errmsg
+ *   romp.dbError(db)             -> string error terakhir
+ * Nilai kolom: INTEGER->integer, REAL->number, TEXT/BLOB->string,
+ * NULL->nil (key hilang dari tabel baris). */
+
+/* Bind argumen Lua (stack `first`..top) ke parameter "?" statement. */
+static void db_bind_lua_args(sqlite3 *db, sqlite3_stmt *st,
+                             lua_State *Ls, int first) {
+    (void)db;
+    int n = lua_gettop(Ls) - first + 1;
+    if (n > sqlite3_bind_parameter_count(st))
+        n = sqlite3_bind_parameter_count(st);
+    for (int i = 0; i < n; i++) {
+        int idx = first + i;
+        switch (lua_type(Ls, idx)) {
+        case LUA_TNUMBER:
+            if (lua_isinteger(Ls, idx))
+                sqlite3_bind_int64(st, i + 1, (sqlite3_int64)lua_tointeger(Ls, idx));
+            else
+                sqlite3_bind_double(st, i + 1, lua_tonumber(Ls, idx));
+            break;
+        case LUA_TSTRING: {
+            size_t len;
+            const char *s = lua_tolstring(Ls, idx, &len);
+            sqlite3_bind_text(st, i + 1, s, (int)len, SQLITE_TRANSIENT);
+            break;
+        }
+        case LUA_TBOOLEAN:
+            sqlite3_bind_int(st, i + 1, lua_toboolean(Ls, idx) ? 1 : 0);
+            break;
+        default:
+            sqlite3_bind_null(st, i + 1);
+            break;
+        }
+    }
+}
+
+static int l_romp_db_open(lua_State *Ls) {
+    const char *path = luaL_checkstring(Ls, 1);
+    int h = db_open(path);
+    if (h < 0) {
+        lua_pushnil(Ls);
+        lua_pushstring(Ls, db_last_error(-1));
+        return 2;
+    }
+    lua_pushinteger(Ls, (lua_Integer)h);
+    return 1;
+}
+
+static int l_romp_db_close(lua_State *Ls) {
+    int h = (int)luaL_checkinteger(Ls, 1);
+    if (!db_raw(h)) {
+        lua_pushnil(Ls);
+        lua_pushstring(Ls, "invalid db handle");
+        return 2;
+    }
+    db_close(h);
+    lua_pushboolean(Ls, 1);
+    return 1;
+}
+
+static int l_romp_db_error(lua_State *Ls) {
+    int h = (int)luaL_checkinteger(Ls, 1);
+    lua_pushstring(Ls, db_last_error(h));
+    return 1;
+}
+
+/* Siapkan statement + binding; return statement atau NULL (error di stack). */
+static sqlite3_stmt *db_prepare_bound(lua_State *Ls, int h, int sqlidx,
+                                      int firstarg) {
+    sqlite3 *db = db_raw(h);
+    if (!db) {
+        lua_pushnil(Ls);
+        lua_pushstring(Ls, "invalid db handle");
+        return NULL;
+    }
+    const char *sql = luaL_checkstring(Ls, sqlidx);
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) {
+        lua_pushnil(Ls);
+        lua_pushstring(Ls, sqlite3_errmsg(db));
+        return NULL;
+    }
+    db_bind_lua_args(db, st, Ls, firstarg);
+    return st;
+}
+
+static int l_romp_db_exec(lua_State *Ls) {
+    int h = (int)luaL_checkinteger(Ls, 1);
+    sqlite3_stmt *st = db_prepare_bound(Ls, h, 2, 3);
+    if (!st) return 2; /* nil, errmsg sudah di-push */
+    sqlite3 *db = db_raw(h);
+    int rc = sqlite3_step(st);
+    int changes = sqlite3_changes(db);
+    const char *emsg = (rc != SQLITE_DONE) ? sqlite3_errmsg(db) : NULL;
+    sqlite3_finalize(st);
+    if (emsg) {
+        lua_pushnil(Ls);
+        lua_pushstring(Ls, emsg);
+        return 2;
+    }
+    lua_pushinteger(Ls, (lua_Integer)changes);
+    return 1;
+}
+
+static int l_romp_db_query(lua_State *Ls) {
+    int h = (int)luaL_checkinteger(Ls, 1);
+    sqlite3_stmt *st = db_prepare_bound(Ls, h, 2, 3);
+    if (!st) return 2; /* nil, errmsg sudah di-push */
+    sqlite3 *db = db_raw(h);
+    int ncols = sqlite3_column_count(st);
+    lua_newtable(Ls); /* rows */
+    int row = 0, rc = SQLITE_ROW;
+    while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+        lua_newtable(Ls);
+        for (int c = 0; c < ncols; c++) {
+            const char *name = sqlite3_column_name(st, c);
+            if (!name) name = "?";
+            switch (sqlite3_column_type(st, c)) {
+            case SQLITE_INTEGER:
+                lua_pushinteger(Ls, (lua_Integer)sqlite3_column_int64(st, c));
+                break;
+            case SQLITE_FLOAT:
+                lua_pushnumber(Ls, (lua_Number)sqlite3_column_double(st, c));
+                break;
+            case SQLITE_TEXT:
+                lua_pushlstring(Ls, (const char *)sqlite3_column_text(st, c),
+                                (size_t)sqlite3_column_bytes(st, c));
+                break;
+            case SQLITE_BLOB: {
+                const void *b = sqlite3_column_blob(st, c);
+                lua_pushlstring(Ls, b ? (const char *)b : "",
+                                (size_t)sqlite3_column_bytes(st, c));
+                break;
+            }
+            default: /* SQLITE_NULL */
+                lua_pushnil(Ls);
+                break;
+            }
+            lua_setfield(Ls, -2, name);
+        }
+        lua_rawseti(Ls, -2, ++row);
+    }
+    const char *emsg = (rc != SQLITE_DONE) ? sqlite3_errmsg(db) : NULL;
+    sqlite3_finalize(st);
+    if (emsg) {
+        lua_pop(Ls, 1); /* buang tabel rows setengah jadi */
+        lua_pushnil(Ls);
+        lua_pushstring(Ls, emsg);
+        return 2;
+    }
+    return 1; /* rows */
 }
 
 /* ---------------- API info & admin runtime ---------------- */
@@ -884,6 +1051,16 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_get_player_armour);  lua_setfield(Ls, -2, "getPlayerArmour");
     lua_pushcfunction(Ls, l_romp_set_player_armour);  lua_setfield(Ls, -2, "setPlayerArmour");
     lua_pushcfunction(Ls, l_romp_get_player_warnings); lua_setfield(Ls, -2, "getPlayerWarnings");
+    /* database SQLite ala SA-MP */
+    lua_pushcfunction(Ls, l_romp_db_open);   lua_setfield(Ls, -2, "dbOpen");
+    lua_pushcfunction(Ls, l_romp_db_close);  lua_setfield(Ls, -2, "dbClose");
+    lua_pushcfunction(Ls, l_romp_db_exec);   lua_setfield(Ls, -2, "dbExec");
+    lua_pushcfunction(Ls, l_romp_db_query);  lua_setfield(Ls, -2, "dbQuery");
+    lua_pushcfunction(Ls, l_romp_db_error);  lua_setfield(Ls, -2, "dbError");
+    /* handle default dari server.cfg ("database <path>"), nil bila tak diset */
+    if (db_get_default() >= 0) lua_pushinteger(Ls, (lua_Integer)db_get_default());
+    else lua_pushnil(Ls);
+    lua_setfield(Ls, -2, "db");
     /* konstanta hittype tembakan ala SA-MP */
     lua_pushinteger(Ls, 0); lua_setfield(Ls, -2, "WPN_HIT_NONE");
     lua_pushinteger(Ls, 1); lua_setfield(Ls, -2, "WPN_HIT_PLAYER");

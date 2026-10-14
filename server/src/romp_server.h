@@ -121,6 +121,7 @@ typedef struct {
     char rcon_password[64]; /* password RCON; kosong = RCON mati (ala SA-MP) */
     int  anticheat;      /* 1 = anti-cheat dasar aktif (default 1) */
     int  ac_maxwarnings;  /* peringatan sebelum auto-kick, 0 = tidak pernah kick */
+    char database[256];   /* path file SQLite gamemode; kosong = fitur DB mati */
 } Config;
 
 extern Config g_cfg;

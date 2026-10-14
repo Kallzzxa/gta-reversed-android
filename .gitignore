@@ -40,3 +40,6 @@ ReversibleHooks.h
 
 # Build artifacts (MSVC/Zig debug info)
 *.pdb
+
+# SQLite intermediate object (rebuilt by make)
+obj_sqlite3.o

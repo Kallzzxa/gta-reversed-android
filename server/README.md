@@ -27,6 +27,7 @@ Server membaca `server.cfg` di folder yang sama. Default port **7777**.
 | `maxplayers` | 50 | Maksimal pemain (1–120) |
 | `password` | *(kosong)* | Password server, kosongkan = bebas |
 | `gamemode` | gamemode.lua | File gamemode Lua (relatif ke folder server) |
+| `database` | *(kosong)* | Path file SQLite gamemode; kosong = fitur DB mati |
 
 ## Scripting Gamemode (Lua, ala FiveM)
 
@@ -101,6 +102,46 @@ bridge `window.romp.postMessage`, fokus sentuhan; JNI TODO seperti chat).
 | `romp.getServerInfo()` | Table `{hostname, motd, port, maxplayers, players, hasPassword, query, announce}` |
 | `romp.banIP(ip)` / `romp.unbanIP(ip)` / `romp.isIPBanned(ip)` | Ban IP (in-memory, dicek saat handshake) |
 | `romp.announceNow()` | Paksa announce ke master sekarang |
+
+### Database SQLite untuk gamemode (skor, akun)
+
+Tanpa server eksternal: cukup set `database <path>` di `server.cfg`
+(mis. `database romp.db`), file dibuat otomatis. Database dibuka sebelum
+`onGamemodeInit` dan tersedia sebagai **`romp.db`** di semua script
+(gamemode + filterscript). SQLite 3.54 ikut di-bundle di dalam binari.
+
+```lua
+function onGamemodeInit()
+    romp.dbExec(romp.db, [[CREATE TABLE IF NOT EXISTS akun (
+        nama TEXT PRIMARY KEY, skor INTEGER, uang REAL)]])
+end
+
+function onPlayerJoin(id, name)
+    -- INSERT aman: pakai "?" + parameter, BUKAN string.format (anti SQL injection)
+    romp.dbExec(romp.db,
+        "INSERT OR IGNORE INTO akun (nama, skor, uang) VALUES (?, 0, 0)", name)
+    local rows = romp.dbQuery(romp.db,
+        "SELECT skor, uang FROM akun WHERE nama = ?", name)
+    if rows and rows[1] then
+        romp.sendChatToPlayer(id, romp.KIND_INFO,
+            string.format("Selamat datang kembali! Skor: %d", rows[1].skor))
+    end
+end
+```
+
+| Fungsi | Keterangan |
+|---|---|
+| `romp.dbOpen(path)` | Buka DB tambahan → `dbid` / `nil, errmsg` |
+| `romp.dbClose(db)` | Tutup DB (jangan tutup `romp.db`) → `true` |
+| `romp.dbExec(db, sql, ...)` | INSERT/UPDATE/DELETE/CREATE → jumlah baris berubah / `nil, errmsg` |
+| `romp.dbQuery(db, sql, ...)` | SELECT → `{ {kolom=nilai, ...}, ... }` / `nil, errmsg` |
+| `romp.dbError(db)` | Pesan error terakhir (string) |
+| `romp.db` | Handle default dari `server.cfg`, `nil` bila `database` kosong |
+| `romp.getConfig("database")` | Path database dari config |
+
+Tipe kolom: INTEGER→integer, REAL→number, TEXT/BLOB→string, NULL→`nil`
+(key hilang dari tabel baris). Boolean Lua → 0/1. `dbQuery` hanya menyiapkan
+satu statement per panggilan.
 
 ## Server Browser & Master Server
 

@@ -14,6 +14,7 @@
 #include "romp_vehicle.h"
 #include "romp_weapon.h"
 #include "romp_anticheat.h"
+#include "romp_sqlite.h"
 
 #include <time.h>
 #include <pthread.h>
@@ -47,7 +48,8 @@ Config g_cfg = {
     1,      /* rcon */
     "",     /* rcon_password */
     1,      /* anticheat */
-    3       /* ac_maxwarnings (0 = tidak pernah kick otomatis) */
+    3,      /* ac_maxwarnings (0 = tidak pernah kick otomatis) */
+    ""      /* database (kosong = fitur SQLite mati) */
 };
 
 static void cfg_load(const char *path) {
@@ -87,6 +89,7 @@ static void cfg_load(const char *path) {
             g_cfg.ac_maxwarnings = atoi(val);
             if (g_cfg.ac_maxwarnings < 0) g_cfg.ac_maxwarnings = 0;
         }
+        else if (!strcmp(key, "database")) { strncpy(g_cfg.database, val, sizeof(g_cfg.database)-1); }
     }
     fclose(f);
 }
@@ -1552,6 +1555,19 @@ int main(int argc, char **argv) {
     log_msg(" Ketik 'help' untuk command console.");
     log_msg("===========================================");
 
+    /* Database SQLite opsional untuk gamemode (skor, akun).
+     * Dibuka SEBELUM lua_init agar romp.db sudah tersedia di onGamemodeInit. */
+    if (g_cfg.database[0]) {
+        int dbh = db_open(g_cfg.database);
+        if (dbh >= 0) {
+            db_set_default(dbh);
+            log_msg(" Database : %s (akses Lua via romp.db)", g_cfg.database);
+        } else {
+            log_msg(" WARNING: database '%s' gagal dibuka: %s",
+                    g_cfg.database, db_last_error(-1));
+        }
+    }
+
     if (lua_init(g_cfg.gamemode) != 0)
         log_msg("WARNING: jalan tanpa gamemode Lua (pakai default C).");
     else
@@ -1631,6 +1647,7 @@ int main(int argc, char **argv) {
     pthread_join(cthread, NULL);
     if (athr) pthread_join(athr, NULL);
     lua_shutdown();
+    db_close_all(); /* tutup database SQLite gamemode */
     ban_clear();
     beacon_close();
     for (Client *c = g_clients; c; c = c->next) CLOSESOCK(c->sock);
