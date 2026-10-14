@@ -278,6 +278,31 @@ radius 1.5). State pickup bersifat per-pemain (show/hide/respawn
 untuk tiap pemain), dibersihkan saat pemain leave.
 Halaman UI referensi: `android/app/src/main/assets/romp/nui/pickup.html`.
 
+### Map icon / radar blip (NUI_MESSAGE `0x40`)
+
+```json
+{"action":"setMapIcon","id":"mi5","iconid":5,
+ "x":100.0,"y":200.0,"z":3.0,"markertype":2,
+ "color":4278190335,"style":1}
+{"action":"removeMapIcon","id":"mi5"}
+{"action":"playerPos","x":98.0,"y":199.0,"z":3.0}
+```
+
+API Lua di `server/mapicon.lua` (dimuat otomatis seperti `dialog.lua`),
+mirip SA-MP `SetPlayerMapIcon`/`RemovePlayerMapIcon`:
+`romp.setPlayerMapIcon(pid, iconid, x, y, z, markertype, color, style)` /
+`romp.removePlayerMapIcon(pid, iconid)` / `romp.removeAllPlayerMapIcons(pid)`
+/ `romp.getPlayerMapIcon(pid, iconid)`.
+
+`iconid`: 0-99 per pemain. `markertype`: 1=local, 2=global, 3=local
+checkpoint, 4=global checkpoint. `color`: 0xRRGGBBAA. `style`: 1=permanen,
+2=berkedip. Konstanta: `romp.MAPICON_LOCAL/GLOBAL/LOCAL_CHECKPOINT/`
+`GLOBAL_CHECKPOINT` dan `romp.MAPICON_STYLE_PERMANENT/FLASHING`.
+Server mengirim `playerPos` tiap detik (via `onTick`) ke pemain yang punya
+icon agar radar UI bisa menggambar blip relatif terhadap pemain; state
+dibersihkan saat pemain leave.
+Halaman UI referensi: `android/app/src/main/assets/romp/nui/mapicon.html`.
+
 ## Server Browser — UDP Query
 
 Server menjawab query UDP di **port yang sama** dengan TCP (bisa dimatikan

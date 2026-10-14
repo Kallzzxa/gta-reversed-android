@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>RO-MP Map Icon Radar</title>
+<style>
+  /* Radar blip ala SA-MP versi UI.
+     Ini jembatan NUI: client game sesungguhnya merender map icon di
+     radar/minimap dari pesan yang sama, halaman ini hanya fallback 2D.
+     Blip digambar relatif terhadap posisi pemain (pusat radar). */
+  * { box-sizing: border-box; margin: 0; padding: 0;
+      -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden;
+      background: transparent; }
+  #mi-radar {
+      position: absolute; top: 12px; right: 12px;
+      width: 150px; height: 150px; border-radius: 50%;
+      background: rgba(5, 8, 12, .55);
+      border: 2px solid rgba(240, 180, 41, .85);
+      box-shadow: 0 0 10px rgba(0, 0, 0, .6);
+      pointer-events: none; overflow: hidden;
+      font-family: Arial, sans-serif; }
+  #mi-radar .lbl {
+      position: absolute; top: 4px; left: 0; right: 0;
+      text-align: center; font-size: 9px; font-weight: bold;
+      letter-spacing: 2px; color: rgba(240, 180, 41, .9);
+      text-shadow: 1px 1px 0 #000; }
+  .blip {
+      position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px;
+      border-radius: 50%; border: 2px solid rgba(0, 0, 0, .75);
+      box-shadow: 0 0 6px rgba(255, 255, 255, .35); }
+  .blip.cp { border-radius: 2px; transform: rotate(45deg); }
+  .blip.flash { animation: blink 1s steps(2, start) infinite; }
+  @keyframes blink { 50% { opacity: .15; } }
+  .me {
+      position: absolute; left: 50%; top: 50%;
+      width: 0; height: 0; margin: -7px 0 0 -6px;
+      border-left: 6px solid transparent; border-right: 6px solid transparent;
+      border-bottom: 12px solid #fff;
+      filter: drop-shadow(0 0 2px #000); }
+</style>
+</head>
+<body>
+<div id="mi-radar">
+  <div class="lbl">RADAR</div>
+  <div class="me"></div>
+</div>
+<script>
+// Server -> UI: romp.setPlayerMapIcon / removePlayerMapIcon (via 0x40).
+window.onRomMessage = function (json) {
+  var msg;
+  try { msg = JSON.parse(json); } catch (e) { return; }
+  if (msg.action === "setMapIcon") render(msg);
+  else if (msg.action === "removeMapIcon") remove(msg.id);
+  else if (msg.action === "playerPos") { setPos(msg); }
+};
+
+var radar = document.getElementById("mi-radar");
+var R = 69;            // radius dalam px
+var SCALE = 0.28;      // 1 satuan dunia = 0.28px (250 satuan ~ tepi radar)
+var LOCAL_RANGE = 250; // jangkauan icon "local" ala SA-MP
+var blips = {};        // id -> {m: pesan terakhir}
+var px = 0, py = 0, havePos = false;
+
+function el(id) { return document.getElementById("mi-" + id); }
+
+function remove(id) {
+  var d = el(id);
+  if (d) d.parentNode.removeChild(d);
+  delete blips[id];
+}
+
+// 0xRRGGBBAA -> css rgba()
+function cssColor(c) {
+  c = Number(c) >>> 0;
+  var r = (c >>> 24) & 255, g = (c >>> 16) & 255,
+      b = (c >>> 8) & 255, a = (c & 255) / 255;
+  return "rgba(" + r + "," + g + "," + b + "," + a.toFixed(2) + ")";
+}
+
+function visible(m) {
+  if (!havePos) return true;
+  if (m.markertype === 2 || m.markertype === 4) return true; // global
+  var dx = m.x - px, dy = m.y - py;
+  return (dx * dx + dy * dy) <= LOCAL_RANGE * LOCAL_RANGE;
+}
+
+function render(m) {
+  blips[m.id] = { m: m };
+  var d = el(m.id);
+  if (!d) {
+    d = document.createElement("div");
+    d.id = "mi-" + m.id;
+    radar.appendChild(d);
+  }
+  var isCp = (m.markertype === 3 || m.markertype === 4);
+  d.className = "blip" + (isCp ? " cp" : "") +
+                (m.style === 2 ? " flash" : "");
+  d.style.background = cssColor(m.color);
+  d.title = "Icon " + m.iconid + " (" + Math.round(m.x) + ", " +
+            Math.round(m.y) + ")";
+  place(d, m);
+}
+
+function place(d, m) {
+  if (!havePos) { d.style.display = "none"; return; }
+  if (!visible(m)) { d.style.display = "none"; return; }
+  d.style.display = "";
+  var dx = (m.x - px) * SCALE, dy = (m.y - py) * SCALE;
+  var dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist > R) { // tempel di tepi radar ala panah offscreen SA-MP
+    dx = dx / dist * R; dy = dy / dist * R;
+  }
+  d.style.left = (75 + dx) + "px";
+  d.style.top = (75 - dy) + "px"; // +y dunia = utara = atas
+}
+
+function setPos(m) {
+  px = Number(m.x); py = Number(m.y); havePos = true;
+  for (var id in blips) {
+    var d = el(id);
+    if (d) place(d, blips[id].m);
+  }
+}
+</script>
+</body>
+</html>
