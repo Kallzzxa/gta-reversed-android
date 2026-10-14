@@ -481,6 +481,62 @@ Dikirim oleh `server/vehicle.lua` (dimuat otomatis), di-diff tiap detik dari
 `0x13`/`0x14`/`0x15`/`0x16`, halaman ini hanya indikator 2D fallback.
 Halaman UI referensi: `android/app/src/main/assets/romp/nui/vehicle.html`.
 
+## Filterscript ala SA-MP (modul Lua terpisah)
+
+Mirip SA-MP: selain gamemode utama, server bisa me-load **filterscript** —
+modul Lua terpisah yang bisa di-load/unload **tanpa restart server**.
+Tiap filterscript punya **state Lua sendiri** (variabel global terpisah dari
+gamemode & filterscript lain) tapi API `romp.*` yang sama, termasuk helper
+yang dimuat otomatis (`dialog.lua`, `textdraw.lua`, `checkpoint.lua`,
+`pickup.lua`, `mapicon.lua` — dicari di folder filterscript dulu, lalu
+fallback ke folder gamemode).
+
+**Lokasi file:** `<folder gamemode>/filterscripts/<nama>.lua`
+(nama polos, tanpa `/`, `\`, atau `..` — anti path traversal).
+
+**Konfigurasi** (`server.cfg`): `filterscripts contoh` — daftar nama dipisah
+spasi, di-load otomatis saat server start (setelah gamemode).
+
+**Console & RCON** (command sama, RCON otomatis ikut karena satu `console_run`):
+
+```
+loadfs <nama>     - load filterscripts/<nama>.lua
+unloadfs <nama>   - unload (panggil onFilterScriptExit dulu)
+reloadfs <nama>   - unload + load ulang
+filterscripts     - daftar filterscript yang sedang aktif
+```
+
+**Urutan event** (ala SA-MP): filterscript dipanggil **DULU** (urutan load),
+baru gamemode. Kalau ada yang `return true` (= handled), sisanya dilewati —
+contoh: filterscript bisa "mencuri" command sebelum gamemode melihatnya.
+Callback NUI (`romp.onNUICallback`) dikirim ke **semua** modul yang
+mendaftarkan nama itu (mirip `OnDialogResponse` SA-MP yang dipanggil di tiap
+script; tiap script cek id-nya sendiri).
+
+**Lifecycle per modul:**
+
+```lua
+function onFilterScriptInit()  -- dipanggil sekali saat load
+    romp.log("halo dari filterscript!")
+end
+
+function onFilterScriptExit()  -- dipanggil sekali saat unload
+    romp.log("dadah!")
+end
+```
+
+**API Lua:**
+
+```lua
+romp.loadFilterScript("nama")    -- true = dimuat / sudah dimuat
+romp.unloadFilterScript("nama")  -- true = berhasil di-unload
+romp.getFilterScripts()          -- {"contoh", "anticheat", ...}
+```
+
+Catatan: pemain yang sudah online **tidak** menerima `onPlayerJoin` ulang
+saat filterscript di-load belakangan (sama seperti SA-MP). Maksimal 16
+filterscript aktif bersamaan. Contoh: `server/filterscripts/contoh.lua`.
+
 ## Server Browser — UDP Query
 
 Server menjawab query UDP di **port yang sama** dengan TCP (bisa dimatikan

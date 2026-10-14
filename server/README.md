@@ -132,8 +132,18 @@ dicatat di log — server tidak crash.
 | `help` | Daftar command |
 | `say <pesan>` | Pengumuman ke semua pemain |
 | `players` | Lihat pemain online |
+| `vehicles` | Lihat kendaraan aktif |
 | `kick <id> [alasan]` | Kick pemain |
+| `ban <ip>` / `unban <ip>` / `bans` | Kelola ban IP |
+| `loadfs <nama>` | Load filterscript (`filterscripts/<nama>.lua`) |
+| `unloadfs <nama>` | Unload filterscript |
+| `reloadfs <nama>` | Reload filterscript |
+| `filterscripts` | Daftar filterscript yang aktif |
 | `stop` | Matikan server |
+
+Command console juga tersedia lewat RCON (UDP, butuh `rcon_password`).
+Lihat `PROTOCOL.md` bagian "Filterscript ala SA-MP" untuk detail modul Lua
+terpisah yang bisa di-load/unload tanpa restart server.
 
 ## Command chat (di dalam game)
 
