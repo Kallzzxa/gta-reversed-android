@@ -60,6 +60,21 @@ function onTick() ... end                         -- tiap 1 detik
 | `romp.getConfig(key)` | `hostname`/`motd`/`port`/`maxplayers` |
 | `romp.KIND_CHAT/INFO/ME/PM/SYS` | Konstanta jenis chat |
 
+**Timer ala SA-MP (`SetTimer`/`SetTimerEx`/`KillTimer`):**
+
+| Fungsi | Keterangan |
+|---|---|
+| `romp.setTimer(cb, ms, repeating, ...)` | `cb` = fungsi Lua atau nama fungsi global; dipanggil tiap `ms` (min 50). Argumen tambahan diteruskan ke callback ala `SetTimerEx`. → timerid / `nil, errmsg` |
+| `romp.killTimer(timerid)` | Hentikan timer → `true`/`false` |
+| `romp.getTimerCount()` | Jumlah timer aktif |
+
+```lua
+local tid = romp.setTimer("updateSkor", 60000, true)     -- tiap 60 dtk
+romp.setTimer(function(pesan) romp.sendChatToAll(romp.KIND_INFO, pesan) end,
+              5000, false, "Halo!")                      -- sekali, bawa argumen
+romp.killTimer(tid)
+```
+
 **NUI — UI ala FiveM (HTML/JS).** Lua bisa mengirim pesan JSON ke WebView di
 client, dan JavaScript bisa callback balik ke Lua. Demo bawaan: ketik `/inv`
 di dalam game untuk membuka inventory ala ox_inventory.

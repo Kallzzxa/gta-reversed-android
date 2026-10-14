@@ -15,6 +15,7 @@
 #include "romp_weapon.h"
 #include "romp_anticheat.h"
 #include "romp_sqlite.h"
+#include "romp_timer.h"
 
 #include <time.h>
 #include <pthread.h>
@@ -1629,6 +1630,9 @@ int main(int argc, char **argv) {
             lua_on_tick();
             vehicle_tick(tnow); /* respawn kendaraan hancur */
         }
+
+        /* timer Lua ala SA-MP SetTimer (tiap iterasi loop, ~100 ms) */
+        timer_tick(tnow);
 
         /* beacon LAN tiap LAN_BEACON_MS */
         if (g_cfg.lan_discovery && tnow - last_beacon_ms >= LAN_BEACON_MS) {

@@ -8,6 +8,7 @@
 #include "romp_weapon.h"
 #include "romp_anticheat.h"
 #include "romp_sqlite.h"
+#include "romp_timer.h"
 
 #include "../vendor/sqlite/sqlite3.h"
 
@@ -1057,6 +1058,10 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_db_exec);   lua_setfield(Ls, -2, "dbExec");
     lua_pushcfunction(Ls, l_romp_db_query);  lua_setfield(Ls, -2, "dbQuery");
     lua_pushcfunction(Ls, l_romp_db_error);  lua_setfield(Ls, -2, "dbError");
+    /* timer ala SA-MP SetTimer/SetTimerEx/KillTimer */
+    lua_pushcfunction(Ls, l_romp_set_timer);      lua_setfield(Ls, -2, "setTimer");
+    lua_pushcfunction(Ls, l_romp_kill_timer);     lua_setfield(Ls, -2, "killTimer");
+    lua_pushcfunction(Ls, l_romp_get_timer_count); lua_setfield(Ls, -2, "getTimerCount");
     /* handle default dari server.cfg ("database <path>"), nil bila tak diset */
     if (db_get_default() >= 0) lua_pushinteger(Ls, (lua_Integer)db_get_default());
     else lua_pushnil(Ls);
@@ -1157,7 +1162,11 @@ static void script_flush_pending(void) {
 }
 
 static void script_teardown(Script *s) {
-    if (s->L) { lua_close(s->L); s->L = NULL; }
+    if (s->L) {
+        timer_kill_state(s->L); /* bunuh timer milik state ini sebelum close */
+        lua_close(s->L);
+        s->L = NULL;
+    }
     s->active = 0;
 }
 

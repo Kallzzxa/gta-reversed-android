@@ -51,4 +51,4 @@ Setiap fitur: implementasi → compile/test → commit (English) → push.
 - [ ] API pemain: setPos, getPos, setHealth, setArmour, giveWeapon
 - [ ] API kendaraan: createVehicle, destroyVehicle, setVehiclePos
 - [x] API textdraw & dialog — DONE 2026-10-14 (dialog: commit 5615807; textdraw: server/textdraw.lua + textdraw.html)
-- [ ] Timer Lua: setTimer / killTimer
+- [x] Timer Lua: setTimer / killTimer — DONE 2026-10-15 (ala SA-MP SetTimer/SetTimerEx/KillTimer: server/src/romp_timer.c/.h — romp.setTimer(cb, ms, repeating, ...) → timerid / nil,errmsg (cb = fungsi atau nama fungsi global, argumen diteruskan ala SetTimerEx; interval 50..86400000 ms, maks 256 timer; per-state gamemode/filterscript, dibunuh saat FS unload), romp.killTimer(id) → true/false, romp.getTimerCount(); timer_tick tiap iterasi loop utama ~100 ms; binari linux+windows rebuild; test 13/13 di tests/test_timer.py + semua regresi lolos)
