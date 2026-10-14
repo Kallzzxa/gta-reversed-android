@@ -9,23 +9,28 @@
       -webkit-tap-highlight-color: transparent; user-select: none; }
   html, body { width: 100%; height: 100%; overflow: hidden;
       background: #0b0d11; color: #eee; font-family: system-ui, sans-serif; }
-  #head { padding: 14px 16px 10px; display: flex; align-items: center;
-      justify-content: space-between; border-bottom: 1px solid rgba(0,200,180,.25); }
+  #head { padding: 12px 16px 8px; border-bottom: 1px solid rgba(0,200,180,.25); }
   #head h1 { font-size: 17px; letter-spacing: 2px; color: #4de3c8;
-      text-transform: uppercase; }
-  #ref { background: rgba(0,200,180,.12); border: 1px solid rgba(0,200,180,.5);
-      color: #4de3c8; border-radius: 8px; padding: 8px 14px; font-size: 14px; }
-  #ref:active { background: rgba(0,200,180,.3); }
-  #list { overflow-y: auto; height: calc(100% - 128px); padding: 10px 12px; }
+      text-transform: uppercase; margin-bottom: 8px; }
+  #tabs { display: flex; gap: 6px; }
+  .tab { flex: 1; text-align: center; padding: 8px; font-size: 13px;
+      background: rgba(255,255,255,.05); color: #aaa; border-radius: 8px;
+      border: 1px solid transparent; cursor: pointer; }
+  .tab.on { color: #4de3c8; border-color: rgba(0,200,180,.5);
+      background: rgba(0,200,180,.08); }
+  #list { overflow-y: auto; height: calc(100% - 190px); padding: 10px 12px; }
   .srv { background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.1);
-      border-radius: 10px; padding: 12px; margin-bottom: 8px; cursor: pointer; }
+      border-radius: 10px; padding: 12px; margin-bottom: 8px; cursor: pointer;
+      position: relative; }
   .srv:active { border-color: #4de3c8; transform: scale(.99); }
-  .srv .hn { font-size: 15px; font-weight: 600; }
+  .srv .hn { font-size: 15px; font-weight: 600; padding-right: 30px; }
   .srv .mt { font-size: 12px; color: #999; margin-top: 2px;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .srv .meta { display: flex; justify-content: space-between; margin-top: 8px;
       font-size: 12px; color: #4de3c8; }
   .srv .lock { color: #e3a44d; }
+  .fav { position: absolute; top: 10px; right: 10px; font-size: 18px;
+      padding: 4px; }
   #empty { text-align: center; color: #666; margin-top: 40px; font-size: 14px;
       line-height: 1.8; }
   #manual { display: flex; gap: 8px; padding: 10px 12px;
@@ -33,67 +38,122 @@
   #manual input { flex: 1; background: rgba(255,255,255,.06); border: 1px solid
       rgba(255,255,255,.15); border-radius: 8px; color: #eee; padding: 10px;
       font-size: 14px; }
-  #manual button { background: rgba(0,200,180,.15); border: 1px solid
-      rgba(0,200,180,.5); color: #4de3c8; border-radius: 8px; padding: 10px 16px;
+  #manual button, #ref { background: rgba(0,200,180,.15); border: 1px solid
+      rgba(0,200,180,.5); color: #4de3c8; border-radius: 8px; padding: 10px 14px;
       font-size: 14px; }
+  #refrow { display: flex; padding: 0 12px; }
+  #ref { flex: 1; }
 </style>
 </head>
 <body>
 <div id="head">
-  <h1>🌐 Server</h1>
-  <button id="ref">⟳ Refresh</button>
+  <h1>Server Browser</h1>
+  <div id="tabs">
+    <div class="tab on" id="t-lan">📡 LAN</div>
+    <div class="tab" id="t-net">🌐 Internet</div>
+    <div class="tab" id="t-fav">⭐ Favorit</div>
+  </div>
 </div>
-<div id="list"><div id="empty">Memuat daftar server…</div></div>
+<div id="refrow"><button id="ref">⟳ Refresh</button></div>
+<div id="list"><div id="empty">Memuat…</div></div>
 <div id="manual">
-  <input id="ipport" placeholder="IP:port mis. 1.2.3.4:7777" />
+  <input id="ipport" placeholder="IP:port mis. 192.168.1.5:7777" />
   <button id="go">Connect</button>
 </div>
 <script>
-// Dipanggil native setelah daftar + query selesai.
+var mode = "lan";
+var favs = [];
+try { favs = JSON.parse(localStorage.getItem("romp_favs") || "[]"); } catch (e) {}
+
+function saveFavs() {
+  try { localStorage.setItem("romp_favs", JSON.stringify(favs)); } catch (e) {}
+}
+function isFav(ip, port) {
+  return favs.some(function (f) { return f.ip === ip && f.port === port; });
+}
+function toggleFav(ip, port, hostname) {
+  var i = favs.findIndex(function (f) { return f.ip === ip && f.port === port; });
+  if (i >= 0) favs.splice(i, 1);
+  else favs.push({ ip: ip, port: port, hostname: hostname || (ip + ":" + port) });
+  saveFavs();
+  render(current);
+}
+
+// Dipanggil native setelah daftar selesai.
+var current = [];
 window.onServers = function (json) {
-  var arr;
-  try { arr = JSON.parse(json); } catch (e) { arr = []; }
+  try { current = JSON.parse(json); } catch (e) { current = []; }
+  render(current);
+};
+
+function render(arr) {
   var list = document.getElementById("list");
   list.innerHTML = "";
+  if (mode === "fav") arr = favs;
   if (!arr.length) {
-    list.innerHTML = '<div id="empty">Tidak ada server yang nyala.<br>' +
-      'Jalankan romp-server + romp-master,<br>atau connect manual di bawah.</div>';
+    var hint = mode === "lan"
+      ? "Tidak ada server di WiFi ini.<br>Pastikan server nyala &<br>satu jaringan dengan HP."
+      : mode === "net"
+      ? "Tidak ada server internet.<br>Butuh master server / VPS."
+      : "Belum ada favorit.<br>Ketuk ⭐ di server untuk menyimpan.";
+    list.innerHTML = '<div id="empty">' + hint + "</div>";
     return;
   }
   arr.forEach(function (s) {
     var d = document.createElement("div");
     d.className = "srv";
     var lock = s.has_password ? ' <span class="lock">🔒</span>' : "";
+    var star = isFav(s.ip, s.port) ? "⭐" : "☆";
     d.innerHTML = '<div class="hn">' + esc(s.hostname) + lock + "</div>" +
+      '<div class="fav">' + star + "</div>" +
       '<div class="mt">' + esc(s.motd || "") + "</div>" +
       '<div class="meta"><span>👥 ' + s.players + "/" + s.maxplayers +
       "</span><span>" + esc(s.ip) + ":" + s.port +
       "</span><span>📶 " + s.ping_ms + " ms</span></div>";
+    d.querySelector(".fav").onclick = function (ev) {
+      ev.stopPropagation();
+      toggleFav(s.ip, s.port, s.hostname);
+    };
     d.onclick = function () { connectTo(s.ip, s.port); };
     list.appendChild(d);
   });
-};
+}
 
 function esc(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
     .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
-
 function connectTo(ip, port) {
   if (window.romp && window.romp.connect) window.romp.connect(ip, port);
 }
+function setMode(m) {
+  mode = m;
+  ["lan", "net", "fav"].forEach(function (x) {
+    document.getElementById("t-" + x).classList.toggle("on", x === m);
+  });
+  doRefresh();
+}
+function doRefresh() {
+  var list = document.getElementById("list");
+  list.innerHTML = '<div id="empty">Memuat…</div>';
+  if (!window.romp) { render([]); return; }
+  if (mode === "lan" && window.romp.scanLan) window.romp.scanLan();
+  else if (mode === "net" && window.romp.refresh) window.romp.refresh();
+  else if (mode === "fav") render(favs);
+}
 
-document.getElementById("ref").onclick = function () {
-  document.getElementById("list").innerHTML =
-    '<div id="empty">Memuat daftar server…</div>';
-  if (window.romp && window.romp.refresh) window.romp.refresh();
-};
-
+document.getElementById("t-lan").onclick = function () { setMode("lan"); };
+document.getElementById("t-net").onclick = function () { setMode("net"); };
+document.getElementById("t-fav").onclick = function () { setMode("fav"); };
+document.getElementById("ref").onclick = doRefresh;
 document.getElementById("go").onclick = function () {
   var v = document.getElementById("ipport").value.trim();
   var m = v.match(/^([^:]+):(\d+)$/);
   if (m) connectTo(m[1], parseInt(m[2], 10));
 };
+
+// Default: scan LAN (tanpa VPS).
+doRefresh();
 </script>
 </body>
 </html>

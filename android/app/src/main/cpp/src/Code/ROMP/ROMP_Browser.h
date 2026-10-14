@@ -56,6 +56,13 @@ public:
     static bool QueryServer(const std::string& host, uint16_t port,
                             BrowserServer& out, int timeout_ms = 1500);
 
+    // Dengarkan beacon LAN (UDP 7779) selama timeout_ms. Mengumpulkan
+    // server-server di jaringan lokal tanpa perlu master/VPS.
+    // Tiap beacon: "ROMP" 0x11 + gameport + info. Duplikat (ip+port)
+    // digabung, diambil yang terbaru.
+    static bool ListenLan(std::vector<BrowserServer>& out,
+                          int timeout_ms = 3000);
+
     // Ambil daftar server dari master via TCP.
     // Entri hanya berisi ip/port/hostname/motd/players/maxplayers apa adanya
     // dari announce terakhir — panggil QueryServer per entri untuk info live.

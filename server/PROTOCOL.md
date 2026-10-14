@@ -250,6 +250,25 @@ per server:
 Alur browser tipikal: `FetchMasterList` -> untuk tiap entri `QueryServer`
 via UDP (info live + ping) -> tampilkan daftar -> user pilih -> connect.
 
+## LAN Discovery (tanpa master/VPS)
+
+Server yang `lan_discovery 1` (default) broadcast beacon UDP tiap 5 detik
+ke `255.255.255.255:7779` supaya client di jaringan lokal yang sama
+otomatis menemukannya — murni server -> client, tanpa perantara.
+
+```
+"ROMP" 0x11 LAN_BEACON
+u16 gameport
+u8  hostnamelen, hostname
+u16 players, maxplayers
+u8  has_password
+u8  motdlen, motd
+```
+
+Client cukup listen di UDP 7779 dan kumpulkan beacon (lihat
+`ROMPBrowser::ListenLan` / `BrowserListenLan`). Tidak perlu tahu IP
+server sebelumnya. Cocok untuk main bareng satu WiFi/warnet.
+
 ## Alur koneksi tipikal
 
 ```

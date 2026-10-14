@@ -108,13 +108,18 @@ Biar pemain bisa lihat server yang nyala tanpa hafal IP:
 
 1. **Query UDP** — server menjawab info + daftar pemain di port yang sama
    (opsi `query 1` di server.cfg).
-2. **Master server** — jalankan `start-master.sh` (atau `.bat`) di VPS,
-   default port 7778. Game server daftarkan diri via
-   `announce 1` + `master_host`/`master_port` di server.cfg.
-3. **Client** — modul `ROMP_Browser` (C++): `FetchMasterList()` untuk daftar
-   dari master, `QueryServer()` untuk info live + ping per server.
+2. **LAN discovery (tanpa VPS)** — server broadcast beacon tiap 5 detik
+   (`lan_discovery 1`, default nyala); client di WiFi yang sama otomatis
+   menemukan server. Murni server -> client.
+3. **Master server** — untuk daftar internet-wide: jalankan
+   `start-master.sh` (atau `.bat`) di VPS, default port 7778.
+   Game server daftarkan diri via `announce 1` + `master_host`/`master_port`.
+4. **Client** — modul `ROMP_Browser` (C++): `ListenLan()` untuk LAN,
+   `FetchMasterList()` untuk daftar dari master, `QueryServer()` untuk
+   info live + ping per server.
    Contoh UI: `ROMPServerBrowser.java` + `assets/romp/browser.html`
-   (daftar server, ketuk untuk connect; JNI TODO seperti modul lain).
+   (tab LAN / Internet / Favorit tersimpan lokal, ketuk untuk connect;
+   JNI TODO seperti modul lain).
 
 Command bawaan server (`/me` `/pm` `/players` `/help` `/q`) tetap jalan sebagai
 fallback kalau gamemode tidak meng-handle-nya. Error di script Lua hanya

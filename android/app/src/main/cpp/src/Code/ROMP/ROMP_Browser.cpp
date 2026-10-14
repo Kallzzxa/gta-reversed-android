@@ -245,4 +245,61 @@ bool ROMPBrowser::FetchMasterList(const std::string& master_host,
     return ok;
 }
 
+bool ROMPBrowser::ListenLan(std::vector<BrowserServer>& out, int timeout_ms) {
+    out.clear();
+    sock_t s = socket(AF_INET, SOCK_DGRAM, 0);
+    if (s == INVALID_SOCK) return false;
+    int one = 1;
+    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (char*)&one, sizeof(one));
+    sockaddr_in a{};
+    a.sin_family = AF_INET;
+    a.sin_addr.s_addr = INADDR_ANY;
+    a.sin_port = htons(7779);  // LAN_BEACON_PORT
+    bool bound = bind(s, (sockaddr*)&a, sizeof(a)) == 0;
+    if (!bound) { CLOSESOCK(s); return false; }
+
+    auto end = std::chrono::steady_clock::now() +
+               std::chrono::milliseconds(timeout_ms);
+    uint8_t buf[512];
+    while (std::chrono::steady_clock::now() < end) {
+        int remain = (int)std::chrono::duration_cast<std::chrono::milliseconds>(
+                         end - std::chrono::steady_clock::now()).count();
+        if (remain <= 0) break;
+        if (!wait_readable(s, remain > 500 ? 500 : remain)) continue;
+        sockaddr_in from{}; socklen_t fl = sizeof(from);
+        ssize_t n = recvfrom(s, (char*)buf, sizeof(buf), 0,
+                             (sockaddr*)&from, &fl);
+        // Beacon: "ROMP" 0x11 gameport(u16) hostnamelen(u8) hostname
+        //         players(u16) maxplayers(u16) has_password(u8)
+        //         motdlen(u8) motd
+        if (n < 4 + 1 + 2 + 1 || memcmp(buf, kMagic, 4) || buf[4] != 0x11)
+            continue;
+        size_t o = 5;
+        BrowserServer e;
+        char ipstr[48];
+        inet_ntop(AF_INET, &from.sin_addr, ipstr, sizeof(ipstr));
+        e.ip = ipstr;
+        e.port = (uint16_t)(buf[o] | (buf[o + 1] << 8)); o += 2;
+        uint8_t hl = buf[o++];
+        if (o + hl + 5 > (size_t)n) continue;
+        e.hostname.assign((char*)(buf + o), hl); o += hl;
+        e.players = (uint16_t)(buf[o] | (buf[o + 1] << 8)); o += 2;
+        e.maxplayers = (uint16_t)(buf[o] | (buf[o + 1] << 8)); o += 2;
+        e.has_password = buf[o++] != 0;
+        uint8_t ml = buf[o++];
+        if (o + ml > (size_t)n) continue;
+        e.motd.assign((char*)(buf + o), ml); o += ml;
+        e.version = "romp1";
+        e.ping_ms = 0;  // LAN, anggap 0
+        // Dedupe by ip+port: timpa dengan beacon terbaru.
+        bool found = false;
+        for (auto& x : out) {
+            if (x.ip == e.ip && x.port == e.port) { x = e; found = true; break; }
+        }
+        if (!found) out.push_back(std::move(e));
+    }
+    CLOSESOCK(s);
+    return true;
+}
+
 }  // namespace ROMP

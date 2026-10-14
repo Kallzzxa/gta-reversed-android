@@ -38,7 +38,8 @@ Config g_cfg = {
     1,      /* query */
     0,      /* announce */
     "",     /* master_host */
-    7778    /* master_port */
+    7778,   /* master_port */
+    1       /* lan_discovery */
 };
 
 static void cfg_load(const char *path) {
@@ -69,6 +70,7 @@ static void cfg_load(const char *path) {
         else if (!strcmp(key, "announce")) g_cfg.announce = atoi(val) ? 1 : 0;
         else if (!strcmp(key, "master_host")) { strncpy(g_cfg.master_host, val, sizeof(g_cfg.master_host)-1); }
         else if (!strcmp(key, "master_port")) g_cfg.master_port = atoi(val);
+        else if (!strcmp(key, "lan_discovery")) g_cfg.lan_discovery = atoi(val) ? 1 : 0;
     }
     fclose(f);
 }
@@ -811,6 +813,53 @@ static void *announce_thread(void *arg) {
     return NULL;
 }
 
+/* ---------------- LAN discovery beacon ---------------- */
+/* Broadcast tiap 5 detik ke 255.255.255.255:7779 supaya client di LAN
+ * yang sama otomatis menemukan server tanpa master/VPS. */
+static SOCKET g_beacon_sock = INVALID_SOCKET;
+
+static void beacon_init(void) {
+    if (!g_cfg.lan_discovery) return;
+    g_beacon_sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (g_beacon_sock == INVALID_SOCKET) {
+        log_msg("WARNING: socket beacon LAN gagal.");
+        return;
+    }
+    int one = 1;
+    setsockopt(g_beacon_sock, SOL_SOCKET, SO_BROADCAST, (char*)&one, sizeof(one));
+}
+
+static void beacon_send(void) {
+    if (g_beacon_sock == INVALID_SOCKET) return;
+    uint8_t out[512];
+    size_t o = 0;
+    memcpy(out, QUERY_MAGIC, QUERY_MAGIC_LEN); o += QUERY_MAGIC_LEN;
+    out[o++] = LAN_BEACON;
+    put_u16(out + o, (uint16_t)g_cfg.port); o += 2;
+    size_t hl = strlen(g_cfg.hostname), ml = strlen(g_cfg.motd);
+    if (hl > 63) hl = 63; if (ml > 200) ml = 200;
+    out[o++] = (uint8_t)hl; memcpy(out + o, g_cfg.hostname, hl); o += hl;
+    put_u16(out + o, (uint16_t)client_count()); o += 2;
+    put_u16(out + o, (uint16_t)g_cfg.maxplayers); o += 2;
+    out[o++] = g_cfg.password[0] ? 1 : 0;
+    out[o++] = (uint8_t)ml; memcpy(out + o, g_cfg.motd, ml); o += ml;
+
+    struct sockaddr_in bc;
+    memset(&bc, 0, sizeof(bc));
+    bc.sin_family = AF_INET;
+    bc.sin_port = htons(LAN_BEACON_PORT);
+    bc.sin_addr.s_addr = INADDR_BROADCAST;
+    sendto(g_beacon_sock, (char*)out, (int)o, 0,
+           (struct sockaddr*)&bc, sizeof(bc));
+}
+
+static void beacon_close(void) {
+    if (g_beacon_sock != INVALID_SOCKET) {
+        CLOSESOCK(g_beacon_sock);
+        g_beacon_sock = INVALID_SOCKET;
+    }
+}
+
 /* ---------------- Accept & cleanup ---------------- */
 static void accept_new(SOCKET lsock) {
     struct sockaddr_in addr;
@@ -935,6 +984,8 @@ int main(int argc, char **argv) {
         log_msg(" Announce : ke master %s:%d tiap 60 dtk",
                 g_cfg.master_host, g_cfg.master_port);
     if (g_cfg.query) log_msg(" UDP query: aktif (server browser)");
+    if (g_cfg.lan_discovery) log_msg(" LAN beacon: broadcast tiap 5 dtk (port %d)", LAN_BEACON_PORT);
+    log_msg(" Ketik 'help' untuk command console.");
     log_msg(" Ketik 'help' untuk command console.");
     log_msg("===========================================");
 
@@ -948,7 +999,10 @@ int main(int argc, char **argv) {
     if (g_cfg.announce && g_cfg.master_host[0])
         pthread_create(&athr, NULL, announce_thread, NULL);
 
+    beacon_init();
+
     uint64_t last_lua_tick = now_ms();
+    uint64_t last_beacon_ms = 0;
     while (g_running) {
         fd_set rfds;
         FD_ZERO(&rfds);
@@ -993,6 +1047,12 @@ int main(int argc, char **argv) {
             lua_on_tick();
         }
 
+        /* beacon LAN tiap 5 detik */
+        if (g_cfg.lan_discovery && tnow - last_beacon_ms >= 5000) {
+            last_beacon_ms = tnow;
+            beacon_send();
+        }
+
         sweep_dead();
     }
 
@@ -1005,6 +1065,7 @@ int main(int argc, char **argv) {
     if (athr) pthread_join(athr, NULL);
     lua_shutdown();
     ban_clear();
+    beacon_close();
     for (Client *c = g_clients; c; c = c->next) CLOSESOCK(c->sock);
     CLOSESOCK(lsock);
     if (usock != INVALID_SOCKET) CLOSESOCK(usock);

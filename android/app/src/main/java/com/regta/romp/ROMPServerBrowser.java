@@ -100,6 +100,18 @@ public class ROMPServerBrowser {
         }).start();
     }
 
+    /** Scan LAN: dengarkan beacon broadcast (tanpa perlu master/VPS). */
+    public void scanLan() {
+        new Thread(() -> {
+            try {
+                String json = nativeListenLan(3000);
+                pushToPage(json);
+            } catch (Exception ex) {
+                pushToPage("[]");
+            }
+        }).start();
+    }
+
     private void pushToPage(final String json) {
         activity.runOnUiThread(() -> {
             if (webView == null) return;
@@ -124,6 +136,11 @@ public class ROMPServerBrowser {
         public void refresh() {
             ROMPServerBrowser.this.refresh();
         }
+
+        @JavascriptInterface
+        public void scanLan() {
+            ROMPServerBrowser.this.scanLan();
+        }
     }
 
     // TODO(GAME): implementasikan via JNI -> ROMP::ROMPBrowser.
@@ -134,5 +151,7 @@ public class ROMPServerBrowser {
     //                       "player_list":[{"id":0,"name":"Andi"}]}
     private static native String nativeFetchMasterList(String host, int port);
     private static native String nativeQueryServer(String host, int port);
+    // Dengarkan beacon LAN (JSON array, format sama seperti QueryServer).
+    private static native String nativeListenLan(int timeoutMs);
     private static native void nativeConnect(String ip, int port);
 }
