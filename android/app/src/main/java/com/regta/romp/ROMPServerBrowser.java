@@ -113,12 +113,17 @@ public class ROMPServerBrowser {
     }
 
     private void pushToPage(final String json) {
+        postToPage("onServers", json);
+    }
+
+    /** Kirim JSON ke fungsi JS window.<fn>(json). */
+    private void postToPage(final String fn, final String json) {
         activity.runOnUiThread(() -> {
             if (webView == null) return;
             String esc = json.replace("\\", "\\\\")
                     .replace("'", "\\'").replace("\n", "\\n");
             webView.evaluateJavascript(
-                    "window.onServers && window.onServers('" + esc + "')", null);
+                    "window." + fn + " && window." + fn + "('" + esc + "')", null);
         });
     }
 
@@ -144,13 +149,13 @@ public class ROMPServerBrowser {
 
         @JavascriptInterface
         public void toggleFavorite(String ip, int port, String name) {
-            boolean now = ROMPFavorites.toggle(getContext(), ip, port, name);
+            ROMPFavorites.toggle(activity, ip, port, name);
             pushFavorites();
         }
 
         @JavascriptInterface
         public boolean isFavorite(String ip, int port) {
-            return ROMPFavorites.isFavorite(getContext(), ip, port);
+            return ROMPFavorites.isFavorite(activity, ip, port);
         }
 
         @JavascriptInterface
@@ -160,7 +165,7 @@ public class ROMPServerBrowser {
     }
 
     private void pushFavorites() {
-        final String json = ROMPFavorites.toJson(getContext());
+        final String json = ROMPFavorites.toJson(activity);
         postToPage("onFavorites", json);
     }
 
