@@ -18,7 +18,23 @@
       border: 1px solid transparent; cursor: pointer; }
   .tab.on { color: #4de3c8; border-color: rgba(0,200,180,.5);
       background: rgba(0,200,180,.08); }
-  #list { overflow-y: auto; height: calc(100% - 190px); padding: 10px 12px; }
+  /* Toolbar cari + urut + filter ala browser SA-MP */
+  #tools { display: flex; gap: 8px; padding: 10px 12px 0; }
+  #q { flex: 2; background: rgba(255,255,255,.06); border: 1px solid
+      rgba(255,255,255,.15); border-radius: 8px; color: #eee; padding: 9px 10px;
+      font-size: 13px; user-select: text; -webkit-user-select: text; }
+  #sort { flex: 1; background: rgba(255,255,255,.06); border: 1px solid
+      rgba(255,255,255,.15); border-radius: 8px; color: #eee; padding: 9px 6px;
+      font-size: 12px; }
+  #sort option { background: #14181e; }
+  #chips { display: flex; gap: 6px; align-items: center; padding: 8px 12px 0; }
+  .chip { font-size: 11px; padding: 5px 9px; border-radius: 20px;
+      background: rgba(255,255,255,.05); color: #888; border: 1px solid
+      rgba(255,255,255,.12); cursor: pointer; }
+  .chip.on { color: #4de3c8; border-color: rgba(0,200,180,.55);
+      background: rgba(0,200,180,.1); }
+  #count { margin-left: auto; font-size: 11px; color: #777; }
+  #list { overflow-y: auto; height: calc(100% - 262px); padding: 10px 12px; }
   .srv { background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.1);
       border-radius: 10px; padding: 12px; margin-bottom: 8px; cursor: pointer;
       position: relative; }
@@ -75,6 +91,24 @@
     <div class="tab" id="t-fav">⭐ Favorit</div>
   </div>
 </div>
+<!-- Toolbar cari, urut & filter ala browser SA-MP -->
+<div id="tools">
+  <input id="q" placeholder="🔍 Cari nama server…" autocomplete="off" />
+  <select id="sort">
+    <option value="ping_asc">📶 Ping terendah</option>
+    <option value="ping_desc">📶 Ping tertinggi</option>
+    <option value="players_desc">👥 Pemain terbanyak</option>
+    <option value="players_asc">👥 Pemain tersedikit</option>
+    <option value="name_asc">🔤 Nama A–Z</option>
+    <option value="name_desc">🔤 Nama Z–A</option>
+  </select>
+</div>
+<div id="chips">
+  <span class="chip" id="c-empty">🚫 kosong</span>
+  <span class="chip" id="c-full">🚫 penuh</span>
+  <span class="chip" id="c-lock">🔒 terkunci</span>
+  <span id="count"></span>
+</div>
 <div id="refrow"><button id="ref">⟳ Refresh</button></div>
 <div id="list"><div id="empty">Memuat…</div></div>
 <div id="manual">
@@ -120,34 +154,91 @@ function toggleFav(ip, port, hostname) {
   if (i >= 0) favs.splice(i, 1);
   else favs.push({ ip: ip, port: port, hostname: hostname || (ip + ":" + port) });
   saveFavs();
-  render(current);
+  render();
+}
+
+/* --- Cari, urut & filter ala browser SA-MP --- */
+var pref = { sort: "ping", dir: 1, q: "", hideEmpty: false,
+             hideFull: false, hideLocked: false };
+try {
+  var p = JSON.parse(localStorage.getItem("romp_browser_pref") || "{}");
+  for (var k in pref) if (p[k] !== undefined) pref[k] = p[k];
+} catch (e) {}
+function savePref() {
+  try { localStorage.setItem("romp_browser_pref", JSON.stringify(pref)); }
+  catch (e) {}
+}
+
+function filterServers(arr, o) {
+  o = o || pref;
+  var q = (o.q || "").toLowerCase();
+  return arr.filter(function (s) {
+    if (o.hideEmpty && (s.players | 0) === 0) return false;
+    var mp = (typeof s.maxplayers === "number") ? s.maxplayers : Infinity;
+    if (o.hideFull && (s.players | 0) >= mp) return false;
+    if (o.hideLocked && s.has_password) return false;
+    if (q) {
+      var hay = ((s.hostname || "") + " " + (s.motd || "") + " " +
+                 (s.ip || "")).toLowerCase();
+      if (hay.indexOf(q) < 0) return false;
+    }
+    return true;
+  });
+}
+function pingOf(s) {
+  var p = parseInt(s.ping_ms, 10);
+  return isNaN(p) ? Infinity : p;
+}
+function sortServers(arr, o) {
+  o = o || pref;
+  var key = o.sort || "ping";
+  var dir = (o.dir === -1) ? -1 : 1;
+  function nameCmp(a, b) {
+    var x = String(a.hostname || "").toLowerCase();
+    var y = String(b.hostname || "").toLowerCase();
+    return x < y ? -1 : (x > y ? 1 : 0);
+  }
+  return arr.slice().sort(function (a, b) {
+    var r;
+    if (key === "name") r = nameCmp(a, b);
+    else if (key === "players") r = ((a.players | 0) - (b.players | 0));
+    else r = pingOf(a) - pingOf(b);          // ping (default)
+    if (r === 0 && key !== "ping") r = pingOf(a) - pingOf(b);  // tie-breaker
+    return r * dir;
+  });
 }
 
 // Dipanggil native setelah daftar favorit berubah.
-var current = [];
 window.onFavorites = function (json) {
   try { favs = JSON.parse(json); } catch (e) { favs = []; }
   saveFavs();  // sinkronkan cache lokal
-  if (mode === "fav") render(favs);
-  else render(current);
+  render();
 };
 
 // Dipanggil native setelah daftar selesai.
+var current = [];
 window.onServers = function (json) {
   try { current = JSON.parse(json); } catch (e) { current = []; }
-  render(current);
+  render();
 };
 
-function render(arr) {
+function render() {
+  var raw = (mode === "fav") ? favs : current;
+  var arr = sortServers(filterServers(raw));
   var list = document.getElementById("list");
   list.innerHTML = "";
-  if (mode === "fav") arr = favs;
+  document.getElementById("count").textContent =
+      arr.length === raw.length
+        ? arr.length + " server"
+        : arr.length + " dari " + raw.length + " server";
   if (!arr.length) {
     var hint = mode === "lan"
       ? "Tidak ada server di WiFi ini.<br>Pastikan server nyala &<br>satu jaringan dengan HP."
       : mode === "net"
       ? "Tidak ada server internet.<br>Butuh master server / VPS."
       : "Belum ada favorit.<br>Ketuk ⭐ di server untuk menyimpan.";
+    if (raw.length > 0)
+      hint = "Tidak ada server yang cocok<br>dengan pencarian / filter.";
     list.innerHTML = '<div id="empty">' + hint + "</div>";
     return;
   }
@@ -156,10 +247,11 @@ function render(arr) {
     d.className = "srv";
     var lock = s.has_password ? ' <span class="lock">🔒</span>' : "";
     var star = isFav(s.ip, s.port) ? "⭐" : "☆";
+    var mp = (typeof s.maxplayers === "number") ? s.maxplayers : "?";
     d.innerHTML = '<div class="hn">' + esc(s.hostname) + lock + "</div>" +
       '<div class="fav">' + star + "</div>" +
       '<div class="mt">' + esc(s.motd || "") + "</div>" +
-      '<div class="meta"><span>👥 ' + s.players + "/" + s.maxplayers +
+      '<div class="meta"><span>👥 ' + s.players + "/" + mp +
       "</span><span>" + esc(s.ip) + ":" + s.port +
       "</span><span>📶 " + s.ping_ms + " ms</span></div>";
     d.querySelector(".fav").onclick = function (ev) {
@@ -208,6 +300,39 @@ document.getElementById("pw-cancel").onclick = hidePasswordPrompt;
 document.getElementById("pw-input").onkeydown = function (ev) {
   if (ev.key === "Enter") document.getElementById("pw-ok").click();
 };
+
+/* --- Kontrol toolbar: cari, urut, filter --- */
+function syncToolbar() {
+  document.getElementById("q").value = pref.q || "";
+  document.getElementById("sort").value = pref.sort + "_" +
+      (pref.dir === -1 ? "desc" : "asc");
+  [["c-empty", "hideEmpty"], ["c-full", "hideFull"],
+   ["c-lock", "hideLocked"]].forEach(function (pair) {
+    document.getElementById(pair[0]).classList.toggle("on", !!pref[pair[1]]);
+  });
+}
+document.getElementById("q").oninput = function (ev) {
+  pref.q = ev.target.value;
+  savePref();
+  render();
+};
+document.getElementById("sort").onchange = function (ev) {
+  var v = ev.target.value.split("_");
+  pref.sort = v[0];
+  pref.dir = (v[1] === "desc") ? -1 : 1;
+  savePref();
+  render();
+};
+[["c-empty", "hideEmpty"], ["c-full", "hideFull"],
+ ["c-lock", "hideLocked"]].forEach(function (pair) {
+  document.getElementById(pair[0]).onclick = function () {
+    pref[pair[1]] = !pref[pair[1]];
+    savePref();
+    syncToolbar();
+    render();
+  };
+});
+
 function setMode(m) {
   mode = m;
   ["lan", "net", "fav"].forEach(function (x) {
@@ -218,12 +343,12 @@ function setMode(m) {
 function doRefresh() {
   var list = document.getElementById("list");
   list.innerHTML = '<div id="empty">Memuat…</div>';
-  if (!window.romp) { render([]); return; }
+  if (!window.romp) { render(); return; }
   if (mode === "lan" && window.romp.scanLan) window.romp.scanLan();
   else if (mode === "net" && window.romp.refresh) window.romp.refresh();
   else if (mode === "fav") {
     if (window.romp.loadFavorites) window.romp.loadFavorites();
-    else render(favs);
+    else render();
   }
 }
 
@@ -240,6 +365,7 @@ document.getElementById("go").onclick = function () {
 };
 
 // Default: scan LAN (tanpa VPS).
+syncToolbar();
 doRefresh();
 </script>
 </body>
