@@ -4,7 +4,7 @@
 
 #include "StdInc.h"
 
-#include "Vendor/ReversibleHooks/ReversibleHooks.h"
+#include "ReversibleHooks/ReversibleHooks.h"
 
 void InjectReversedClasses()
 {
