@@ -23,7 +23,7 @@ Setiap fitur: implementasi → compile/test → commit (English) → push.
 
 - [ ] Server browser in-game (Android): tab Internet/LAN/Favorit — DONE (v1)
 - [x] Favorit ala SA-MP Mobile Launcher (ROMPFavorites.java + JSON, tambah/hapus, tab Favorit) — DONE 2026-10-14
-- [ ] Password server di browser (prompt sebelum connect)
+- [x] Password server di browser (prompt sebelum connect) — DONE 2026-10-15 (browser.html: dialog password modal ala DIALOG_STYLE_PASSWORD muncul saat server punya has_password=1, juga untuk connect manual; window.romp.connect(ip, port, password) → ROMPServerBrowser.Bridge + nativeConnect(ip, port, password) untuk handshake pwlen; JS lolos node --check, Java lolos javac vs android.jar)
 - [ ] Sorting & filter browser (nama, pemain, ping)
 
 ## Client Android

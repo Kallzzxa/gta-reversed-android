@@ -21,6 +21,8 @@ import org.json.JSONObject;
  *   1. Ambil daftar dari master server (FetchMasterList).
  *   2. Query tiap server via UDP untuk info live (nama, pemain, ping).
  *   3. Tampilkan di halaman browser.html; ketuk server untuk connect.
+ *      Server ber-password (has_password=1) menampilkan dialog password
+ *      ala DIALOG_STYLE_PASSWORD sebelum connect dipanggil.
  *
  * Semua network jalan di background thread; hasilnya di-push ke WebView
  * via onServers(json).
@@ -128,13 +130,21 @@ public class ROMPServerBrowser {
     }
 
     private class Bridge {
-        /** Dipanggil halaman saat user mengetuk server / tombol connect manual. */
+        /** Dipanggil halaman saat user mengetuk server / tombol connect manual.
+         *  Password sudah ditanyakan halaman lewat dialog ala
+         *  DIALOG_STYLE_PASSWORD bila server punya password. */
+        @JavascriptInterface
+        public void connect(String ip, int port, String password) {
+            // TODO(GAME): nativeConnect -> Client::Connect(ip, port, nick, password).
+            // Password diteruskan ke handshake (u8 pwlen + byte password).
+            nativeConnect(ip, port, password == null ? "" : password);
+            hide();
+        }
+
+        /** Versi lama tanpa password (backward compat): connect tanpa password. */
         @JavascriptInterface
         public void connect(String ip, int port) {
-            // TODO(GAME): nativeConnect -> Client::Connect(ip, port, nick).
-            // Setelah connect sukses, hide() browser & masuk game.
-            nativeConnect(ip, port);
-            hide();
+            connect(ip, port, "");
         }
 
         @JavascriptInterface
@@ -175,9 +185,14 @@ public class ROMPServerBrowser {
     //   QueryServer     -> {"ip":"..","port":7777,"hostname":"..","motd":"..","version":"romp1",
     //                       "players":3,"maxplayers":50,"has_password":false,"ping_ms":12,
     //                       "player_list":[{"id":0,"name":"Andi"}]}
+    // Connect: browser.html menampilkan dialog password ala DIALOG_STYLE_PASSWORD
+    //   bila has_password=1 (atau selalu untuk connect manual), lalu panggil
+    //   nativeConnect(ip, port, password) — password dimasukkan ke handshake:
+    //   u8 pwlen + char pw[pwlen] (0 bila tanpa password), diverifikasi server
+    //   terhadap `password` di server.cfg (PROTOCOL.md).
     private static native String nativeFetchMasterList(String host, int port);
     private static native String nativeQueryServer(String host, int port);
     // Dengarkan beacon LAN (JSON array, format sama seperti QueryServer).
     private static native String nativeListenLan(int timeoutMs);
-    private static native void nativeConnect(String ip, int port);
+    private static native void nativeConnect(String ip, int port, String password);
 }

@@ -43,6 +43,27 @@
       font-size: 14px; }
   #refrow { display: flex; padding: 0 12px; }
   #ref { flex: 1; }
+  /* Dialog password ala SA-MP DIALOG_STYLE_PASSWORD */
+  #pw-overlay { position: fixed; left: 0; top: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,.65); display: none; align-items: center;
+      justify-content: center; z-index: 50; }
+  #pw-overlay.show { display: flex; }
+  #pw-box { width: 86%; max-width: 340px; background: #14181e;
+      border: 1px solid rgba(227,164,77,.6); border-radius: 12px; padding: 18px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.6); }
+  #pw-box h2 { font-size: 15px; color: #e3a44d; margin-bottom: 8px; }
+  #pw-box p { font-size: 12px; color: #999; margin-bottom: 10px;
+      line-height: 1.6; }
+  #pw-box input { width: 100%; background: rgba(255,255,255,.07);
+      border: 1px solid rgba(255,255,255,.2); border-radius: 8px; color: #eee;
+      padding: 11px; font-size: 15px; margin-bottom: 14px; }
+  #pw-row { display: flex; gap: 8px; }
+  #pw-row button { flex: 1; border-radius: 8px; padding: 11px; font-size: 14px;
+      cursor: pointer; }
+  #pw-ok { background: rgba(0,200,180,.18); border: 1px solid
+      rgba(0,200,180,.55); color: #4de3c8; }
+  #pw-cancel { background: rgba(255,255,255,.05); border: 1px solid
+      rgba(255,255,255,.18); color: #aaa; }
 </style>
 </head>
 <body>
@@ -59,6 +80,19 @@
 <div id="manual">
   <input id="ipport" placeholder="IP:port mis. 192.168.1.5:7777" />
   <button id="go">Connect</button>
+</div>
+<!-- Prompt password sebelum connect (ala SA-MP DIALOG_STYLE_PASSWORD) -->
+<div id="pw-overlay">
+  <div id="pw-box">
+    <h2>🔒 Server Terkunci</h2>
+    <p id="pw-text">Server ini membutuhkan password:</p>
+    <input id="pw-input" type="password" placeholder="Password server"
+        autocomplete="off" maxlength="64" />
+    <div id="pw-row">
+      <button id="pw-cancel">Batal</button>
+      <button id="pw-ok">Hubungkan</button>
+    </div>
+  </div>
 </div>
 <script>
 var mode = "lan";
@@ -132,7 +166,7 @@ function render(arr) {
       ev.stopPropagation();
       toggleFav(s.ip, s.port, s.hostname);
     };
-    d.onclick = function () { connectTo(s.ip, s.port); };
+    d.onclick = function () { connectTo(s.ip, s.port, !!s.has_password); };
     list.appendChild(d);
   });
 }
@@ -141,9 +175,39 @@ function esc(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
     .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
-function connectTo(ip, port) {
-  if (window.romp && window.romp.connect) window.romp.connect(ip, port);
+function connectTo(ip, port, hasPassword) {
+  // Ala SA-MP: server ber-password minta password dulu sebelum connect.
+  if (hasPassword) showPasswordPrompt(ip, port);
+  else doConnect(ip, port, "");
 }
+function doConnect(ip, port, password) {
+  if (window.romp && window.romp.connect) window.romp.connect(ip, port, password || "");
+}
+
+/* --- Dialog password ala SA-MP DIALOG_STYLE_PASSWORD --- */
+var pwIp = "", pwPort = 0;
+function showPasswordPrompt(ip, port) {
+  pwIp = ip; pwPort = port;
+  document.getElementById("pw-text").textContent =
+      "Server " + ip + ":" + port + " membutuhkan password:";
+  document.getElementById("pw-input").value = "";
+  document.getElementById("pw-overlay").classList.add("show");
+  setTimeout(function () {
+    document.getElementById("pw-input").focus();
+  }, 100);
+}
+function hidePasswordPrompt() {
+  document.getElementById("pw-overlay").classList.remove("show");
+}
+document.getElementById("pw-ok").onclick = function () {
+  var pw = document.getElementById("pw-input").value;
+  hidePasswordPrompt();
+  doConnect(pwIp, pwPort, pw);
+};
+document.getElementById("pw-cancel").onclick = hidePasswordPrompt;
+document.getElementById("pw-input").onkeydown = function (ev) {
+  if (ev.key === "Enter") document.getElementById("pw-ok").click();
+};
 function setMode(m) {
   mode = m;
   ["lan", "net", "fav"].forEach(function (x) {
@@ -170,7 +234,9 @@ document.getElementById("ref").onclick = doRefresh;
 document.getElementById("go").onclick = function () {
   var v = document.getElementById("ipport").value.trim();
   var m = v.match(/^([^:]+):(\d+)$/);
-  if (m) connectTo(m[1], parseInt(m[2], 10));
+  // Manual: tidak tahu has_password — selalu tawarkan input password
+  // (kosongkan jika server tanpa password, seperti dialog SA-MP).
+  if (m) showPasswordPrompt(m[1], parseInt(m[2], 10));
 };
 
 // Default: scan LAN (tanpa VPS).
