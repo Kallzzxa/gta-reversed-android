@@ -277,6 +277,15 @@ function onPlayerCommand(id, name, cmd, args)
                 tostring(romp.getPlayerPing(id)) .. " ms.")
         end
         return true
+    elseif cmd == "bubble" then
+        -- Chat bubble ala SA-MP SetPlayerChatBubble: /bubble <teks>
+        if args == "" then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Pakai: /bubble <teks>")
+        else
+            romp.setPlayerChatBubble(id, args, 0xFFFFFFFF, 25.0, 5000)
+        end
+        return true
     elseif cmd == "tp" then
         -- Teleport ala SA-MP SetPlayerPos: /tp <x> <y> <z>
         local x, y, z = args:match("^([%-%d%.]+)%s+([%-%d%.]+)%s+([%-%d%.]+)%s*$")

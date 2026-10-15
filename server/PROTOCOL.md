@@ -800,6 +800,43 @@ tampilkan ping sendiri.
 Test: `~/workspace/romp/tests/test_scoreboard.py`
 (+ `test_scoreboard_gamemode.lua`) — 27 checks.
 
+## Nametag + chat bubble 3D ala SA-MP
+
+Nametag = 3D text label (paket `0x28`–`0x2B`, lihat bagian label) berisi nama
+pemain, di-attach ke pemain (`attach_type=1`, offset `0,0,2.6` di atas
+kepala). Dibuat otomatis saat pemain join (termasuk NPC), dihapus saat
+leave — server juga otomatis menghapus label yang di-attach saat pemain
+disconnect. Chat bubble ala SA-MP `SetPlayerChatBubble` = label sementara
+berisi teks chat, di-attach di atas nametag (`0,0,3.4`), otomatis dihapus
+setelah `expiretime` (via `romp.setTimer`).
+
+Render client: paket `0x28`–`0x2B` yang sama dengan label biasa —
+`pc-game/` (Godot) sudah merendernya; client Android menerima via hook
+`IROMPPlatform::OnLabelSpawn/Dispawn/Text/Pos` (implementasi render di
+game menunggu reversal, lihat `ROMP.h`).
+
+### API Lua
+
+```
+romp.showNameTags(on)              -- ala SA-MP ShowNameTags; default true
+romp.areNameTagsEnabled()          -- -> bool
+romp.setNameTagDrawDistance(d)     -- ala SA-MP; default 25.0 (label dibuat ulang)
+romp.getNameTagDrawDistance()      -- -> number
+romp.setPlayerNametagColor(pid, color)  -- warna nametag (0xRRGGBBAA)
+romp.setPlayerChatBubble(pid, text, color, drawdistance, expiretime)
+    -- ala SA-MP; expiretime ms (50..30000); text kosong = sembunyikan;
+    -- satu pemain satu bubble aktif (yang baru menggantikan yang lama)
+romp.setAutoChatBubble(on)         -- bubble otomatis tiap chat normal; default true
+romp.isAutoChatBubble()            -- -> bool
+```
+
+`server/nametag.lua` dimuat otomatis (daftar `g_helpers` di `romp_lua.c`).
+Chat normal (bukan command) yang lolos filter gamemode otomatis memunculkan
+bubble 5 detik. Command demo di gamemode default: `/bubble <teks>`.
+
+Test: `~/workspace/romp/tests/test_nametag.py`
+(+ `test_nametag_gamemode.lua`) — 29 checks.
+
 ## Master Server (daftar server publik)
 
 `romp-master` (lihat `server/src/romp_master.c`, default port 7778) menyimpan
