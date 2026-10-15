@@ -92,6 +92,11 @@ typedef int SOCKET;
 #define P_VEH_PLATE   0x4A  /* server -> client: plat nomor kendaraan berubah
                                (vid+len+bytes, vw-scoped) */
 
+/* ---- Spectate ala SA-MP (lihat romp_spectate.h & PROTOCOL.md) ---- */
+#define P_SPECTATE    0x4B  /* server -> client: status spectate pemain
+                               (pid+spectating+type+target+mode,
+                               broadcast vw-scoped ke vw penonton) */
+
 /* ---- Sinkronisasi senjata & tembakan ala SA-MP (lihat PROTOCOL.md) ---- */
 #define P_WPN         0x17  /* client -> server: event tembakan */
 #define P_WPN_SYNC    0x18  /* server -> client: broadcast tembakan */
@@ -303,6 +308,15 @@ typedef struct Client {
      * otoritatif server, default 0, dikirim per-pemain (0x49 MONEY_SET)
      * hanya ke pemiliknya sendiri. */
     int32_t  money;
+    /* Spectate ala SA-MP (lihat romp_spectate.h): mode penonton.
+     * 0x4B SPECTATE di-broadcast vw-scoped ke vw penonton tiap berubah:
+     * client penonton mengikuti target via kamera, client lain
+     * menyembunyikan ped si penonton. Paket 0x10 dari penonton dibuang
+     * (posisi beku ala SA-MP). */
+    uint8_t  spectating;      /* 1 = sedang spectate */
+    uint8_t  spectate_type;   /* 0=none, 1=pemain, 2=kendaraan */
+    uint16_t spectate_target; /* pid atau vid target */
+    uint8_t  spectate_mode;   /* 0=normal, 1=fixed, 2=side */
     struct Client *next;
 } Client;
 

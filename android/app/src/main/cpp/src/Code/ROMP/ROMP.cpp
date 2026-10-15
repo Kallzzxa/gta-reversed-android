@@ -489,6 +489,16 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
             platform_->OnVehicleNumberPlate(pi.vid, pi.plate);
             break;
         }
+        case PacketType::SPECTATE: {
+            // Spectate ala SA-MP (romp.togglePlayerSpectating /
+            // playerSpectatePlayer / playerSpectateVehicle): broadcast
+            // vw-scoped + resync saat join / pindah vw.
+            SpectateInfo si;
+            if (!parse_spectate(payload, len, si)) break;
+            platform_->OnPlayerSpectate(si.pid, si.spectating,
+                                        si.target_type, si.target, si.mode);
+            break;
+        }
         default:
             // Tipe tak dikenal: abaikan (forward-compat protokol).
             break;

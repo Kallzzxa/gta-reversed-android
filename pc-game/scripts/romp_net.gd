@@ -57,6 +57,7 @@ const T_DEATH_MSG := 0x47
 const T_WANTED_SET := 0x48
 const T_MONEY_SET := 0x49
 const T_VEH_PLATE := 0x4A
+const T_SPECTATE := 0x4B
 const T_NUI := 0x40
 
 const VER := 1
@@ -119,6 +120,7 @@ signal death_msg(killerid: int, victimid: int, weaponid: int)
 signal wanted_set(pid: int, level: int)
 signal money_set(pid: int, amount: int)
 signal veh_plate(vid: int, plate: String)
+signal spectate(pid: int, spectating: int, target_type: int, target: int, mode: int)
 signal nui_message(json_text: String)
 signal ping_updated(ms: int)
 
@@ -438,6 +440,12 @@ func _dispatch(ftype: int, payload: PackedByteArray) -> void:
 			# bytes(len). Broadcast vw-scoped + resync saat join / pindah
 			# vw. "" = tak ada plat.
 			veh_plate.emit(r.u16(), r.str8())
+		T_SPECTATE:
+			# Spectate ala SA-MP (0x4B): u8 pid + u8 spectating +
+			# u8 target_type (0=none/1=pemain/2=kendaraan) + u16 target LE +
+			# u8 mode (0=normal/1=fixed/2=side). Broadcast vw-scoped ke vw
+			# penonton + resync saat join / pindah vw.
+			spectate.emit(r.u8(), r.u8(), r.u8(), r.u16(), r.u8())
 		T_WPN_SYNC:
 			var shooter := r.u16()
 			var weapon := r.u16()

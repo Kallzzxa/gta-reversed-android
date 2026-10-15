@@ -136,6 +136,7 @@ func _setup_multiplayer() -> void:
 	net.vehicle_params.connect(_on_vehicle_params)
 	net.vehicle_params_p.connect(_on_vehicle_params_p)
 	net.veh_plate.connect(_on_vehicle_plate)
+	net.spectate.connect(_on_spectate)
 	net.attach_obj_set.connect(_on_attach_obj_set)
 	net.attach_obj_remove.connect(_on_attach_obj_remove)
 	net.skill_set.connect(_on_skill_set)
@@ -303,6 +304,51 @@ func _on_vehicle_plate(vid: int, plate: String) -> void:
 	# 0x4A VEH_PLATE ala SA-MP SetVehicleNumberPlate.
 	if _remote_cars.has(vid):
 		_remote_cars[vid].set_number_plate(plate)
+
+
+## Spectate ala SA-MP (0x4B SPECTATE): status penonton per pemain
+## (TogglePlayerSpectating / PlayerSpectatePlayer / PlayerSpectateVehicle).
+var _spectate_state := {}  # pid -> {target_type, target, mode}
+
+
+func _on_spectate(pid: int, spectating: int, target_type: int,
+		target: int, mode: int) -> void:
+	# 0x4B SPECTATE: broadcast vw-scoped ke vw penonton + resync.
+	if spectating == 1:
+		_spectate_state[pid] = {"target_type": target_type,
+			"target": target, "mode": mode}
+	else:
+		_spectate_state.erase(pid)
+	if pid == net.player_id:
+		# Pemain lokal (berhenti) spectate: alihkan kamera mengikuti
+		# target, sembunyikan ped lokal ala SA-MP.
+		_apply_local_spectate(spectating == 1, target_type, target)
+	elif _remotes.has(pid):
+		# Pemain remote (berhenti) spectate: sembunyikan / tampilkan
+		# ped-nya (tetap ada di daftar pemain & scoreboard).
+		_remotes[pid].visible = spectating == 0
+
+
+func _apply_local_spectate(on: bool, target_type: int, target: int) -> void:
+	if on:
+		var node: Node3D = null
+		if target_type == 1 and _remotes.has(target):
+			node = _remotes[target]
+		elif target_type == 2 and _remote_cars.has(target):
+			node = _remote_cars[target]
+		if node:
+			camera_rig.target = node
+			player.visible = false
+			mp_chat.add_message(RompNet.CHAT_INFO,
+				"*** 👁 Mode spectate: kamera mengikuti target.")
+		else:
+			mp_chat.add_message(RompNet.CHAT_INFO,
+				"*** 👁 Mode spectate aktif (target belum ter-stream).")
+	else:
+		camera_rig.target = player
+		player.visible = true
+		mp_chat.add_message(RompNet.CHAT_INFO,
+			"*** 👁 Mode spectate berhenti.")
 
 
 func _on_vehicle_params(vid: int, engine: int, lights: int, alarm: int,

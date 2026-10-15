@@ -178,6 +178,20 @@ public:
     virtual void OnVehicleNumberPlate(uint16_t /*vid*/,
                                       const std::string& /*plate*/) {}
 
+    // Spectate ala SA-MP (paket 0x4B SPECTATE, dari
+    // romp.togglePlayerSpectating/playerSpectatePlayer/
+    // playerSpectateVehicle): pemain pid masuk (spectating=1) atau keluar
+    // (spectating=0) mode penonton. target_type 0=none/1=pemain/2=kendaraan,
+    // target = pid/vid (0 bila none), mode 0=normal/1=fixed/2=side.
+    // Broadcast vw-scoped ke vw penonton + resync saat join / pindah vw.
+    // Bila pid adalah pemain lokal: alihkan kamera mengikuti target.
+    // Bila pemain lain: sembunyikan (spectating=1) / tampilkan lagi
+    // (spectating=0) ped-nya. Default no-op.
+    // TODO(GAME): ikuti target via kamera; hide/show ped remote.
+    virtual void OnPlayerSpectate(uint8_t /*pid*/, uint8_t /*spectating*/,
+                                  uint8_t /*target_type*/, uint16_t /*target*/,
+                                  uint8_t /*mode*/) {}
+
     // Log ke konsol game / logcat.
     virtual void Log(const std::string& msg) = 0;
 

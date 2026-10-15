@@ -601,6 +601,79 @@ hancur; parse unit C++ di `tests/client/test_plate_parse.cpp`;
 cek sinyal Godot (sintetik + end-to-end `/plategodot`) di
 `pc-game/tests/mp_client_test.gd` (via `test_godot_mp.py`).
 
+### 0x4B SPECTATE (Server -> Client)
+
+Mode penonton ala SA-MP (`TogglePlayerSpectating` /
+`PlayerSpectatePlayer` / `PlayerSpectateVehicle`): dikirim server ke semua
+pemain di virtual world si penonton setiap status spectate berubah —
+bersifat otoritatif server, tidak ada paket client -> server untuk spectate.
+
+Efek di client:
+
+- client si penonton (`pid` == id sendiri): masuk mode kamera mengikuti
+  target (`mode` 0=normal, 1=fixed, 2=side ala SA-MP `SPECTATE_MODE_*`);
+  `target_type` 0 = spectate tanpa target (kamera bebas).
+- client lain yang se-vw: sembunyikan ped si penonton (`spectating`=1) /
+  tampilkan lagi (`spectating`=0). Pemain tetap ada di daftar pemain &
+  scoreboard ala SA-MP.
+
+Selama spectate, paket posisi `0x10` dari si penonton DIBUANG server
+(posisi beku ala SA-MP — tak di-relay, tak memicu anti-cheat). Pemain yang
+baru join menerima `0x4B` untuk semua yang sedang spectate di vw-nya
+(`spectate_sync_join`); saat penonton pindah vw, state di-broadcast ulang
+di vw baru.
+
+Frame `0x4B` SPECTATE (7 byte):
+
+```
+u8  pid         // pemain yang (berhenti) spectate
+u8  spectating  // 0 = berhenti, 1 = spectate
+u8  target_type // 0=none, 1=pemain (target=pid), 2=kendaraan (target=vid)
+u16 target      // LE; 0 bila target_type=0
+u8  mode        // 0=normal, 1=fixed, 2=side
+```
+
+Validasi server: NPC tak bisa jadi penonton (tak punya kamera) tapi boleh
+jadi target; target pemain harus connect, bukan diri sendiri, dan se-vw
+dengan penonton (stream posisi target hanya jalan se-vw); target kendaraan
+harus valid & tidak hancur dan se-vw; mode 0..2. `playerSpectatePlayer` /
+`playerSpectateVehicle` otomatis mengaktifkan mode spectate bila belum
+(perpanjangan RO-MP — SA-MP mewajibkan `TogglePlayerSpectating` dulu).
+Idempoten: nilai sama -> `true` tanpa broadcast.
+
+Auto-stop (broadcast `0x4B` `spectating`=0 + event): target pemain
+disconnect, target kendaraan di-destroy, atau vw berubah sehingga penonton
+& target tak lagi se-vw.
+
+API Lua (lihat `server/README.md`):
+`romp.togglePlayerSpectating(pid, on)` -> bool,
+`romp.playerSpectatePlayer(pid, targetpid[, mode])` -> bool,
+`romp.playerSpectateVehicle(pid, vid[, mode])` -> bool,
+`romp.isPlayerSpectating(pid)` -> bool,
+`romp.getPlayerSpectateTarget(pid)` -> `{type="player"|"vehicle"|"none",
+id, mode}` | nil.
+Event `onPlayerSpectate(pid, spectating, targettype, target, mode)` —
+perpanjangan RO-MP (SA-MP tak punya event ini).
+Konstanta: `romp.SPECTATE_TARGET_NONE/PLAYER/VEHICLE`,
+`romp.SPECTATE_MODE_NORMAL/FIXED/SIDE`.
+
+Client game menerapkan spectate dari `0x4B` langsung
+(C++: `IROMPPlatform::OnPlayerSpectate`; Godot: sinyal `spectate` ->
+kamera mengikuti target bila pemain lokal, hide/show ped remote bila
+pemain lain).
+Demo: `/spec <id> [mode]`, `/specv <vid> [mode]`, `/unspec` di
+`server/gamemode.lua`.
+
+Test: `~/workspace/romp/tests/test_spectate.py`
+(+ `test_spectate_gamemode.lua`) — toggle on/off, broadcast ke penonton &
+viewer, idempotensi, paket posisi dibuang, spectate pemain/kendaraan,
+validasi (diri sendiri/pid invalid/mode invalid/NPC penonton/cross-vw),
+NPC jadi target, auto-stop (target disconnect, kendaraan destroy,
+pindah vw, NPC target disconnect), resync join, event;
+parse unit C++ di `tests/client/test_spectate_parse.cpp`;
+cek sinyal Godot (sintetik + end-to-end `/specgodot`) di
+`pc-game/tests/mp_client_test.gd` (via `test_godot_mp.py`).
+
 ### 0x21 CHAT_MSG
 
 ```

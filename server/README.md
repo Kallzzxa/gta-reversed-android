@@ -582,6 +582,33 @@ plat. Demo: `/plat <teks>` (tanpa argumen = hapus) pada kendaraan demo
 
 `romp.getVehicles()` kini membawa field `plate` per kendaraan.
 
+### Spectate ala SA-MP (`TogglePlayerSpectating` / `PlayerSpectatePlayer` / `PlayerSpectateVehicle`)
+
+Mode penonton, otoritatif di server. Setiap perubahan status di-broadcast
+ke virtual world si penonton via paket `0x4B` (dan di-resync ke pemain yang
+baru join / pindah vw): client si penonton mengalihkan kamera mengikuti
+target (mode 0=normal, 1=fixed, 2=side), client lain menyembunyikan ped si
+penonton (tetap ada di daftar pemain & scoreboard). Selama spectate, paket
+posisi `0x10` dari si penonton dibuang server (posisi beku ala SA-MP).
+Auto-stop saat target disconnect / kendaraan di-destroy / pindah vw
+melewati batas world. NPC tak bisa jadi penonton (tak punya kamera) tapi
+boleh jadi target. Demo: `/spec <id> [mode]`, `/specv <vid> [mode]`,
+`/unspec` di `server/gamemode.lua`.
+
+| API | Keterangan |
+|-----|------------|
+| `romp.togglePlayerSpectating(pid, on)` | Masuk/keluar mode penonton → `true`/`false` (`false` bila pemain tak valid / NPC) |
+| `romp.playerSpectatePlayer(pid, targetpid[, mode])` | Kamera mengikuti pemain (otomatis masuk mode spectate); mode default 0 → `true`/`false` |
+| `romp.playerSpectateVehicle(pid, vid[, mode])` | Kamera mengikuti kendaraan → `true`/`false` |
+| `romp.isPlayerSpectating(pid)` | `true` bila pemain sedang spectate |
+| `romp.getPlayerSpectateTarget(pid)` | `{type="player"\|"vehicle"\|"none", id, mode}` / nil bila tidak spectate |
+
+Event `onPlayerSpectate(pid, spectating, targettype, target, mode)` —
+perpanjangan RO-MP (SA-MP tak punya event ini); `targettype`
+0=none/1=pemain/2=kendaraan. Konstanta:
+`romp.SPECTATE_TARGET_NONE/PLAYER/VEHICLE`,
+`romp.SPECTATE_MODE_NORMAL/FIXED/SIDE`.
+
 ### Database SQLite untuk gamemode (skor, akun)
 
 Tanpa server eksternal: cukup set `database <path>` di `server.cfg`

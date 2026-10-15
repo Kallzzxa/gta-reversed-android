@@ -68,6 +68,7 @@ func _run() -> void:
 	_net.wanted_set.connect(_on_wanted)
 	_net.money_set.connect(_on_money)
 	_net.veh_plate.connect(_on_plate)
+	_net.spectate.connect(_on_spectate)
 
 	# --- 1. Handshake + WELCOME ---
 	_net.connect_to("127.0.0.1", _port, "GodotTes", "rahasia")
@@ -194,6 +195,26 @@ func _run() -> void:
 	await create_timer(2.5).timeout  # jeda anti-spam server (maks 3/2dtk)
 	_net.send_chat("/plategodot")
 	_check(await _wait("plate_real", 10.0), "veh_plate_server_diterima")
+
+	# --- 5f. Spectate ala SA-MP (0x4B SPECTATE): frame sintetik langsung
+	# ke parser + end-to-end via /specgodot
+	# (romp.playerSpectatePlayer(GodotTes, PeerPy, 1) -> 0x4B broadcast) ---
+	_ev.erase("spec_ok")
+	_ev.erase("spec_real")
+	var spay := StreamPeerBuffer.new()
+	spay.big_endian = false
+	spay.put_u8(5)    # pid penonton
+	spay.put_u8(1)    # spectating=1
+	spay.put_u8(1)    # target_type=1 (pemain)
+	spay.put_u16(9)   # target pid 9
+	spay.put_u8(2)    # mode=2 (side)
+	_net._inbuf.append_array(_mk_frame(RompNet.T_SPECTATE, spay.data_array))
+	_net._parse()
+	_check(_ev.get("spec_ok", false), "spectate_diterima")
+	# end-to-end: /specgodot -> GodotTes spectate PeerPy mode fixed (1)
+	await create_timer(2.5).timeout  # jeda anti-spam server (maks 3/2dtk)
+	_net.send_chat("/specgodot")
+	_check(await _wait("spec_real", 10.0), "spectate_server_diterima")
 
 	# --- 6. Password salah -> REJECT -> connect_failed ---
 	_ev.erase("failed")
@@ -369,3 +390,15 @@ func _on_plate(vid: int, plate: String) -> void:
 		_ev["plate_ok"] = true
 	if plate == "GODOT1":
 		_ev["plate_real"] = true
+
+
+func _on_spectate(pid: int, spectating: int, target_type: int,
+		target: int, mode: int) -> void:
+	# Frame sintetik: (5,1,1,9,2); end-to-end /specgodot: GodotTes
+	# (player_id) spectate PeerPy dengan mode fixed (1).
+	if pid == 5 and spectating == 1 and target_type == 1 \
+			and target == 9 and mode == 2:
+		_ev["spec_ok"] = true
+	if pid == _net.player_id and spectating == 1 \
+			and target_type == 1 and mode == 1:
+		_ev["spec_real"] = true

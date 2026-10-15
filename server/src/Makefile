@@ -17,7 +17,7 @@ CC_LINUX   = gcc
 CC_WINDOWS = x86_64-w64-mingw32-gcc
 
 CFLAGS   = -O2 -Wall -Wextra
-SRC      = romp_server.c romp_lua.c romp_vehicle.c romp_label.c romp_weapon.c romp_anticheat.c romp_sqlite.c romp_timer.c romp_object.c romp_actor.c romp_audio.c romp_world.c romp_attach.c romp_skill.c romp_marker.c romp_death.c romp_wanted.c romp_money.c
+SRC      = romp_server.c romp_lua.c romp_vehicle.c romp_label.c romp_weapon.c romp_anticheat.c romp_sqlite.c romp_timer.c romp_object.c romp_actor.c romp_audio.c romp_world.c romp_attach.c romp_skill.c romp_marker.c romp_death.c romp_wanted.c romp_money.c romp_spectate.c
 LUA_SRC  = $(wildcard ../vendor/lua/*.c)
 LUA_INC  = -I../vendor/lua
 # SQLite amalgamation (vendor): dikompilasi terpisah tanpa -Wall agar

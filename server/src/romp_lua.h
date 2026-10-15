@@ -86,6 +86,12 @@ void lua_on_wanted_level_change(int pid, int oldlevel, int newlevel);
  * onPlayerMoneyChange(pid, oldamount, newamount). Dipakai gamemode untuk
  * logika bank/payday. */
 void lua_on_player_money_change(int pid, int32_t oldamount, int32_t newamount);
+/* Event spectate ala SA-MP (perpanjangan RO-MP): menyala setiap status
+ * spectate berubah — onPlayerSpectate(pid, spectating, targettype, target,
+ * mode). spectating 0/1; targettype 0=none/1=pemain/2=kendaraan;
+ * target = pid/vid (0 bila none); mode 0=normal/1=fixed/2=side. */
+void lua_on_player_spectate(int pid, int spectating, int targettype,
+                            int target, int mode);
 /* Event interior & virtual world ala SA-MP (tidak ada default C):
  * onPlayerInteriorChange(pid, old, new),
  * onPlayerVirtualWorldChange(pid, old, new). */

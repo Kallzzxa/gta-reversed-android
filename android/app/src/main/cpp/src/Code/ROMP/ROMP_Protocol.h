@@ -103,6 +103,13 @@ enum class PacketType : uint8_t {
     // client (broadcast vw-scoped + resync saat join / pindah vw).
     VEH_PLATE    = 0x4A,  // plat berubah: u16 vid + u8 len + bytes(len)
                           // (len 0..32, "" = tak ada plat)
+    // Spectate ala SA-MP (TogglePlayerSpectating/PlayerSpectatePlayer/
+    // PlayerSpectateVehicle), server -> client (broadcast vw-scoped ke
+    // vw penonton + resync saat join / pindah vw).
+    SPECTATE     = 0x4B,  // u8 pid + u8 spectating + u8 target_type +
+                          // u16 target LE + u8 mode (6B payload);
+                          // target_type 0=none/1=pemain/2=kendaraan,
+                          // mode 0=normal/1=fixed/2=side
 };
 
 // Alasan PLAYER_LEAVE (u8 reason).
@@ -837,6 +844,30 @@ inline bool parse_plate(const uint8_t* data, size_t len,
     if (plen > 32) return false;
     if (!r.get_str(out.plate, plen)) return false;
     return len == 3 + plen;  // tolak payload kepanjangan/kependekan
+}
+
+// ---- Spectate ala SA-MP (server -> client) ----
+
+// Info status spectate pemain ala SA-MP (0x4B SPECTATE).
+struct SpectateInfo {
+    uint8_t pid = 0;         // pemain yang (berhenti) spectate (u8)
+    uint8_t spectating = 0;  // 0 = berhenti, 1 = spectate (u8)
+    uint8_t target_type = 0; // 0=none, 1=pemain, 2=kendaraan (u8)
+    uint16_t target = 0;     // pid atau vid target, u16 LE (0 bila none)
+    uint8_t mode = 0;        // 0=normal, 1=fixed, 2=side (u8)
+};
+
+// 0x4B SPECTATE: u8 pid | u8 spectating | u8 target_type | u16 target LE |
+// u8 mode (6 byte payload).
+inline bool parse_spectate(const uint8_t* data, size_t len,
+                           SpectateInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u8(out.pid)) return false;
+    if (!r.get_u8(out.spectating)) return false;
+    if (!r.get_u8(out.target_type)) return false;
+    if (!r.get_u16(out.target)) return false;
+    if (!r.get_u8(out.mode)) return false;
+    return len == 6;  // tolak payload kepanjangan/kependekan
 }
 
 struct ChatMsgInfo {

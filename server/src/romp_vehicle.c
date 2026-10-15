@@ -5,6 +5,7 @@
 #include "romp_vehicle.h"
 #include "romp_label.h"
 #include "romp_lua.h"
+#include "romp_spectate.h"
 
 static Vehicle *g_vehicles = NULL;
 
@@ -484,6 +485,8 @@ int vehicle_destroy(int id) {
             eject_all(v, 1);
             /* 3D text label yang di-attach ikut terhapus (ala SA-MP) */
             label_on_vehicle_destroy(id);
+            /* penonton yang menarget kendaraan ini di-stop (ala SA-MP) */
+            spectate_on_vehicle_destroy(id);
             /* params per-pemain kendaraan ini ikut dibersihkan */
             vehicle_params_vehicle_cleanup(id);
             bcast_veh_despawn(id, v->vw);
@@ -925,6 +928,8 @@ int vehicle_set_vw(int id, uint32_t vw) {
     bcast_veh_spawn(v);
     /* 3D text label yang di-attach ikut pindah vw */
     label_sync_vehicle_world(v->id, old);
+    /* penonton yang menarget kendaraan ini & kini beda vw di-stop */
+    spectate_on_vehicle_world_change(v->id);
     for (int s = 0; s < VEH_SEATS; s++) {
         int occ = vehicle_occupant(v->id, s);
         if (occ >= 0) bcast_veh_seat(v, s, occ);

@@ -238,6 +238,23 @@ function onPlayerMoneyChange(pid, oldamount, newamount)
     return true
 end
 
+-- Spectate ala SA-MP: perpanjangan RO-MP — event ini TIDAK ada di SA-MP.
+-- Menyala setiap status spectate berubah (mulai/berhenti/ganti target).
+function onPlayerSpectate(pid, spectating, targettype, target, mode)
+    local name = romp.getPlayerName(pid) or ("id " .. pid)
+    if spectating == 1 then
+        local tname = targettype == 1 and "pemain" or
+                      targettype == 2 and "kendaraan" or "tanpa target"
+        romp.sendChatToAll(romp.KIND_SYS,
+            "*** 👁 " .. name .. " mulai spectate " .. tname ..
+            (targettype ~= 0 and (" (id " .. target .. ")") or "") .. ".")
+    else
+        romp.sendChatToAll(romp.KIND_SYS,
+            "*** 👁 " .. name .. " berhenti spectate.")
+    end
+    return true
+end
+
 -- Pemain leave. reason: 0=quit, 1=kick, 2=timeout.
 -- Default C: "*** <nama> (id) keluar/di-kick/timeout."
 function onPlayerLeave(id, name, reason)
@@ -976,6 +993,54 @@ function onPlayerCommand(id, name, cmd, args)
             romp.sendChatToPlayer(id, romp.KIND_INFO,
                 "*** Pakai: /gz create|show|showall|flash|stopflash|" ..
                 "hide|hideall|destroy|list")
+        end
+        return true
+    elseif cmd == "spec" then
+        -- Spectate pemain ala SA-MP (PlayerSpectatePlayer):
+        -- /spec <id> [mode] -> kamera mengikuti pemain target
+        -- (mode 0=normal, 1=fixed, 2=side); /spec tanpa argumen = info.
+        local tgt, m = args:match("(%d+)%s*(%d*)")
+        tgt = tonumber(tgt)
+        if not tgt then
+            local s = romp.getPlayerSpectateTarget(id)
+            romp.sendChatToPlayer(id, romp.KIND_INFO, s and
+                ("*** Spectate: " .. s.type .. " id " .. s.id ..
+                 " mode " .. s.mode .. ". /unspec untuk berhenti.") or
+                "*** Kamu tidak spectate. Pakai: /spec <id> [mode]")
+            return true
+        end
+        m = (m ~= "" and tonumber(m)) or 0
+        if romp.playerSpectatePlayer(id, tgt, m) then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** 👁 Spectate pemain id " .. tgt .. " (mode " .. m .. ").")
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal spectate (target tak valid / beda world).")
+        end
+        return true
+    elseif cmd == "specv" then
+        -- Spectate kendaraan ala SA-MP (PlayerSpectateVehicle):
+        -- /specv <vid> [mode] -> kamera mengikuti kendaraan.
+        local vid, m = args:match("(%d+)%s*(%d*)")
+        vid = tonumber(vid)
+        m = (m ~= "" and tonumber(m)) or 0
+        if vid and romp.playerSpectateVehicle(id, vid, m) then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** 👁 Spectate kendaraan id " .. vid .. ".")
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal spectate kendaraan. Pakai: /specv <vid> [mode]")
+        end
+        return true
+    elseif cmd == "unspec" then
+        -- Keluar mode spectate ala SA-MP (TogglePlayerSpectating false).
+        if romp.isPlayerSpectating(id) then
+            romp.togglePlayerSpectating(id, false)
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** 👁 Mode spectate berhenti.")
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Kamu tidak sedang spectate.")
         end
         return true
     end

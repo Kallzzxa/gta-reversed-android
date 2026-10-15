@@ -27,6 +27,7 @@
 #include "romp_death.h"
 #include "romp_wanted.h"
 #include "romp_money.h"
+#include "romp_spectate.h"
 
 #include <time.h>
 #include <pthread.h>
@@ -428,6 +429,14 @@ void player_set_world(Client *c, int interior, uint32_t vw) {
      * mengubah siapa yang saling terlihat. */
     if (old_vw != vw || old_int != c->interior)
         marker_sync_world(c);
+    /* Spectate ala SA-MP: relasi yang kini cross-vw (atau targetnya hilang)
+     * di-stop otomatis; kirim state penonton lain yang kini terlihat ke c;
+     * bila c masih spectate, broadcast ulang state-nya di vw baru agar
+     * viewer baru menyembunyikan ped-nya. */
+    spectate_on_world_change();
+    spectate_sync_join(c);
+    if (c->spectating)
+        spectate_broadcast(c);
     log_msg("[vw] %s (id %d): interior %d->%d, vw %u->%u",
             c->name, c->id, old_int, c->interior, old_vw, vw);
 }
@@ -558,6 +567,9 @@ static void do_join(Client *c) {
     /* resync world settings (gravity/weather/time) ke pemain baru */
     world_send_to(c);
 
+    /* resync status spectate pemain lain yang terlihat ke pemain baru */
+    spectate_sync_join(c);
+
     /* beritahu yang lain (hanya yang se-vw & se-interior) */
     size_t jn = build_join(b, c);
     broadcast_scoped(b, jn, c, c);
@@ -591,6 +603,8 @@ static void do_leave(Client *c, int reason) {
     wanted_on_player_leave(c);
     /* bersihkan saldo pemain ini */
     money_on_player_leave(c);
+    /* bersihkan state spectate pemain ini + stop penonton yang menargetnya */
+    spectate_on_player_leave(c);
     /* bersihkan params kendaraan per-pemain miliknya (ala SA-MP) */
     vehicle_params_player_cleanup(c->id);
     uint8_t b[4];
@@ -659,6 +673,8 @@ int npc_connect(const char *name) {
     wanted_init(c);
     /* Uang: 0 ala SA-MP. */
     money_init(c);
+    /* Spectate: mati ala SA-MP. */
+    spectate_init(c);
     c->last_activity = now_ms();
     strncpy(c->ip, "npc", sizeof(c->ip) - 1);
     c->next = g_clients;
@@ -701,6 +717,8 @@ void npc_disconnect(int id, int reason) {
     wanted_on_player_leave(c);
     /* bersihkan saldo milik NPC ini */
     money_on_player_leave(c);
+    /* bersihkan state spectate milik NPC ini + stop penontonnya */
+    spectate_on_player_leave(c);
     /* salin field yang dipakai setelah free */
     int nid = c->id;
     uint8_t interior = c->interior;
@@ -879,12 +897,17 @@ static void handle_hello(Client *c, const uint8_t *p, size_t n) {
     wanted_init(c);
     /* Uang: 0 ala SA-MP. */
     money_init(c);
+    /* Spectate: mati ala SA-MP. */
+    spectate_init(c);
     c->last_activity = now_ms();
     do_join(c);
 }
 
 static void handle_pos(Client *c, const uint8_t *p, size_t n) {
     if (!c->handshaked || n < 19) return;
+    /* Spectate ala SA-MP: ped penonton tak ada di dunia — paket posisi
+     * dibuang diam-diam (posisi beku, tak di-relay, tak kena anti-cheat). */
+    if (c->spectating) return;
     uint64_t t = now_ms();
     if (t - c->last_pos_ms < 30) return; /* rate limit 33 Hz */
     /* Simpan posisi dunia (format paket 0x10: float x,y,z,heading; u8 state;

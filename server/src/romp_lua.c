@@ -20,6 +20,7 @@
 #include "romp_death.h"
 #include "romp_wanted.h"
 #include "romp_money.h"
+#include "romp_spectate.h"
 
 #include "../vendor/sqlite/sqlite3.h"
 
@@ -1660,6 +1661,76 @@ static int l_romp_get_player_money(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- API spectate ala SA-MP ----------------
+ * romp.togglePlayerSpectating(pid, on) -> bool
+ *   Mirip SA-MP TogglePlayerSpectating: on=true -> masuk mode penonton
+ *   (target tetap seperti sebelumnya / none); on=false -> keluar & hapus
+ *   target. Broadcast 0x4B vw-scoped + event onPlayerSpectate. false bila
+ *   pemain tak valid atau NPC (NPC tak punya kamera).
+ * romp.playerSpectatePlayer(pid, targetpid[, mode]) -> bool
+ *   ala SA-MP PlayerSpectatePlayer: kamera mengikuti pemain target.
+ *   Otomatis masuk mode spectate bila belum (tak wajib Toggle dulu —
+ *   perpanjangan RO-MP). mode 0=normal/1=fixed/2=side (default 0).
+ *   false bila target tak valid / diri sendiri / beda vw / mode invalid.
+ * romp.playerSpectateVehicle(pid, vid[, mode]) -> bool
+ *   ala SA-MP PlayerSpectateVehicle: kamera mengikuti kendaraan target.
+ *   false bila kendaraan tak valid/hancur / beda vw / mode invalid.
+ * romp.isPlayerSpectating(pid) -> bool
+ * romp.getPlayerSpectateTarget(pid) -> table | nil
+ *   { type = "player"|"vehicle"|"none", id = pid|vid|0, mode = 0|1|2 }
+ *   (nil bila pemain tak valid / tidak spectate)
+ */
+static int l_romp_toggle_player_spectating(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int on = lua_toboolean(Ls, 2);
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && spectate_toggle(c, on));
+    return 1;
+}
+
+static int l_romp_player_spectate_player(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int target = (int)luaL_checkinteger(Ls, 2);
+    int mode = (int)luaL_optinteger(Ls, 3, SPECTATE_MODE_NORMAL);
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && spectate_player(c, target, mode));
+    return 1;
+}
+
+static int l_romp_player_spectate_vehicle(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int vid = (int)luaL_checkinteger(Ls, 2);
+    int mode = (int)luaL_optinteger(Ls, 3, SPECTATE_MODE_NORMAL);
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && spectate_vehicle(c, vid, mode));
+    return 1;
+}
+
+static int l_romp_is_player_spectating(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, spectate_is(c));
+    return 1;
+}
+
+static int l_romp_get_player_spectate_target(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(pid);
+    int type = 0, target = 0, mode = 0;
+    if (!spectate_get(c, &type, &target, &mode)) {
+        lua_pushnil(Ls);
+        return 1;
+    }
+    lua_newtable(Ls);
+    const char *tname = "none";
+    if (type == SPECTATE_TARGET_PLAYER) tname = "player";
+    else if (type == SPECTATE_TARGET_VEHICLE) tname = "vehicle";
+    lua_pushstring(Ls, tname); lua_setfield(Ls, -2, "type");
+    lua_pushinteger(Ls, (lua_Integer)target); lua_setfield(Ls, -2, "id");
+    lua_pushinteger(Ls, (lua_Integer)mode); lua_setfield(Ls, -2, "mode");
+    return 1;
+}
+
 /* ---------------- API player marker ala SA-MP ----------------
  * romp.showPlayerMarkers(mode) -> bool
  *   Mirip SA-MP ShowPlayerMarkers: 0=off, 1=global, 2=streamed
@@ -2171,6 +2242,20 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_give_player_money); lua_setfield(Ls, -2, "givePlayerMoney");
     lua_pushcfunction(Ls, l_romp_reset_player_money); lua_setfield(Ls, -2, "resetPlayerMoney");
     lua_pushcfunction(Ls, l_romp_get_player_money); lua_setfield(Ls, -2, "getPlayerMoney");
+    /* spectate ala SA-MP (TogglePlayerSpectating/PlayerSpectatePlayer/PlayerSpectateVehicle) */
+    lua_pushcfunction(Ls, l_romp_toggle_player_spectating); lua_setfield(Ls, -2, "togglePlayerSpectating");
+    lua_pushcfunction(Ls, l_romp_player_spectate_player); lua_setfield(Ls, -2, "playerSpectatePlayer");
+    lua_pushcfunction(Ls, l_romp_player_spectate_vehicle); lua_setfield(Ls, -2, "playerSpectateVehicle");
+    lua_pushcfunction(Ls, l_romp_is_player_spectating); lua_setfield(Ls, -2, "isPlayerSpectating");
+    lua_pushcfunction(Ls, l_romp_get_player_spectate_target); lua_setfield(Ls, -2, "getPlayerSpectateTarget");
+    /* konstanta tipe target spectate ala SA-MP */
+    lua_pushinteger(Ls, SPECTATE_TARGET_NONE);    lua_setfield(Ls, -2, "SPECTATE_TARGET_NONE");
+    lua_pushinteger(Ls, SPECTATE_TARGET_PLAYER);  lua_setfield(Ls, -2, "SPECTATE_TARGET_PLAYER");
+    lua_pushinteger(Ls, SPECTATE_TARGET_VEHICLE); lua_setfield(Ls, -2, "SPECTATE_TARGET_VEHICLE");
+    /* konstanta mode kamera spectate ala SA-MP (SPECTATE_MODE_* di a_samp.inc) */
+    lua_pushinteger(Ls, SPECTATE_MODE_NORMAL); lua_setfield(Ls, -2, "SPECTATE_MODE_NORMAL");
+    lua_pushinteger(Ls, SPECTATE_MODE_FIXED);  lua_setfield(Ls, -2, "SPECTATE_MODE_FIXED");
+    lua_pushinteger(Ls, SPECTATE_MODE_SIDE);   lua_setfield(Ls, -2, "SPECTATE_MODE_SIDE");
     /* konstanta skill senjata ala SA-MP (WEAPONSKILL_* di a_samp.inc) */
     lua_pushinteger(Ls, SKILL_PISTOL);         lua_setfield(Ls, -2, "SKILL_PISTOL");
     lua_pushinteger(Ls, SKILL_PISTOL_SILENCED); lua_setfield(Ls, -2, "SKILL_PISTOL_SILENCED");
@@ -2807,6 +2892,28 @@ void lua_on_player_money_change(int pid, int32_t oldamount, int32_t newamount) {
     EvMoney e = { pid, oldamount, newamount };
     fs_event("onPlayerMoneyChange", push_money, &e);
     call_event("onPlayerMoneyChange", push_money, &e);
+}
+
+/* Event spectate ala SA-MP (perpanjangan RO-MP — SA-MP tak punya event
+ * ini): onPlayerSpectate(pid, spectating, targettype, target, mode). */
+typedef struct {
+    int pid, spectating, targettype, target, mode;
+} EvSpectate;
+static int push_spectate(lua_State *Ls, void *ud) {
+    EvSpectate *e = (EvSpectate *)ud;
+    lua_pushinteger(Ls, e->pid);
+    lua_pushinteger(Ls, e->spectating);
+    lua_pushinteger(Ls, e->targettype);
+    lua_pushinteger(Ls, e->target);
+    lua_pushinteger(Ls, e->mode);
+    return 5;
+}
+
+void lua_on_player_spectate(int pid, int spectating, int targettype,
+                            int target, int mode) {
+    EvSpectate e = { pid, spectating, targettype, target, mode };
+    fs_event("onPlayerSpectate", push_spectate, &e);
+    call_event("onPlayerSpectate", push_spectate, &e);
 }
 
 typedef struct { int pid; int oldi; int newi; } EvInt;
