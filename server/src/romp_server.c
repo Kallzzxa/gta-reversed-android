@@ -17,6 +17,7 @@
 #include "romp_anticheat.h"
 #include "romp_sqlite.h"
 #include "romp_timer.h"
+#include "romp_object.h"
 
 #include <time.h>
 #include <pthread.h>
@@ -392,6 +393,7 @@ void player_set_world(Client *c, int interior, uint32_t vw) {
     if (old_vw != vw) {
         vehicle_sync_world(c, old_vw);
         label_sync_world(c, old_vw);
+        object_sync_world(c, old_vw);
         if (c->vehicle_id >= 0) {
             Vehicle *v = vehicle_by_id(c->vehicle_id);
             if (v && v->driver == c->id) vehicle_set_vw(v->id, vw);
@@ -505,6 +507,9 @@ static void do_join(Client *c) {
 
     /* stream 3D text label yang sudah ada ke pemain baru */
     label_sync_join(c);
+
+    /* stream objek yang sudah ada ke pemain baru */
+    object_sync_join(c);
 
     /* beritahu yang lain (hanya yang se-vw & se-interior) */
     size_t jn = build_join(b, c);
@@ -1704,6 +1709,9 @@ int main(int argc, char **argv) {
 
         /* timer Lua ala SA-MP SetTimer (tiap iterasi loop, ~100 ms) */
         timer_tick(tnow);
+
+        /* gerakan MoveObject ala SA-MP */
+        object_tick(tnow);
 
         /* beacon LAN tiap LAN_BEACON_MS */
         if (g_cfg.lan_discovery && tnow - last_beacon_ms >= LAN_BEACON_MS) {

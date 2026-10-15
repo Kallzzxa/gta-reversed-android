@@ -123,6 +123,7 @@ end
 -- ============================================================
 local demoTds = {}  -- id textdraw global demo
 local demoLabel = {}  -- id pemain -> id 3D text label demo
+local demoObj = {}  -- id pemain -> id objek demo
 
 local function hapusDemoTd()
     for _, tdid in ipairs(demoTds) do romp.destroyTextDraw(tdid) end
@@ -338,6 +339,53 @@ function onPlayerCommand(id, name, cmd, args)
         else
             romp.sendChatToPlayer(id, romp.KIND_INFO,
                 "*** Kamu belum punya label (/label dulu).")
+        end
+        return true
+    elseif cmd == "object" then
+        -- Objek ala SA-MP (CreateObject/MoveObject):
+        -- /object [modelid] -> buat di posisi pemain, /object move -> geser,
+        -- /objdel -> hapus.
+        local sub = args:match("^(%S+)") or ""
+        local x, y, z = romp.getPlayerPos(id)
+        if not x then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Posisi kamu belum diketahui server.")
+            return true
+        end
+        if sub == "move" then
+            local oid = demoObj[id]
+            if oid and romp.moveObject(oid, x + 10.0, y, z, 5.0) then
+                romp.sendChatToPlayer(id, romp.KIND_INFO,
+                    "*** Objek digeser 10 unit ke depan (5 unit/detik).")
+            else
+                romp.sendChatToPlayer(id, romp.KIND_INFO,
+                    "*** Kamu belum punya objek (/object dulu).")
+            end
+            return true
+        end
+        local modelid = tonumber(sub) or 1337
+        if demoObj[id] then romp.destroyObject(demoObj[id]) end
+        local oid = romp.createObject(modelid, x + 2.0, y, z, 0.0, 0.0, 0.0)
+        if oid then
+            demoObj[id] = oid
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Objek dibuat (id " .. oid .. ", model " .. modelid ..
+                "). /object move = geser, /objdel = hapus.")
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal membuat objek.")
+        end
+        return true
+    elseif cmd == "objdel" then
+        -- Hapus objek demo milik pemain.
+        local oid = demoObj[id]
+        if oid and romp.destroyObject(oid) then
+            demoObj[id] = nil
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Objek dihapus.")
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Kamu belum punya objek (/object dulu).")
         end
         return true
     elseif cmd == "gz" then

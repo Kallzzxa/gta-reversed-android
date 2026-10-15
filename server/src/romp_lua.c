@@ -10,6 +10,7 @@
 #include "romp_anticheat.h"
 #include "romp_sqlite.h"
 #include "romp_timer.h"
+#include "romp_object.h"
 
 #include "../vendor/sqlite/sqlite3.h"
 
@@ -874,6 +875,162 @@ static int l_romp_get_labels(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- API objek ala SA-MP ----------------
+ * romp.createObject(modelid, x, y, z, rx, ry, rz [, drawDist])
+ *   -> objid | nil (ala SA-MP CreateObject; drawDist <= 0 = default 300)
+ * romp.destroyObject(id) -> bool (ala SA-MP DestroyObject)
+ * romp.isValidObject(id) -> bool (ala SA-MP IsValidObject)
+ * romp.moveObject(id, x, y, z, speed [, rx, ry, rz]) -> bool
+ *   (ala SA-MP MoveObject; speed > 0 unit/detik; rotasi -1000 = tetap)
+ * romp.stopObject(id) -> bool (ala SA-MP StopObject)
+ * romp.isObjectMoving(id) -> bool (ala SA-MP IsObjectMoving)
+ * romp.getObjectPos(id) -> x, y, z | nil (ala SA-MP GetObjectPos)
+ * romp.setObjectPos(id, x, y, z) -> bool (ala SA-MP SetObjectPos)
+ * romp.getObjectRot(id) -> rx, ry, rz | nil (ala SA-MP GetObjectRot)
+ * romp.setObjectRot(id, rx, ry, rz) -> bool (ala SA-MP SetObjectRot)
+ * romp.getObjectModel(id) -> modelid | nil (ala SA-MP GetObjectModel)
+ * romp.getObjectVirtualWorld(id) -> vw | nil
+ * romp.setObjectVirtualWorld(id, vw) -> bool
+ *   (ala SA-MP SetObjectVirtualWorld; vw = -1 berarti semua world)
+ * romp.getObjects() -> tabel array
+ *   { {id,modelid,x,y,z,rx,ry,rz,drawdist,vw,moving}, ... }
+ * Event: onObjectMoved(objid) ala SA-MP OnObjectMoved.
+ */
+
+static int l_romp_create_object(lua_State *Ls) {
+    uint32_t modelid = (uint32_t)luaL_checkinteger(Ls, 1);
+    float x = (float)luaL_checknumber(Ls, 2);
+    float y = (float)luaL_checknumber(Ls, 3);
+    float z = (float)luaL_checknumber(Ls, 4);
+    float rx = (float)luaL_checknumber(Ls, 5);
+    float ry = (float)luaL_checknumber(Ls, 6);
+    float rz = (float)luaL_checknumber(Ls, 7);
+    float dd = (float)luaL_optnumber(Ls, 8, 0.0);
+    int id = object_create(modelid, x, y, z, rx, ry, rz, dd);
+    if (id < 0) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, id);
+    return 1;
+}
+
+static int l_romp_destroy_object(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    lua_pushboolean(Ls, object_destroy(id));
+    return 1;
+}
+
+static int l_romp_is_valid_object(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    lua_pushboolean(Ls, object_by_id(id) != NULL);
+    return 1;
+}
+
+static int l_romp_move_object(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    float x = (float)luaL_checknumber(Ls, 2);
+    float y = (float)luaL_checknumber(Ls, 3);
+    float z = (float)luaL_checknumber(Ls, 4);
+    float speed = (float)luaL_checknumber(Ls, 5);
+    float rx = (float)luaL_optnumber(Ls, 6, OBJECT_NO_ROT);
+    float ry = (float)luaL_optnumber(Ls, 7, OBJECT_NO_ROT);
+    float rz = (float)luaL_optnumber(Ls, 8, OBJECT_NO_ROT);
+    lua_pushboolean(Ls, object_move(id, x, y, z, speed, rx, ry, rz));
+    return 1;
+}
+
+static int l_romp_stop_object(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    lua_pushboolean(Ls, object_stop(id));
+    return 1;
+}
+
+static int l_romp_is_object_moving(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    lua_pushboolean(Ls, object_is_moving(id));
+    return 1;
+}
+
+static int l_romp_get_object_pos(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    GameObject *o = object_by_id(id);
+    if (!o) { lua_pushnil(Ls); return 1; }
+    lua_pushnumber(Ls, (lua_Number)o->x);
+    lua_pushnumber(Ls, (lua_Number)o->y);
+    lua_pushnumber(Ls, (lua_Number)o->z);
+    return 3;
+}
+
+static int l_romp_set_object_pos(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    float x = (float)luaL_checknumber(Ls, 2);
+    float y = (float)luaL_checknumber(Ls, 3);
+    float z = (float)luaL_checknumber(Ls, 4);
+    lua_pushboolean(Ls, object_set_pos(id, x, y, z));
+    return 1;
+}
+
+static int l_romp_get_object_rot(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    GameObject *o = object_by_id(id);
+    if (!o) { lua_pushnil(Ls); return 1; }
+    lua_pushnumber(Ls, (lua_Number)o->rx);
+    lua_pushnumber(Ls, (lua_Number)o->ry);
+    lua_pushnumber(Ls, (lua_Number)o->rz);
+    return 3;
+}
+
+static int l_romp_set_object_rot(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    float rx = (float)luaL_checknumber(Ls, 2);
+    float ry = (float)luaL_checknumber(Ls, 3);
+    float rz = (float)luaL_checknumber(Ls, 4);
+    lua_pushboolean(Ls, object_set_rot(id, rx, ry, rz));
+    return 1;
+}
+
+static int l_romp_get_object_model(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    GameObject *o = object_by_id(id);
+    if (!o) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, (lua_Integer)o->modelid);
+    return 1;
+}
+
+static int l_romp_get_object_vw(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    GameObject *o = object_by_id(id);
+    if (!o) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, (lua_Integer)o->vw);
+    return 1;
+}
+
+static int l_romp_set_object_vw(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    int32_t vw = (int32_t)luaL_checkinteger(Ls, 2);
+    lua_pushboolean(Ls, object_set_vw(id, vw));
+    return 1;
+}
+
+static int l_romp_get_objects(lua_State *Ls) {
+    lua_newtable(Ls);
+    int i = 1;
+    for (GameObject *o = object_first(); o; o = o->next) {
+        lua_newtable(Ls);
+        lua_pushinteger(Ls, o->id);    lua_setfield(Ls, -2, "id");
+        lua_pushinteger(Ls, (lua_Integer)o->modelid); lua_setfield(Ls, -2, "modelid");
+        lua_pushnumber(Ls, (lua_Number)o->x); lua_setfield(Ls, -2, "x");
+        lua_pushnumber(Ls, (lua_Number)o->y); lua_setfield(Ls, -2, "y");
+        lua_pushnumber(Ls, (lua_Number)o->z); lua_setfield(Ls, -2, "z");
+        lua_pushnumber(Ls, (lua_Number)o->rx); lua_setfield(Ls, -2, "rx");
+        lua_pushnumber(Ls, (lua_Number)o->ry); lua_setfield(Ls, -2, "ry");
+        lua_pushnumber(Ls, (lua_Number)o->rz); lua_setfield(Ls, -2, "rz");
+        lua_pushnumber(Ls, (lua_Number)o->drawdist); lua_setfield(Ls, -2, "drawdist");
+        lua_pushinteger(Ls, (lua_Integer)o->vw); lua_setfield(Ls, -2, "vw");
+        lua_pushboolean(Ls, o->moving); lua_setfield(Ls, -2, "moving");
+        lua_rawseti(Ls, -2, i++);
+    }
+    return 1;
+}
+
 static int l_romp_give_weapon(lua_State *Ls) {
     int pid = (int)luaL_checkinteger(Ls, 1);
     int wid = (int)luaL_checkinteger(Ls, 2);
@@ -1156,6 +1313,23 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_attach_label_player); lua_setfield(Ls, -2, "attach3DTextLabelToPlayer");
     lua_pushcfunction(Ls, l_romp_attach_label_vehicle); lua_setfield(Ls, -2, "attach3DTextLabelToVehicle");
     lua_pushcfunction(Ls, l_romp_get_labels);         lua_setfield(Ls, -2, "get3DTextLabels");
+    /* objek ala SA-MP (CreateObject/DestroyObject/MoveObject/dsb) */
+    lua_pushcfunction(Ls, l_romp_create_object);   lua_setfield(Ls, -2, "createObject");
+    lua_pushcfunction(Ls, l_romp_destroy_object);  lua_setfield(Ls, -2, "destroyObject");
+    lua_pushcfunction(Ls, l_romp_is_valid_object); lua_setfield(Ls, -2, "isValidObject");
+    lua_pushcfunction(Ls, l_romp_move_object);     lua_setfield(Ls, -2, "moveObject");
+    lua_pushcfunction(Ls, l_romp_stop_object);     lua_setfield(Ls, -2, "stopObject");
+    lua_pushcfunction(Ls, l_romp_is_object_moving); lua_setfield(Ls, -2, "isObjectMoving");
+    lua_pushcfunction(Ls, l_romp_get_object_pos);  lua_setfield(Ls, -2, "getObjectPos");
+    lua_pushcfunction(Ls, l_romp_set_object_pos);  lua_setfield(Ls, -2, "setObjectPos");
+    lua_pushcfunction(Ls, l_romp_get_object_rot);  lua_setfield(Ls, -2, "getObjectRot");
+    lua_pushcfunction(Ls, l_romp_set_object_rot);  lua_setfield(Ls, -2, "setObjectRot");
+    lua_pushcfunction(Ls, l_romp_get_object_model); lua_setfield(Ls, -2, "getObjectModel");
+    lua_pushcfunction(Ls, l_romp_get_object_vw);   lua_setfield(Ls, -2, "getObjectVirtualWorld");
+    lua_pushcfunction(Ls, l_romp_set_object_vw);   lua_setfield(Ls, -2, "setObjectVirtualWorld");
+    lua_pushcfunction(Ls, l_romp_get_objects);     lua_setfield(Ls, -2, "getObjects");
+    /* sentinel rotasi MoveObject "tak berubah" ala SA-MP (-1000.0) */
+    lua_pushnumber(Ls, (lua_Number)OBJECT_NO_ROT); lua_setfield(Ls, -2, "OBJECT_NO_ROT");
     /* konstanta attach label: 0=statis, 1=pemain, 2=kendaraan */
     lua_pushinteger(Ls, LABEL_ATTACH_NONE);    lua_setfield(Ls, -2, "LABEL_STATIC");
     lua_pushinteger(Ls, LABEL_ATTACH_PLAYER); lua_setfield(Ls, -2, "LABEL_PLAYER");
@@ -1640,6 +1814,13 @@ void lua_on_vehicle_death(int vid, int killerid) {
 void lua_on_vehicle_spawn(int vid) {
     fs_event("onVehicleSpawn", push_veh_vid, &vid);
     call_event("onVehicleSpawn", push_veh_vid, &vid);
+}
+
+/* ---------------- Event objek ala SA-MP ---------------- */
+
+void lua_on_object_moved(int objid) {
+    fs_event("onObjectMoved", push_veh_vid, &objid);
+    call_event("onObjectMoved", push_veh_vid, &objid);
 }
 
 /* ---------------- Event senjata ala SA-MP ---------------- */

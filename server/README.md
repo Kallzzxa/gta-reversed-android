@@ -143,6 +143,43 @@ romp.attach3DTextLabelToPlayer(lid, playerid)  -- mengikuti pemain
 romp.update3DTextLabelText(lid, 0x00FF00FF, "Toko Bang Jago [BUKA]")
 ```
 
+**Objek ala SA-MP (`CreateObject` / `MoveObject`):**
+
+| Fungsi | Keterangan |
+|---|---|
+| `romp.createObject(modelid, x, y, z, rx, ry, rz [, drawDist])` | Buat objek → objid / nil. `drawDist` <= 0 = default 300 |
+| `romp.destroyObject(id)` | Hapus objek → `true`/`false` |
+| `romp.isValidObject(id)` | `true` bila objek ada |
+| `romp.moveObject(id, x, y, z, speed [, rx, ry, rz])` | Gerakkan ke target (`speed` > 0 unit/detik; rotasi `-1000` = tetap) → `true`/`false` |
+| `romp.stopObject(id)` | Hentikan gerakan → `true`/`false` |
+| `romp.isObjectMoving(id)` | `true` bila sedang bergerak |
+| `romp.getObjectPos(id)` | `x, y, z` / nil |
+| `romp.setObjectPos(id, x, y, z)` | Set posisi instan (hentikan gerakan) → `true`/`false` |
+| `romp.getObjectRot(id)` | `rx, ry, rz` / nil |
+| `romp.setObjectRot(id, rx, ry, rz)` | Set rotasi instan → `true`/`false` |
+| `romp.getObjectModel(id)` | modelid / nil |
+| `romp.getObjectVirtualWorld(id)` | vw / nil (`-1` = semua world) |
+| `romp.setObjectVirtualWorld(id, vw)` | Pindah vw (`-1` = semua world) → `true`/`false` |
+| `romp.getObjects()` | Array `{ {id, modelid, x, y, z, rx, ry, rz, drawdist, vw, moving}, ... }` |
+| `romp.OBJECT_NO_ROT` | Konstanta `-1000.0` (sentinel rotasi "tak berubah" ala SA-MP) |
+
+**Event:** `onObjectMoved(objid)` — menyala saat `MoveObject` tiba di target
+(ala SA-MP `OnObjectMoved`).
+
+Objek di-scope virtual world (`vw` objek `-1` atau == vw pemain); pemain yang
+join di tengah gerakan menerima posisi saat ini + sisa gerakan. Paket:
+`0x2C` OBJ_SPAWN / `0x2D` OBJ_DESPAWN / `0x2E` OBJ_MOVE / `0x2F` OBJ_UPDATE
+(lihat `PROTOCOL.md`).
+
+```lua
+-- Contoh: gerbang yang terbuka saat pemain mengetik /buka.
+local gate = romp.createObject(980, 100.0, 200.0, 10.0, 0.0, 0.0, 90.0)
+function onObjectMoved(objid)
+    romp.log("objek " .. objid .. " tiba di target")
+end
+romp.moveObject(gate, 100.0, 210.0, 10.0, 5.0)  -- geser 10 unit, 5 unit/detik
+```
+
 ### Database SQLite untuk gamemode (skor, akun)
 
 Tanpa server eksternal: cukup set `database <path>` di `server.cfg`

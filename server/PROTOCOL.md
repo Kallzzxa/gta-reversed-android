@@ -298,6 +298,54 @@ bila di-attach). Saat pemain pindah vw, label vw lama di-despawn dan
 label vw baru di-spawn ulang ke pemain itu; label yang di-attach ke
 pemain tersebut ikut pindah vw dan di-resync ke semua viewer. Label yang
 di-attach ke kendaraan ikut pindah saat kendaraan ganti vw
+
+### 0x2C OBJECT_SPAWN (Server -> Client)
+Objek ala SA-MP `CreateObject` muncul. Client me-render objek sesuai
+model id (di client yang belum punya model game: placeholder).
+
+```
+u16 objid
+u32 modelid
+float x, y, z     // posisi dunia
+float rx, ry, rz  // rotasi derajat
+float drawdist    // jarak render
+i32  vw           // -1 = terlihat di semua world
+```
+
+### 0x2D OBJECT_DESPAWN (Server -> Client)
+Objek hilang (`romp.destroyObject`).
+
+```
+u16 objid
+```
+
+### 0x2E OBJECT_MOVE (Server -> Client)
+Objek bergerak ala SA-MP `MoveObject`: server mengirim target + speed
+sekali, client menginterpolasi posisi (dan rotasi) secara linear.
+`trx/try/trz = -1000.0` berarti rotasi tak berubah (sentinel SA-MP).
+
+```
+u16 objid
+float tx, ty, tz  // posisi target
+float speed       // unit/detik
+float trx, try, trz  // target rotasi derajat (-1000.0 = tetap)
+```
+
+### 0x2F OBJECT_UPDATE (Server -> Client)
+Set posisi/rotasi instan (`romp.setObjectPos`/`romp.setObjectRot`,
+`romp.stopObject`, dan posisi final saat `MoveObject` tiba).
+
+```
+u16 objid
+float x, y, z
+float rx, ry, rz
+```
+
+Objek di-scope virtual world: `0x2C`-`0x2F` hanya dikirim ke pemain yang
+melihat objek (vw objek `-1`, atau vw objek == vw pemain). Saat pemain
+pindah vw, objek vw lama di-despawn dan objek vw baru di-spawn ke pemain
+itu. Pemain yang join di tengah gerakan `MoveObject` menerima `0x2C`
+(posisi saat ini) diikuti `0x2E` (sisa gerakan).
 (`romp.setVehicleVirtualWorld`).
 
 API Lua (lihat `server/README.md`):
@@ -319,6 +367,7 @@ mereka sama. Yang di-scope:
 - `0x22 PLAYER_JOIN` / `0x23 PLAYER_LEAVE` (entity)
 - `0x24 PLAYER_LIST` (hanya yang terlihat)
 - `0x28`-`0x2B` 3D text label (vw efektif label; lihat atas)
+- `0x2C`-`0x2F` objek (vw objek `-1` atau == vw pemain; lihat atas)
 
 Pengumuman server (`romp.sendChatToAll`, join/kick) tetap global.
 Saat pemain pindah vw/interior, server otomatis mengirim `0x25` ke pemain

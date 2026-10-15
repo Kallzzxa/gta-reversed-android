@@ -51,6 +51,11 @@ enum class PacketType : uint8_t {
     LABEL_DESPAWN = 0x29,  // label hilang
     LABEL_TEXT    = 0x2A,  // ubah teks & warna label
     LABEL_POS     = 0x2B,  // pindahkan label statis
+    // Objek ala SA-MP (CreateObject/MoveObject), server -> client.
+    OBJECT_SPAWN   = 0x2C,  // objek muncul
+    OBJECT_DESPAWN = 0x2D,  // objek hilang
+    OBJECT_MOVE    = 0x2E,  // objek bergerak (MoveObject)
+    OBJECT_UPDATE  = 0x2F,  // set posisi/rotasi instan
 };
 
 // Alasan PLAYER_LEAVE (u8 reason).
@@ -343,6 +348,78 @@ inline bool parse_label_pos(const uint8_t* data, size_t len,
     if (!r.get_float(out.x)) return false;
     if (!r.get_float(out.y)) return false;
     if (!r.get_float(out.z)) return false;
+    return true;
+}
+
+struct ObjectSpawnInfo {
+    uint16_t objid = 0;
+    uint32_t modelid = 0;
+    float x = 0, y = 0, z = 0;
+    float rx = 0, ry = 0, rz = 0;  // rotasi derajat
+    float drawdist = 0;
+    int32_t vw = 0;  // -1 = semua world
+};
+
+// 0x2C OBJECT_SPAWN: objid(u16) + modelid(u32) + x,y,z(float) +
+//   rx,ry,rz(float) + drawdist(float) + vw(i32).
+inline bool parse_object_spawn(const uint8_t* data, size_t len,
+                               ObjectSpawnInfo& out) {
+    Reader r(data, len);
+    uint32_t vw = 0;
+    if (!r.get_u16(out.objid)) return false;
+    if (!r.get_u32(out.modelid)) return false;
+    if (!r.get_float(out.x)) return false;
+    if (!r.get_float(out.y)) return false;
+    if (!r.get_float(out.z)) return false;
+    if (!r.get_float(out.rx)) return false;
+    if (!r.get_float(out.ry)) return false;
+    if (!r.get_float(out.rz)) return false;
+    if (!r.get_float(out.drawdist)) return false;
+    if (!r.get_u32(vw)) return false;
+    out.vw = static_cast<int32_t>(vw);
+    return true;
+}
+
+struct ObjectMoveInfo {
+    uint16_t objid = 0;
+    float tx = 0, ty = 0, tz = 0;  // target
+    float speed = 0;               // unit/detik
+    float trx = 0, try_ = 0, trz = 0;  // target rotasi (-1000 = tetap)
+};
+
+// 0x2E OBJECT_MOVE: objid(u16) + tx,ty,tz(float) + speed(float) +
+//   trx,try,trz(float).
+inline bool parse_object_move(const uint8_t* data, size_t len,
+                              ObjectMoveInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u16(out.objid)) return false;
+    if (!r.get_float(out.tx)) return false;
+    if (!r.get_float(out.ty)) return false;
+    if (!r.get_float(out.tz)) return false;
+    if (!r.get_float(out.speed)) return false;
+    if (!r.get_float(out.trx)) return false;
+    if (!r.get_float(out.try_)) return false;
+    if (!r.get_float(out.trz)) return false;
+    return true;
+}
+
+struct ObjectUpdateInfo {
+    uint16_t objid = 0;
+    float x = 0, y = 0, z = 0;
+    float rx = 0, ry = 0, rz = 0;
+};
+
+// 0x2F OBJECT_UPDATE: objid(u16) + x,y,z(float) + rx,ry,rz(float).
+inline bool parse_object_update(const uint8_t* data, size_t len,
+                                ObjectUpdateInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u16(out.objid)) return false;
+    if (!r.get_float(out.x)) return false;
+    if (!r.get_float(out.y)) return false;
+    if (!r.get_float(out.z)) return false;
+    if (!r.get_float(out.rx)) return false;
+    if (!r.get_float(out.ry)) return false;
+    if (!r.get_float(out.rz)) return false;
     return true;
 }
 

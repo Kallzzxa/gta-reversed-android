@@ -31,6 +31,7 @@ var mp_scoreboard: CanvasLayer
 var _pos_timer := 0.0
 var _remotes: Dictionary = {}   # playerid -> RemotePlayer
 var _remote_cars: Dictionary = {}  # vid -> RemoteCar
+var _objects: Dictionary = {}   # objid -> MeshInstance3D (objek SA-MP)
 var _mp_players: Array = []     # [{id, name}] untuk scoreboard
 var _hostname := ""
 var _ping_ms := -1
@@ -125,6 +126,10 @@ func _setup_multiplayer() -> void:
 	net.label_despawn.connect(_on_label_despawn)
 	net.label_text.connect(_on_label_text)
 	net.label_pos.connect(_on_label_pos)
+	net.object_spawn.connect(_on_object_spawn)
+	net.object_despawn.connect(_on_object_despawn)
+	net.object_move.connect(_on_object_move)
+	net.object_update.connect(_on_object_update)
 
 	mp_chat = MpChatScript.new()
 	add_child(mp_chat)
@@ -310,6 +315,104 @@ func _on_label_pos(lid: int, x: float, y: float, z: float) -> void:
 		var lb: Label3D = _labels[lid]
 		if lb.get_parent() == self:
 			lb.global_position = Vector3(x, y, z)
+
+
+# --- Objek ala SA-MP (CreateObject/MoveObject) ---
+# Model asli GTA tak tersedia di client Godot, jadi objek digambar sebagai
+# kubus semi-transparan + Label3D berisi model id di atasnya.
+
+var _object_material: StandardMaterial3D  # dipakai ulang semua objek
+
+
+func _get_object_material() -> StandardMaterial3D:
+	if _object_material == null:
+		_object_material = StandardMaterial3D.new()
+		_object_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_object_material.albedo_color = Color(0.2, 0.7, 1.0, 0.55)
+		_object_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	return _object_material
+
+
+func _on_object_spawn(oid: int, modelid: int, x: float, y: float, z: float,
+		rx: float, ry: float, rz: float, drawdist: float, vw: int) -> void:
+	if _objects.has(oid):
+		_objects[oid].queue_free()
+	var mi := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(1.0, 1.0, 1.0)
+	mi.mesh = box
+	mi.material_override = _get_object_material()
+	var tag := Label3D.new()
+	tag.text = "obj %d" % modelid
+	tag.font_size = 48
+	tag.pixel_size = 0.004
+	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	tag.no_depth_test = true
+	tag.modulate = Color(1, 1, 1, 0.9)
+	tag.outline_size = 6
+	tag.outline_modulate = Color(0, 0, 0, 1)
+	mi.add_child(tag)
+	tag.position = Vector3(0, 0.9, 0)
+	if drawdist > 0:
+		mi.visibility_range_end = drawdist
+	add_child(mi)
+	mi.global_position = Vector3(x, y, z)
+	mi.rotation_degrees = Vector3(rx, ry, rz)
+	mi.set_meta("moving", false)
+	_objects[oid] = mi
+
+
+func _on_object_despawn(oid: int) -> void:
+	if _objects.has(oid):
+		_objects[oid].queue_free()
+		_objects.erase(oid)
+
+
+func _on_object_move(oid: int, tx: float, ty: float, tz: float, speed: float,
+		trx: float, try_: float, trz: float) -> void:
+	if not _objects.has(oid):
+		return
+	var mi: MeshInstance3D = _objects[oid]
+	mi.set_meta("moving", true)
+	mi.set_meta("target", Vector3(tx, ty, tz))
+	mi.set_meta("speed", speed)
+	var trot := Vector3(
+		mi.rotation_degrees.x if trx <= -999.0 else trx,
+		mi.rotation_degrees.y if try_ <= -999.0 else try_,
+		mi.rotation_degrees.z if trz <= -999.0 else trz)
+	mi.set_meta("target_rot", trot)
+
+
+func _on_object_update(oid: int, x: float, y: float, z: float,
+		rx: float, ry: float, rz: float) -> void:
+	if not _objects.has(oid):
+		return
+	var mi: MeshInstance3D = _objects[oid]
+	mi.set_meta("moving", false)
+	mi.global_position = Vector3(x, y, z)
+	mi.rotation_degrees = Vector3(rx, ry, rz)
+
+
+func _process_objects(delta: float) -> void:
+	for oid in _objects:
+		var mi: MeshInstance3D = _objects[oid]
+		if not mi.get_meta("moving"):
+			continue
+		var target: Vector3 = mi.get_meta("target")
+		var speed: float = mi.get_meta("speed")
+		var trot: Vector3 = mi.get_meta("target_rot")
+		var pos := mi.global_position
+		var dist := pos.distance_to(target)
+		if dist < 0.001:
+			mi.global_position = target
+			mi.rotation_degrees = trot
+			mi.set_meta("moving", false)
+			continue
+		var step: float = minf(speed * delta, dist)
+		mi.global_position = pos + (target - pos).normalized() * step
+		if dist > 0.0:
+			var frac := step / dist
+			mi.rotation_degrees = mi.rotation_degrees.lerp(trot, frac)
 	mp_chat.add_message(RompNet.CHAT_INFO, "Di-teleport admin.")
 
 
@@ -324,6 +427,7 @@ func _process(delta: float) -> void:
 		if _pos_timer >= POS_INTERVAL:
 			_pos_timer = 0.0
 			_send_my_pos()
+		_process_objects(delta)
 
 
 func _send_my_pos() -> void:
@@ -347,6 +451,10 @@ func _clear_remotes() -> void:
 		if is_instance_valid(_labels[lid]):
 			_labels[lid].queue_free()
 	_labels.clear()
+	for oid in _objects:
+		if is_instance_valid(_objects[oid]):
+			_objects[oid].queue_free()
+	_objects.clear()
 
 
 func _refresh_scoreboard() -> void:

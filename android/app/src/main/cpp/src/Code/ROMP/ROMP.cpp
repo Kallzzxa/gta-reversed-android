@@ -295,6 +295,34 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
             platform_->OnLabelPos(lp.labelid, lp.x, lp.y, lp.z);
             break;
         }
+        case PacketType::OBJECT_SPAWN: {
+            // Server membuat objek (romp.createObject).
+            ObjectSpawnInfo oi;
+            if (!parse_object_spawn(payload, len, oi)) break;
+            platform_->OnObjectSpawn(oi);
+            break;
+        }
+        case PacketType::OBJECT_DESPAWN: {
+            if (len < 2) break;
+            uint16_t objid = static_cast<uint16_t>(payload[0] |
+                                                   (payload[1] << 8));
+            platform_->OnObjectDespawn(objid);
+            break;
+        }
+        case PacketType::OBJECT_MOVE: {
+            // Server menggerakkan objek (romp.moveObject).
+            ObjectMoveInfo om;
+            if (!parse_object_move(payload, len, om)) break;
+            platform_->OnObjectMove(om);
+            break;
+        }
+        case PacketType::OBJECT_UPDATE: {
+            // Server set posisi/rotasi instan (romp.setObjectPos/Rot).
+            ObjectUpdateInfo ou;
+            if (!parse_object_update(payload, len, ou)) break;
+            platform_->OnObjectUpdate(ou);
+            break;
+        }
         default:
             // Tipe tak dikenal: abaikan (forward-compat protokol).
             break;

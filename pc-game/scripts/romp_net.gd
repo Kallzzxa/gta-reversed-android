@@ -29,6 +29,10 @@ const T_LABEL_SPAWN := 0x28
 const T_LABEL_DESPAWN := 0x29
 const T_LABEL_TEXT := 0x2A
 const T_LABEL_POS := 0x2B
+const T_OBJECT_SPAWN := 0x2C
+const T_OBJECT_DESPAWN := 0x2D
+const T_OBJECT_MOVE := 0x2E
+const T_OBJECT_UPDATE := 0x2F
 const T_PING := 0x30
 const T_PONG := 0x31
 const T_NUI := 0x40
@@ -67,6 +71,10 @@ signal label_spawn(labelid: int, attach_type: int, attach_id: int, x: float, y: 
 signal label_despawn(labelid: int)
 signal label_text(labelid: int, color: int, text: String)
 signal label_pos(labelid: int, x: float, y: float, z: float)
+signal object_spawn(objid: int, modelid: int, x: float, y: float, z: float, rx: float, ry: float, rz: float, drawdist: float, vw: int)
+signal object_despawn(objid: int)
+signal object_move(objid: int, tx: float, ty: float, tz: float, speed: float, trx: float, try_: float, trz: float)
+signal object_update(objid: int, x: float, y: float, z: float, rx: float, ry: float, rz: float)
 signal nui_message(json_text: String)
 signal ping_updated(ms: int)
 
@@ -369,6 +377,28 @@ func _dispatch(ftype: int, payload: PackedByteArray) -> void:
 			label_text.emit(r.u16(), r.u32(), r.str8())
 		T_LABEL_POS:
 			label_pos.emit(r.u16(), r.f32(), r.f32(), r.f32())
+		T_OBJECT_SPAWN:
+			var oid := r.u16()
+			var omodel := r.u32()
+			var ox := r.f32()
+			var oy := r.f32()
+			var oz := r.f32()
+			var orx := r.f32()
+			var ory := r.f32()
+			var orz := r.f32()
+			var odd := r.f32()
+			var ovw := r.u32()
+			if ovw >= 0x80000000:
+				ovw -= 0x100000000  # i32: -1 = semua world
+			object_spawn.emit(oid, omodel, ox, oy, oz, orx, ory, orz, odd, ovw)
+		T_OBJECT_DESPAWN:
+			object_despawn.emit(r.u16())
+		T_OBJECT_MOVE:
+			object_move.emit(r.u16(), r.f32(), r.f32(), r.f32(), r.f32(),
+				r.f32(), r.f32(), r.f32())
+		T_OBJECT_UPDATE:
+			object_update.emit(r.u16(), r.f32(), r.f32(), r.f32(),
+				r.f32(), r.f32(), r.f32())
 		T_PING:
 			_reply_pong(r.u32())
 		T_PONG:

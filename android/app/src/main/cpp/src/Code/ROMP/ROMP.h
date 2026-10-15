@@ -66,6 +66,14 @@ public:
     virtual void OnLabelPos(uint16_t /*labelid*/, float /*x*/, float /*y*/,
                             float /*z*/) {}
 
+    // Objek ala SA-MP (paket 0x2C-0x2F, dari romp.createObject).
+    // Default no-op; platform game menimpa untuk spawn/render objek di dunia.
+    // TODO(GAME): spawn CObject via CStreaming/pool game dari modelid.
+    virtual void OnObjectSpawn(const ObjectSpawnInfo& /*info*/) {}
+    virtual void OnObjectDespawn(uint16_t /*objid*/) {}
+    virtual void OnObjectMove(const ObjectMoveInfo& /*info*/) {}
+    virtual void OnObjectUpdate(const ObjectUpdateInfo& /*info*/) {}
+
     // Log ke konsol game / logcat.
     virtual void Log(const std::string& msg) = 0;
 

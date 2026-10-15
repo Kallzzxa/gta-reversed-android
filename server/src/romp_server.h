@@ -71,6 +71,12 @@ typedef int SOCKET;
 #define P_LABEL_TEXT    0x2A  /* server -> client: ubah teks & warna label */
 #define P_LABEL_POS     0x2B  /* server -> client: pindahkan label statis */
 
+/* ---- Objek ala SA-MP (lihat romp_object.h & PROTOCOL.md) ---- */
+#define P_OBJECT_SPAWN   0x2C  /* server -> client: objek muncul */
+#define P_OBJECT_DESPAWN 0x2D  /* server -> client: objek hilang */
+#define P_OBJECT_MOVE    0x2E  /* server -> client: objek bergerak (MoveObject) */
+#define P_OBJECT_UPDATE  0x2F  /* server -> client: set posisi/rotasi instan */
+
 /* ---- Protokol UDP query (server browser), port sama dengan TCP ---- */
 #define QUERY_MAGIC   "ROMP"
 #define QUERY_MAGIC_LEN 4
