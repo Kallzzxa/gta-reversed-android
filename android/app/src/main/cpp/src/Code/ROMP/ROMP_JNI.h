@@ -34,6 +34,7 @@
 #include <string>
 
 #include "ROMP.h"
+#include "ROMP_PedStreamer.h"
 
 namespace ROMP {
 
@@ -59,6 +60,13 @@ public:
     // Set posisi pemain lokal dari game (CPed). Dipanggil tiap frame
     // sebelum Client::Update() supaya POS yang dikirim akurat.
     void SetLocalPos(float x, float y, float z, float heading);
+
+    // Pasang implementasi dunia game nyata (ReversedGameWorld) saat class
+    // game sudah tersedia. Default: NullGameWorld (no-op tercatat).
+    void SetGameWorld(IGameWorld* game_world) { peds_.Attach(game_world); }
+
+    // Akses streamer ped (untuk test / debug).
+    ROMPPedStreamer& PedStreamer() { return peds_; }
 
     // ---- IROMPPlatform ----
     void GetLocalPlayerPos(float& x, float& y, float& z, float& heading,
@@ -86,6 +94,11 @@ private:
     std::atomic<float> ly_{0.0f};
     std::atomic<float> lz_{0.0f};
     std::atomic<float> lheading_{0.0f};
+
+    // Streamer ped pemain remote (lifecycle spawn/move/remove + baca
+    // posisi lokal dari game). Game world nyata dipasang via
+    // SetGameWorld() saat reversal menyediakan class game.
+    ROMPPedStreamer peds_;
 };
 
 // Singleton platform Android (dipakai ROMPClient.nativeInit).

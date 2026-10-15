@@ -16,6 +16,7 @@ Protokol yang dipakai: `server/PROTOCOL.md` (TCP, frame
 | `ROMP_Net.h` / `.cpp` | `ROMPNet`: TCP client non-blocking (connect + select-based Pump, reassembly frame, callback per paket). |
 | `ROMP_Chat.h` / `.cpp` | `ROMPChat`: ring buffer chat (tampil 12 baris, histori 100) + input buffer ketikan user. |
 | `ROMP_Players.h` / `.cpp` | `ROMPPlayers`: tabel pemain remote + interpolasi linear (lerp eksponensial, update 10 Hz dari server). |
+| `ROMP_PedStreamer.h` / `.cpp` | `ROMPPedStreamer`: lifecycle ped pemain remote (spawn/move/remove/clear) + `IGameWorld` (seam ke game asli) + `NullGameWorld` (no-op pencatat untuk test). Dipakai `AndroidPlatform` untuk `Spawn/Remove/MoveRemotePlayer` & baca posisi lokal. |
 | `ROMP.h` / `.cpp` | `ROMP::Client` (singleton, facade) + `IROMPPlatform` + `NullPlatform`. |
 | `ROMP_Browser.h` / `.cpp` | `ROMP::ROMPBrowser`: server browser. `QueryServer()` (UDP: info + pemain + ping), `FetchMasterList()` (TCP ke master server). Sinkron + timeout — panggil dari background thread. |
 
@@ -85,15 +86,26 @@ Menjalankan server asli di port 17777 (+ master di 17779) lalu menghajar
 skenario penuh: connect+HELLO→WELCOME, echo CHAT_MSG, PLAYER_JOIN/POS/CHAT
 dari client fake kedua (socket mentah), NUI (0x40 message + 0x42 focus
 diterima, 0x41 callback → Lua → chat), PLAYER_LEAVE, disconnect bersih,
-server browser (FetchMasterList dari master + entry check). 22 cek —
-semua harus PASS.
+server browser (FetchMasterList dari master + entry check), ditambah
+jalur render ped: PLAYER_JOIN→spawn ped di streamer, PLAYER_POS→move
+tercatat tiap frame, PLAYER_LEAVE→ped dihapus, plus 19 unit test
+`ROMPPedStreamer` (idempotent spawn, move/remove unknown, game belum
+siap, baca posisi lokal, clear). 53 cek — semua harus PASS.
 
 ## TODO integrasi game (cari `TODO(GAME)` di kode)
 
-- `GetLocalPlayerPos()` — baca dari `CPed` pemain lokal (`FindPlayerPed()`).
-- `SpawnRemotePlayer()` — buat `CPed`/actor via `CWorld::Add`, model CJ.
-- `RemoveRemotePlayer()` — hapus `CPed` yang dibuat di atas.
-- `MoveRemotePlayer()` — set posisi `CPed` (hasil interpolasi).
+- `GetLocalPlayerPos()` — `AndroidPlatform` sekarang coba baca dari game
+  dulu via `ROMPPedStreamer::ReadLocalPlayer()` (fallback ke cache
+  `setLocalPos()` dari Java). Yang kurang: implementasi `IGameWorld`
+  yang membaca `FindPlayerPed()`.
+- `SpawnRemotePlayer()` / `RemoveRemotePlayer()` / `MoveRemotePlayer()` —
+  `AndroidPlatform` sekarang meneruskan semuanya ke `ROMPPedStreamer`
+  (id→ped map, idempotent, thread-safe). Yang kurang: implementasi
+  `IGameWorld` (`ReversedGameWorld`) yang memetakan ke
+  `CWorld::Add(new CPlayerPed)` + `CStreaming::RequestModel(0)` /
+  `CWorld::Remove` / `CPlaceable::SetPosition` — lihat peta lengkap di
+  `ROMP_PedStreamer.h`. Seluruh class game di tree ini masih stub kosong,
+  jadi render 3D nyata menunggu reversal.
 - Render chatbox: `CFont::PrintString` per baris dari `GetVisibleLines()`.
 - Tombol chat HUD → tampilkan `ROMPChatInput.show(context)`.
 - JNI `Java_com_regta_romp_ROMPChatInput_sendChatNative` di `reGTA.cpp`

@@ -171,8 +171,15 @@ void AndroidPlatform::TeleportLocalPlayer(float x, float y, float z) {
 void AndroidPlatform::GetLocalPlayerPos(float& x, float& y, float& z,
                                         float& heading, PlayerState& state,
                                         uint16_t& vehicle_model) {
-    // TODO(GAME): baca langsung dari CPed pemain lokal (FindPlayerPed()).
-    // Sementara posisi disuplai game via ROMPClient.setLocalPos() tiap frame.
+    // Coba baca langsung dari game dulu; kalau game belum siap, pakai
+    // cache yang disuplai Java via ROMPClient.setLocalPos() tiap frame.
+    float gx, gy, gz, gh;
+    if (peds_.ReadLocalPlayer(gx, gy, gz, gh)) {
+        lx_.store(gx);
+        ly_.store(gy);
+        lz_.store(gz);
+        lheading_.store(gh);
+    }
     x = lx_.load();
     y = ly_.load();
     z = lz_.load();
@@ -182,21 +189,29 @@ void AndroidPlatform::GetLocalPlayerPos(float& x, float& y, float& z,
 }
 
 void AndroidPlatform::SpawnRemotePlayer(uint16_t id, const std::string& name) {
-    // TODO(GAME): buat CPed / actor via CWorld::Add + beri model CJ.
-    __android_log_print(ANDROID_LOG_INFO, LOG_TAG,
-                        "SpawnRemotePlayer id=%u name=%s", id, name.c_str());
+    // Buat ped remote di dunia game via streamer (IGameWorld). Selama
+    // class game masih stub, ini tercatat di NullGameWorld.
+    if (peds_.SpawnPlayer(id, name)) {
+        __android_log_print(ANDROID_LOG_INFO, LOG_TAG,
+                            "SpawnRemotePlayer id=%u name=%s", id, name.c_str());
+    } else {
+        __android_log_print(ANDROID_LOG_WARN, LOG_TAG,
+                            "SpawnRemotePlayer GAGAL id=%u name=%s (game belum siap?)",
+                            id, name.c_str());
+    }
 }
 
 void AndroidPlatform::RemoveRemotePlayer(uint16_t id) {
-    // TODO(GAME): hapus CPed yang dibuat di SpawnRemotePlayer.
+    // Hapus ped yang dibuat di SpawnRemotePlayer.
+    peds_.RemovePlayer(id);
     __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "RemoveRemotePlayer id=%u", id);
 }
 
 void AndroidPlatform::MoveRemotePlayer(uint16_t id, float x, float y, float z,
                                       float heading) {
-    // TODO(GAME): set posisi CPed (CPlaceable::SetPosition / teleport).
+    // Set posisi ped (hasil interpolasi, dipanggil tiap frame).
     // Posisi interpolasi tetap bisa dibaca Java via nativeGetPlayers().
-    (void)id; (void)x; (void)y; (void)z; (void)heading;
+    peds_.MovePlayer(id, x, y, z, heading);
 }
 
 void AndroidPlatform::Log(const std::string& msg) {
