@@ -464,6 +464,14 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
             platform_->OnDeathMessage(di.killerid, di.victimid, di.reason);
             break;
         }
+        case PacketType::WANTED_SET: {
+            // Wanted level ala SA-MP (romp.setPlayerWantedLevel):
+            // level 0=bersih .. 6=paling dicari, broadcast global.
+            WantedSetInfo wi;
+            if (!parse_wanted_set(payload, len, wi)) break;
+            platform_->OnPlayerWanted(wi.pid, wi.level);
+            break;
+        }
         default:
             // Tipe tak dikenal: abaikan (forward-compat protokol).
             break;

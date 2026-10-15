@@ -80,6 +80,10 @@ typedef int SOCKET;
 #define P_DEATH_REPORT 0x46 /* client -> server: laporan kematian (killerid+reason) */
 #define P_DEATH_MSG    0x47 /* server -> semua client: kill feed (killer+victim+reason) */
 
+/* ---- Wanted level ala SA-MP (lihat romp_wanted.h & PROTOCOL.md) ---- */
+#define P_WANTED_SET  0x48  /* server -> semua client: wanted pemain berubah
+                               (pid+level, global) */
+
 /* ---- Sinkronisasi senjata & tembakan ala SA-MP (lihat PROTOCOL.md) ---- */
 #define P_WPN         0x17  /* client -> server: event tembakan */
 #define P_WPN_SYNC    0x18  /* server -> client: broadcast tembakan */
@@ -283,6 +287,10 @@ typedef struct Client {
     MarkerOverride *marker_ovs;
     int      marker_novs;
     int      marker_capovs;
+    /* Wanted level ala SA-MP (lihat romp_wanted.h): 0 = bersih .. 6 =
+     * paling dicari. Otoritatif server, default 0, di-broadcast global
+     * (0x48 WANTED_SET) ke semua pemain. */
+    uint8_t  wanted_level;
     struct Client *next;
 } Client;
 

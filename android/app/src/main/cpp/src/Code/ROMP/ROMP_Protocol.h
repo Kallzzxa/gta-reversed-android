@@ -90,6 +90,10 @@ enum class PacketType : uint8_t {
                           // victim = pengirim; killerid 255 = tak ada pembunuh
     DEATH_MSG    = 0x47,  // server -> semua client: kill feed,
                           // u8 killerid + u8 victimid + u8 reason (3B payload)
+    // Wanted level ala SA-MP (SetPlayerWantedLevel/GetPlayerWantedLevel),
+    // server -> semua client (broadcast global).
+    WANTED_SET   = 0x48,  // level wanted berubah: u8 pid + u8 level
+                          // (0=bersih .. 6=paling dicari) (2B payload)
 };
 
 // Alasan PLAYER_LEAVE (u8 reason).
@@ -768,6 +772,23 @@ inline bool parse_death_msg(const uint8_t* data, size_t len,
     if (!r.get_u8(out.victimid)) return false;
     if (!r.get_u8(out.reason)) return false;
     return len == 3;  // tolak payload kepanjangan/kependekan
+}
+
+// ---- Wanted level ala SA-MP (server -> client, broadcast global) ----
+
+// Info wanted level ala SA-MP (0x48 WANTED_SET).
+struct WantedSetInfo {
+    uint8_t pid = 0;    // pemain yang wanted-nya berubah (u8)
+    uint8_t level = 0;  // level wanted 0=bersih .. 6=paling dicari (u8)
+};
+
+// 0x48 WANTED_SET: u8 pid | u8 level (2 byte payload).
+inline bool parse_wanted_set(const uint8_t* data, size_t len,
+                             WantedSetInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u8(out.pid)) return false;
+    if (!r.get_u8(out.level)) return false;
+    return len == 2;  // tolak payload kepanjangan/kependekan
 }
 
 struct ChatMsgInfo {

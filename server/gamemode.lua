@@ -190,6 +190,26 @@ function onPlayerDeath(victimid, killerid, reason)
     return true
 end
 
+-- Wanted level ala SA-MP: perpanjangan RO-MP — event ini TIDAK ada di
+-- SA-MP, tapi memudahkan logika polisi di gamemode (mobil patroli,
+-- skin polisi, dsb).
+function onPlayerWantedLevelChange(pid, oldlevel, newlevel)
+    local name = romp.getPlayerName(pid) or ("id " .. pid)
+    if newlevel > oldlevel and newlevel >= 3 then
+        -- Logika "cop car" demo: wanted tinggi = polisi dikerahkan.
+        romp.sendChatToAll(romp.KIND_SYS,
+            "*** 🚔 PERINGATAN: " .. name .. " kini wanted level "
+            .. newlevel .. "! Polisi mengerahkan mobil patroli.")
+    elseif newlevel == 0 and oldlevel > 0 then
+        romp.sendChatToAll(romp.KIND_SYS,
+            "*** " .. name .. " sudah bersih (wanted 0).")
+    else
+        romp.sendChatToPlayer(pid, romp.KIND_INFO,
+            "*** Wanted level kamu sekarang: " .. newlevel .. ".")
+    end
+    return true
+end
+
 -- Pemain leave. reason: 0=quit, 1=kick, 2=timeout.
 -- Default C: "*** <nama> (id) keluar/di-kick/timeout."
 function onPlayerLeave(id, name, reason)
@@ -642,6 +662,41 @@ function onPlayerCommand(id, name, cmd, args)
         else
             romp.sendChatToPlayer(id, romp.KIND_INFO,
                 "*** Gagal: id pemain/senjata tak valid.")
+        end
+        return true
+    elseif cmd == "wanted" then
+        -- Demo wanted level ala SA-MP (SetPlayerWantedLevel):
+        -- /wanted <0-6> -> set wanted sendiri; broadcast 0x48 ke semua
+        -- pemain + event onPlayerWantedLevelChange (lihat di atas).
+        local lvl = tonumber(args)
+        if not lvl then
+            local cur = romp.getPlayerWantedLevel(id) or 0
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                string.format(
+                    "*** Wanted level kamu: %d. Pakai: /wanted <0-6>.",
+                    cur))
+            return true
+        end
+        if romp.setPlayerWantedLevel(id, lvl) then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                string.format("*** Wanted level kamu diset ke %d.", lvl))
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal: level harus 0-6.")
+        end
+        return true
+    elseif cmd == "wantedof" then
+        -- Lihat wanted level pemain lain (GetPlayerWantedLevel):
+        -- /wantedof <id>.
+        local tp = tonumber(args)
+        local lvl = tp and romp.getPlayerWantedLevel(tp)
+        if lvl then
+            local tname = romp.getPlayerName(tp) or ("id " .. tp)
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                string.format("*** Wanted level %s: %d.", tname, lvl))
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal: pid tak valid.")
         end
         return true
     elseif cmd == "modif" then

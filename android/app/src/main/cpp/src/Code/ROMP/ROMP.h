@@ -155,6 +155,14 @@ public:
     virtual void OnDeathMessage(uint8_t /*killerid*/, uint8_t /*victimid*/,
                                 uint8_t /*weaponid*/) {}
 
+    // Wanted level ala SA-MP (paket 0x48 WANTED_SET, dari
+    // romp.setPlayerWantedLevel): level wanted pemain pid berubah menjadi
+    // level (0=bersih .. 6=paling dicari). Broadcast global — client
+    // menerima wanted semua pemain. Default no-op.
+    // TODO(GAME): tampilkan bintang wanted (0-6) ala HUD GTA:SA untuk
+    //   tiap pemain remote; trigger skin/mobil polisi saat level >= 3.
+    virtual void OnPlayerWanted(uint8_t /*pid*/, uint8_t /*level*/) {}
+
     // Log ke konsol game / logcat.
     virtual void Log(const std::string& msg) = 0;
 

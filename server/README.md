@@ -414,6 +414,50 @@ lihat `PROTOCOL.md`. Pemain yang join belakangan tidak menerima riwayat
 kill feed. Client C++: `IROMPPlatform::OnDeathMessage` +
 `Client::SendDeathReport`; Godot: sinyal `death_msg`.
 
+### Wanted level ala SA-MP (`SetPlayerWantedLevel` / `GetPlayerWantedLevel`)
+
+Level wanted per pemain ala SA-MP: 0 = bersih (tak dicari polisi) ..
+6 = paling dicari. State otoritatif server (`Client.wanted_level`,
+default 0 termasuk NPC). Setiap `romp.setPlayerWantedLevel` yang berhasil
+di-broadcast ke SEMUA pemain via paket `0x48` WANTED_SET (global —
+wanted terlihat semua orang ala SA-MP, tanpa scope vw/interior) +
+menyalakan event Lua `onPlayerWantedLevelChange(pid, oldlevel, newlevel)`
+(perpanjangan RO-MP; SA-MP tidak punya event ini). Pemain yang baru join
+di-resync wanted semua yang connect (termasuk miliknya sendiri).
+
+Event ini memudahkan logika polisi di gamemode: kirim mobil patroli
+(cop car) saat wanted >= 3, ganti skin polisi, dsb. Demo di
+`server/gamemode.lua`: `/wanted <0-6>` (set wanted sendiri), `/wantedof
+<id>` (lihat wanted pemain lain) + handler `onPlayerWantedLevelChange`
+yang mengumumkan pengerahan polisi saat level >= 3.
+
+| API | Keterangan |
+|-----|------------|
+| `romp.setPlayerWantedLevel(pid, level)` | Set wanted 0..6 → `true`/`false`. Broadcast `0x48` + event. |
+| `romp.getPlayerWantedLevel(pid)` | Level wanted saat ini (int) / nil bila pemain tak valid. |
+
+Event: `onPlayerWantedLevelChange(pid, oldlevel, newlevel)` — menyala
+setiap perubahan wanted yang berhasil (level 0 = bersih).
+
+```lua
+-- /wanted: set wanted sendiri ke 4 (polisi siaga).
+romp.setPlayerWantedLevel(id, 4)
+
+-- Event: kerahkan mobil patroli saat wanted tinggi.
+function onPlayerWantedLevelChange(pid, oldlevel, newlevel)
+    if newlevel >= 3 then
+        local n = romp.getPlayerName(pid) or ("id " .. pid)
+        romp.sendChatToAll(romp.KIND_SYS,
+            "*** 🚔 " .. n .. " wanted level " .. newlevel
+            .. " — polisi mengerahkan mobil patroli!")
+    end
+end
+```
+
+Paket: `0x48` WANTED_SET (frame 3 byte: u8 pid + u8 level, server →
+semua client, global) — lihat `PROTOCOL.md`. Client C++:
+`IROMPPlatform::OnPlayerWanted`; Godot: sinyal `wanted_set`.
+
 ### World settings ala SA-MP (gravity, weather, world time)
 
 State dunia bersifat global (sama untuk semua pemain) dan otoritatif di

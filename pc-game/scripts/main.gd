@@ -141,6 +141,7 @@ func _setup_multiplayer() -> void:
 	net.marker_set.connect(_on_marker_set)
 	net.marker_mode.connect(_on_marker_mode)
 	net.death_msg.connect(_on_death_msg)
+	net.wanted_set.connect(_on_wanted_set)
 	net.teleport.connect(_on_teleport)
 	net.ping_updated.connect(_on_ping_updated)
 	net.label_spawn.connect(_on_label_spawn)
@@ -334,6 +335,18 @@ func _on_skill_set(pid: int, skill: int, level: int) -> void:
 		_player_skills[pid] = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 	if skill >= 0 and skill < 11:
 		_player_skills[pid][skill] = level
+
+
+## Wanted level ala SA-MP (0x48): level wanted per-pemain (0=bersih ..
+## 6=paling dicari). Disimpan per-pemain; dipakai HUD (bintang wanted)
+## dan logika polisi client (cop car saat level >= 3).
+var _player_wanted := {}  # pid -> int level
+
+func _on_wanted_set(pid: int, level: int) -> void:
+	_player_wanted[pid] = level
+	if level >= 3:
+		mp_chat.add_message(RompNet.CHAT_INFO,
+			"*** 🚔 %s kini wanted level %d!" % [_mp_name_of(pid), level])
 
 
 ## Player marker ala SA-MP (paket 0x44/0x45): warna marker efektif

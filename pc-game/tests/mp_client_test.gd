@@ -65,6 +65,7 @@ func _run() -> void:
 	_net.marker_set.connect(_on_mset)
 	_net.marker_mode.connect(_on_mmode)
 	_net.death_msg.connect(_on_dmsg)
+	_net.wanted_set.connect(_on_wanted)
 
 	# --- 1. Handshake + WELCOME ---
 	_net.connect_to("127.0.0.1", _port, "GodotTes", "rahasia")
@@ -139,6 +140,22 @@ func _run() -> void:
 	# end-to-end: server broadcast 0x47 sungguhan via sendDeathMessage
 	_net.send_chat("/deathgodot")
 	_check(await _wait("death_real", 10.0), "death_msg_server_diterima")
+
+	# --- 5c. Wanted level ala SA-MP (0x48 WANTED_SET): frame sintetik
+	# langsung ke parser + end-to-end via /wantedgodot
+	# (romp.setPlayerWantedLevel -> broadcast 0x48) ---
+	_ev.erase("wanted_ok")
+	_ev.erase("wanted_real")
+	var wpay := StreamPeerBuffer.new()
+	wpay.big_endian = false
+	wpay.put_u8(9)    # pid
+	wpay.put_u8(4)    # level 4
+	_net._inbuf.append_array(_mk_frame(RompNet.T_WANTED_SET, wpay.data_array))
+	_net._parse()
+	_check(_ev.get("wanted_ok", false), "wanted_set_diterima")
+	# end-to-end: wanted 4 untuk GodotTes sendiri via gamemode
+	_net.send_chat("/wantedgodot")
+	_check(await _wait("wanted_real", 10.0), "wanted_set_server_diterima")
 
 	# --- 6. Password salah -> REJECT -> connect_failed ---
 	_ev.erase("failed")
@@ -287,3 +304,12 @@ func _on_dmsg(killerid: int, victimid: int, weaponid: int) -> void:
 	if killerid == 255 and weaponid == 51 and victimid == _net.player_id:
 		_ev["death_real"] = true
 		_ev["marker_mode_ok"] = true
+
+
+func _on_wanted(pid: int, level: int) -> void:
+	# Frame sintetik: (9,4); end-to-end /wantedgodot: level 4 untuk
+	# pemain sendiri.
+	if pid == 9 and level == 4:
+		_ev["wanted_ok"] = true
+	if pid == _net.player_id and level == 4:
+		_ev["wanted_real"] = true

@@ -77,6 +77,10 @@ void lua_on_player_weapon_shot(int pid, int weaponid, int hittype, int hitid,
  * romp.sendDeathMessage manual (ala SA-MP SendDeathMessage tak menyalakan
  * OnPlayerDeath). killerid 255 = tak ada pembunuh. */
 void lua_on_player_death(int victimid, int killerid, int reason);
+/* Event wanted level ala SA-MP (perpanjangan RO-MP): menyala setiap
+ * romp.setPlayerWantedLevel berhasil — onPlayerWantedLevelChange(pid,
+ * oldlevel, newlevel). Dipakai gamemode untuk logika polisi. */
+void lua_on_wanted_level_change(int pid, int oldlevel, int newlevel);
 /* Event interior & virtual world ala SA-MP (tidak ada default C):
  * onPlayerInteriorChange(pid, old, new),
  * onPlayerVirtualWorldChange(pid, old, new). */

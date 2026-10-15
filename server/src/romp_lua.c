@@ -18,6 +18,7 @@
 #include "romp_skill.h"
 #include "romp_marker.h"
 #include "romp_death.h"
+#include "romp_wanted.h"
 
 #include "../vendor/sqlite/sqlite3.h"
 
@@ -1546,6 +1547,35 @@ static int l_romp_get_player_skill_levels(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- API wanted level ala SA-MP ----------------
+ * romp.setPlayerWantedLevel(pid, level) -> bool
+ *   Mirip SA-MP SetPlayerWantedLevel: set level wanted 0..6 (0 = bersih,
+ *   6 = paling dicari). Server menyimpan state otoritatif, broadcast
+ *   0x48 WANTED_SET ke SEMUA pemain (wanted terlihat semua orang ala
+ *   SA-MP), dan menyalakan event onPlayerWantedLevelChange(pid, old, new)
+ *   — perpanjangan RO-MP (SA-MP tak punya event ini) untuk logika polisi
+ *   di gamemode (mobil patroli, skin polisi, dsb).
+ *   false bila pemain tak valid / level di luar 0..6 (state tak berubah).
+ * romp.getPlayerWantedLevel(pid) -> level | nil
+ *   (ala SA-MP GetPlayerWantedLevel; nil bila pemain tak valid)
+ */
+static int l_romp_set_player_wanted_level(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int level = (int)luaL_checkinteger(Ls, 2);
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && wanted_set(c, level));
+    return 1;
+}
+
+static int l_romp_get_player_wanted_level(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(pid);
+    int lvl = c ? wanted_get(c) : -1;
+    if (lvl < 0) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, (lua_Integer)lvl);
+    return 1;
+}
+
 /* ---------------- API player marker ala SA-MP ----------------
  * romp.showPlayerMarkers(mode) -> bool
  *   Mirip SA-MP ShowPlayerMarkers: 0=off, 1=global, 2=streamed
@@ -2046,6 +2076,9 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_set_player_skill_level); lua_setfield(Ls, -2, "setPlayerSkillLevel");
     lua_pushcfunction(Ls, l_romp_get_player_skill_level); lua_setfield(Ls, -2, "getPlayerSkillLevel");
     lua_pushcfunction(Ls, l_romp_get_player_skill_levels); lua_setfield(Ls, -2, "getPlayerSkillLevels");
+    /* wanted level ala SA-MP (SetPlayerWantedLevel/GetPlayerWantedLevel) */
+    lua_pushcfunction(Ls, l_romp_set_player_wanted_level); lua_setfield(Ls, -2, "setPlayerWantedLevel");
+    lua_pushcfunction(Ls, l_romp_get_player_wanted_level); lua_setfield(Ls, -2, "getPlayerWantedLevel");
     /* konstanta skill senjata ala SA-MP (WEAPONSKILL_* di a_samp.inc) */
     lua_pushinteger(Ls, SKILL_PISTOL);         lua_setfield(Ls, -2, "SKILL_PISTOL");
     lua_pushinteger(Ls, SKILL_PISTOL_SILENCED); lua_setfield(Ls, -2, "SKILL_PISTOL_SILENCED");
@@ -2648,6 +2681,23 @@ void lua_on_player_death(int victimid, int killerid, int reason) {
     EvDeath e = { victimid, killerid, reason };
     fs_event("onPlayerDeath", push_death, &e);
     call_event("onPlayerDeath", push_death, &e);
+}
+
+/* Event wanted level ala SA-MP (perpanjangan RO-MP — SA-MP tak punya
+ * event ini): onPlayerWantedLevelChange(pid, oldlevel, newlevel). */
+typedef struct { int pid; int oldl; int newl; } EvWanted;
+static int push_wanted(lua_State *Ls, void *ud) {
+    EvWanted *e = (EvWanted *)ud;
+    lua_pushinteger(Ls, e->pid);
+    lua_pushinteger(Ls, e->oldl);
+    lua_pushinteger(Ls, e->newl);
+    return 3;
+}
+
+void lua_on_wanted_level_change(int pid, int oldlevel, int newlevel) {
+    EvWanted e = { pid, oldlevel, newlevel };
+    fs_event("onPlayerWantedLevelChange", push_wanted, &e);
+    call_event("onPlayerWantedLevelChange", push_wanted, &e);
 }
 
 typedef struct { int pid; int oldi; int newi; } EvInt;

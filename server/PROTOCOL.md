@@ -474,6 +474,40 @@ melapor; Godot: sinyal `death_msg` -> baris kill feed di chat).
 Demo: `/deathmsg <killer> <victim> <weapon>` di `server/gamemode.lua`
 + event `onPlayerDeath` yang mengumumkan ke chat.
 
+### 0x48 WANTED_SET (Server -> Client)
+
+Wanted level ala SA-MP (`SetPlayerWantedLevel`): dikirim server ke SEMUA
+pemain setiap `romp.setPlayerWantedLevel(pid, level)` berhasil —
+sekaligus menyalakan event Lua `onPlayerWantedLevelChange(pid, old, new)`
+(perpanjangan RO-MP; SA-MP tidak punya event ini — dipakai gamemode
+untuk logika polisi: mobil patroli, skin polisi, dsb). Wanted bersifat
+global ala SA-MP: semua orang melihat bintang wanted pemain lain, tidak
+di-scope virtual world/interior. Pemain yang join belakangan di-resync
+wanted semua yang connect via `wanted_sync_join` (termasuk miliknya
+sendiri, default 0).
+
+Frame `0x48` WANTED_SET (3 byte):
+
+```
+u8  pid    // pemain yang wanted-nya berubah
+u8  level  // level wanted 0=bersih .. 6=paling dicari
+```
+
+Validasi: `pid` harus pemain yang sedang connect; `level` 0..6.
+Kembalikan `false` bila argumen tak valid (tanpa broadcast, tanpa event,
+state tak berubah).
+
+API Lua (lihat `server/README.md`):
+`romp.setPlayerWantedLevel(pid, level)` -> bool,
+`romp.getPlayerWantedLevel(pid)` -> level | nil.
+Event: `onPlayerWantedLevelChange(pid, oldlevel, newlevel)`.
+
+Client game menerapkan wanted dari `0x48` langsung
+(C++: `IROMPPlatform::OnPlayerWanted`; Godot: sinyal `wanted_set` ->
+simpan per-pemain + pengumuman polisi di chat saat level >= 3).
+Demo: `/wanted <0-6>`, `/wantedof <id>` di `server/gamemode.lua`
++ event `onPlayerWantedLevelChange` yang mengumumkan ke chat.
+
 Test: `~/workspace/romp/tests/test_death.py`
 (+ `test_death_gamemode.lua`) — cek laporan valid/global broadcast/event/
 killer 255/validasi killer+reason/payload/manual-tanpa-event/NPC/joiner;
