@@ -5,6 +5,7 @@
  * paling umum:
  *   - teleport     : lompatan posisi mendadak (>= AC_TELEPORT_DIST unit)
  *   - speed hack   : kecepatan gerak melebihi batas wajar pemain/kendaraan
+ *   - airbreak     : naik vertikal sendiri saat jalan kaki (fly hack)
  *   - health hack  : laporan health client melebihi nilai otoritatif server
  *   - armour hack  : laporan armour client melebihi nilai otoritatif server
  *
@@ -29,6 +30,8 @@
 #define AC_TELEPORT_DIST  150.0f  /* lompatan >= ini = teleport */
 #define AC_SPEED_FOOT     60.0f   /* unit/detik, jalan kaki/lari (sprint SA ~12) */
 #define AC_SPEED_VEH      250.0f  /* unit/detik, di kendaraan (pesawat SA ~75) */
+#define AC_AIR_UP         15.0f   /* unit/detik naik vertikal saat jalan kaki
+                                   * (lompat SA ~6-8 u/s, fase naik singkat) */
 #define AC_STAT_TOL       5.0f    /* toleransi laporan health/armour client */
 #define AC_STAT_GRACE_MS  1500    /* abaikan laporan 1.5 dtk setelah server set */
 #define AC_POS_GRACE_MS   2000    /* abaikan cek teleport 2 dtk setelah

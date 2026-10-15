@@ -56,10 +56,20 @@ int ac_check_movement(struct Client *c, float nx, float ny, float nz,
     /* Batas kecepatan: sopir pakai batas kendaraan, yang lain batas kaki. */
     float lim = (c->vehicle_id >= 0 && c->vehicle_seat == 0)
                 ? AC_SPEED_VEH : AC_SPEED_FOOT;
+    int on_foot = !(c->vehicle_id >= 0 && c->vehicle_seat == 0);
     if (dt >= 80) {
         float speed = dist / ((float)dt / 1000.0f);
         if (speed > lim)
             ac_report(c, "speed", (double)speed);
+        /* Airbreak / fly hack: pemain jalan kaki tidak bisa naik sendiri ke
+         * udara — kecepatan naik vertikal di atas ambang = curang. Jatuh ke
+         * bawah selalu legal; sopir pesawat/helikopter boleh naik. Paket
+         * basi dalam grace setPlayerPos juga diabaikan di sini. */
+        if (!in_grace && on_foot && dz > 0.0f) {
+            float up_speed = dz / ((float)dt / 1000.0f);
+            if (up_speed > AC_AIR_UP)
+                ac_report(c, "airbreak", (double)up_speed);
+        }
     }
     return 0;
 }

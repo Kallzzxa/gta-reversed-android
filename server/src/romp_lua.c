@@ -2376,8 +2376,9 @@ void lua_on_player_vw_change(int pid, uint32_t old_vw, uint32_t new_vw) {
 /* ---------------- Event anti-cheat dasar ala SA-MP ----------------
  * Dipicu server C saat deteksi cheat; gamemode opsional menanganinya.
  * onPlayerCheat(playerid, type, value) dengan type = "teleport" | "speed" |
- * "health" | "armour", value = jarak (unit) / kecepatan (unit/dtk) /
- * health / armour yang dilaporkan client. */
+ * "airbreak" | "health" | "armour", value = jarak (unit) / kecepatan
+ * (unit/dtk) / kecepatan naik (unit/dtk) / health / armour yang dilaporkan
+ * client. */
 
 typedef struct { int pid; const char *type; double value; } EvCheat;
 static int push_cheat(lua_State *Ls, void *ud) {
