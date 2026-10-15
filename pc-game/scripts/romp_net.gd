@@ -42,6 +42,7 @@ const T_ACTOR_ANIM := 0x35
 const T_ACTOR_HEALTH := 0x36
 const T_AUDIO_PLAY := 0x37
 const T_AUDIO_STOP := 0x38
+const T_WORLD_SET := 0x39
 const T_NUI := 0x40
 
 const VER := 1
@@ -89,6 +90,7 @@ signal actor_anim(actorid: int, anim: String)
 signal actor_health(actorid: int, health: int)
 signal audio_play(url: String, usepos: bool, x: float, y: float, z: float, distance: float, loop: bool)
 signal audio_stop()
+signal world_settings(gravity: float, weather: int, hour: int, minute: int)
 signal nui_message(json_text: String)
 signal ping_updated(ms: int)
 
@@ -443,6 +445,12 @@ func _dispatch(ftype: int, payload: PackedByteArray) -> void:
 			audio_play.emit(aurl, ausepos, ax, ay, az, adist, aloop)
 		T_AUDIO_STOP:
 			audio_stop.emit()
+		T_WORLD_SET:
+			var wgravity := r.f32()
+			var wweather := r.u8()
+			var whour := r.u8()
+			var wminute := r.u8()
+			world_settings.emit(wgravity, wweather, whour, wminute)
 		T_PING:
 			_reply_pong(r.u32())
 		T_PONG:

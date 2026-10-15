@@ -91,6 +91,12 @@ public:
     virtual void OnAudioPlay(const AudioPlayInfo& /*info*/) {}
     virtual void OnAudioStop() {}
 
+    // World settings ala SA-MP (paket 0x39, dari romp.setGravity/dsb).
+    // Default no-op; platform game menimpa untuk menerapkan ke dunia.
+    // TODO(GAME): terapkan ke engine GTA:SA (SET_GRAVITY via script opcode,
+    //   force weather, set waktu via clock). Versi reversal masih stub.
+    virtual void OnWorldSettings(const WorldSetInfo& /*info*/) {}
+
     // Log ke konsol game / logcat.
     virtual void Log(const std::string& msg) = 0;
 

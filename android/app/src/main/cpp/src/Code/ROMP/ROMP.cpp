@@ -368,6 +368,13 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
             platform_->OnAudioStop();
             break;
         }
+        case PacketType::WORLD_SET: {
+            // Server mengubah world settings (gravity/weather/time).
+            WorldSetInfo ws;
+            if (!parse_world_set(payload, len, ws)) break;
+            platform_->OnWorldSettings(ws);
+            break;
+        }
         default:
             // Tipe tak dikenal: abaikan (forward-compat protokol).
             break;

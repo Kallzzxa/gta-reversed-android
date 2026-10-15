@@ -38,6 +38,10 @@ var _mp_players: Array = []     # [{id, name}] untuk scoreboard
 var _hostname := ""
 var _ping_ms := -1
 var _connecting := false
+var _sky_mat: ProceduralSkyMaterial  # untuk terapkan cuaca dari server
+var _sun: DirectionalLight3D  # untuk terapkan jam dunia dari server
+var _world_gravity := 0.008  # gravity ala SA-MP (default GTA:SA)
+var _default_gravity := 9.8
 
 
 func _ready() -> void:
@@ -51,6 +55,7 @@ func _ready() -> void:
 	# Pemain.
 	player = PlayerScript.new()
 	player.position = Vector3(0, 1.0, 10.0)
+	_default_gravity = player.gravity
 	add_child(player)
 
 	# Mobil: 1 dekat spawn + 2 parkir di jalan (properti lokal, client-side).
@@ -92,6 +97,7 @@ func _setup_environment() -> void:
 	sky_mat.ground_bottom_color = Color(0.18, 0.18, 0.2)
 	sky_mat.ground_horizon_color = Color(0.6, 0.65, 0.7)
 	sky.sky_material = sky_mat
+	_sky_mat = sky_mat
 	e.sky = sky
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	e.ambient_light_energy = 0.6
@@ -104,6 +110,7 @@ func _setup_environment() -> void:
 	sun.shadow_enabled = true
 	sun.light_energy = 1.15
 	sun.directional_shadow_max_distance = 220.0
+	_sun = sun
 	add_child(sun)
 
 
@@ -139,6 +146,7 @@ func _setup_multiplayer() -> void:
 	net.actor_health.connect(_on_actor_health)
 	net.audio_play.connect(_on_audio_play)
 	net.audio_stop.connect(_on_audio_stop)
+	net.world_settings.connect(_on_world_settings)
 
 	mp_chat = MpChatScript.new()
 	add_child(mp_chat)
@@ -513,6 +521,51 @@ func _audio_make_stream(url: String, data: PackedByteArray) -> AudioStream:
 func _on_audio_stop() -> void:
 	if _audio_player != null:
 		_audio_player.stop()
+
+
+## World settings ala SA-MP (paket 0x39 WORLD_SET): terapkan gravity,
+## cuaca, dan jam dunia dari server ke scene Godot.
+func _on_world_settings(gravity: float, weather: int, hour: int,
+		minute: int) -> void:
+	_world_gravity = gravity
+	if player != null and _default_gravity > 0.0:
+		# Skala relatif terhadap default GTA:SA 0.008.
+		player.gravity = _default_gravity * (_world_gravity / 0.008)
+	_apply_weather(weather)
+	_apply_world_time(hour, minute)
+
+
+# Preset warna langit sederhana per cuaca (id ala GTA:SA; 10 = Sunny).
+func _apply_weather(w: int) -> void:
+	if _sky_mat == null:
+		return
+	if w == 17:  # hujan (GTA:SA id 17)
+		_sky_mat.sky_top_color = Color(0.22, 0.26, 0.33)
+		_sky_mat.sky_horizon_color = Color(0.42, 0.46, 0.5)
+		_sky_mat.ground_bottom_color = Color(0.12, 0.12, 0.14)
+		_sky_mat.ground_horizon_color = Color(0.4, 0.43, 0.45)
+	elif w in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]:  # berawan/berkabut
+		_sky_mat.sky_top_color = Color(0.45, 0.55, 0.7)
+		_sky_mat.sky_horizon_color = Color(0.7, 0.73, 0.75)
+		_sky_mat.ground_bottom_color = Color(0.16, 0.16, 0.17)
+		_sky_mat.ground_horizon_color = Color(0.55, 0.57, 0.58)
+	else:  # cerah (default: 10 = Sunny)
+		_sky_mat.sky_top_color = Color(0.3, 0.55, 0.95)
+		_sky_mat.sky_horizon_color = Color(0.72, 0.83, 0.95)
+		_sky_mat.ground_bottom_color = Color(0.18, 0.18, 0.2)
+		_sky_mat.ground_horizon_color = Color(0.6, 0.65, 0.7)
+
+
+# Putar matahari mengikuti jam dunia: 06:00 terbit, 12:00 zenit,
+# 18:00 terbenam; malam hari cahaya meredup.
+func _apply_world_time(hour: int, minute: int) -> void:
+	if _sun == null:
+		return
+	var h := float(hour) + float(minute) / 60.0
+	var elev := sin((h - 6.0) / 12.0 * PI) * 75.0  # -75..75 derajat
+	_sun.rotation_degrees = Vector3(-elev, -35, 0)
+	var day_factor := clampf(elev / 60.0, 0.0, 1.0)
+	_sun.light_energy = 0.08 + 1.07 * day_factor
 
 
 

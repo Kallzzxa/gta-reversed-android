@@ -55,6 +55,7 @@ func _run() -> void:
 	_net.actor_spawn.connect(_on_aspawn)
 	_net.audio_play.connect(_on_aplay)
 	_net.audio_stop.connect(_on_astop)
+	_net.world_settings.connect(_on_world)
 	_net.teleport.connect(_on_teleport)
 	_net.ping_updated.connect(_on_ping)
 
@@ -79,6 +80,9 @@ func _run() -> void:
 
 	# --- 3d. Audio stream: peer kirim /audiogodot -> AUDIO_PLAY (0x37) ---
 	_check(await _wait("audio", 10.0), "audio_play_diterima")
+
+	# --- 3e. World settings: peer kirim /worldgodot -> WORLD_SET (0x39) ---
+	_check(await _wait("world", 10.0), "world_set_diterima")
 
 	# --- 4. Teleport 0x27 via /tpgodot ---
 	_net.send_chat("/tpgodot 500 600 70")
@@ -166,6 +170,11 @@ func _on_aplay(url: String, usepos: bool, _x: float, _y: float, _z: float,
 
 func _on_astop() -> void:
 	_ev["audio_stop"] = true
+
+
+func _on_world(gravity: float, weather: int, hour: int, minute: int) -> void:
+	if absf(gravity - 0.003) < 0.0001 and weather == 17 and hour == 23 and minute == 45:
+		_ev["world"] = true
 
 
 func _on_teleport(x: float, y: float, z: float) -> void:

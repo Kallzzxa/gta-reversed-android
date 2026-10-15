@@ -440,6 +440,31 @@ API Lua (lihat `server/README.md`):
 `romp.getPlayerAudioStream(pid)` -> tabel `{url, x, y, z, distance, usepos, loop}` | nil.
 Tak ada event Lua (audio bersifat pasif, seperti di SA-MP).
 
+### 0x39 WORLD_SET (Server -> Client)
+World settings ala SA-MP: gravitasi, cuaca, dan jam dunia. State bersifat
+**global** (sama untuk semua pemain, seperti di SA-MP) dan otoritatif di
+server. Setiap perubahan di-broadcast ke semua client, dan dikirim ulang
+ke pemain yang baru join (resync saat handshake).
+
+```
+f32 gravity   // gravitasi dunia (default GTA:SA 0.008)
+u8  weather   // id cuaca ala GTA:SA (default 10 = Sunny)
+u8  hour      // jam dunia 0-23 (default 12)
+u8  minute    // menit dunia 0-59 (default 0)
+```
+
+Nilai awal bisa dioverride dari `server.cfg`: `gravity`, `weather`,
+`worldtime HH:MM`.
+
+API Lua (lihat `server/README.md`):
+`romp.setGravity(gravity)` -> bool (valid 0.001..0.5; di luar itu false),
+`romp.getGravity()` -> float,
+`romp.setWeather(weatherid)` -> bool (valid 0..255),
+`romp.getWeather()` -> int,
+`romp.setWorldTime(hour [, minute])` -> bool (hour 0..23, minute 0..59),
+`romp.getWorldTime()` -> hour, minute.
+Tak ada event Lua (world settings bersifat pasif, seperti di SA-MP).
+
 API Lua (lihat `server/README.md`):
 `romp.create3DTextLabel(text, color, x, y, z, drawDist [, vw])`,
 `romp.delete3DTextLabel(id)`, `romp.update3DTextLabelText(id, color, text)`,

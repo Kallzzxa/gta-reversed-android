@@ -65,6 +65,8 @@ enum class PacketType : uint8_t {
     // Audio stream ala SA-MP (PlayAudioStreamForPlayer), server -> client.
     AUDIO_PLAY     = 0x37,  // putar URL audio
     AUDIO_STOP     = 0x38,  // hentikan audio yang diputar
+    // World settings ala SA-MP (SetGravity/SetWeather/SetWorldTime).
+    WORLD_SET      = 0x39,  // gravity/weather/time dunia (global)
 };
 
 // Alasan PLAYER_LEAVE (u8 reason).
@@ -536,6 +538,24 @@ inline bool parse_audio_play(const uint8_t* data, size_t len,
     if (!r.get_u8(loop)) return false;
     out.usepos = (usepos != 0);
     out.loop = (loop != 0);
+    return true;
+}
+
+struct WorldSetInfo {
+    float gravity = 0.008f;  // gravitasi dunia (default GTA:SA)
+    uint8_t weather = 10;    // id cuaca (10 = Sunny)
+    uint8_t hour = 12;       // jam dunia 0-23
+    uint8_t minute = 0;      // menit dunia 0-59
+};
+
+// 0x39 WORLD_SET: gravity(f32) + weather(u8) + hour(u8) + minute(u8).
+inline bool parse_world_set(const uint8_t* data, size_t len,
+                            WorldSetInfo& out) {
+    Reader r(data, len);
+    if (!r.get_float(out.gravity)) return false;
+    if (!r.get_u8(out.weather)) return false;
+    if (!r.get_u8(out.hour)) return false;
+    if (!r.get_u8(out.minute)) return false;
     return true;
 }
 

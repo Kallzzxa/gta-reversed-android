@@ -28,6 +28,9 @@ Server membaca `server.cfg` di folder yang sama. Default port **7777**.
 | `password` | *(kosong)* | Password server, kosongkan = bebas |
 | `gamemode` | gamemode.lua | File gamemode Lua (relatif ke folder server) |
 | `database` | *(kosong)* | Path file SQLite gamemode; kosong = fitur DB mati |
+| `gravity` | 0.008 | Gravitasi awal dunia (ala SA-MP `SetGravity`) |
+| `weather` | 10 | Cuaca awal dunia (ala SA-MP `SetWeather`; 10 = Sunny) |
+| `worldtime` | 12:00 | Jam awal dunia (ala SA-MP `SetWorldTime`), format `HH:MM` |
 
 ## Scripting Gamemode (Lua, ala FiveM)
 
@@ -258,6 +261,38 @@ end
 -- /audiofx: bunyi bel di posisi pemain, jarak dengar 30 unit.
 romp.playAudioStreamForPlayer(id, "https://contoh.test/bel.mp3",
                               x, y, z, 30.0, 1, 0)
+```
+
+### World settings ala SA-MP (gravity, weather, world time)
+
+State dunia bersifat global (sama untuk semua pemain) dan otoritatif di
+server. Nilai awal dari `server.cfg` (`gravity`, `weather`, `worldtime`),
+bisa diubah runtime dari Lua — setiap perubahan di-broadcast ke semua client
+dan dikirim ulang ke pemain yang baru join.
+
+| API | Keterangan |
+|-----|------------|
+| `romp.setGravity(gravity)` | → `true`/`false`; valid 0.001..0.5 (default GTA:SA 0.008) |
+| `romp.getGravity()` | Gravitasi saat ini (float) |
+| `romp.setWeather(weatherid)` | → `true`/`false`; valid 0..255 (default 10 = Sunny) |
+| `romp.getWeather()` | Cuaca saat ini (int) |
+| `romp.setWorldTime(hour [, minute])` | → `true`/`false`; hour 0..23, minute 0..59 |
+| `romp.getWorldTime()` | → `hour, minute` |
+
+Paket: `0x39` WORLD_SET (lihat `PROTOCOL.md`). Tak ada event
+(world settings bersifat pasif, seperti di SA-MP).
+
+```lua
+-- Contoh: zona moon gravity + cuaca badai + tengah malam.
+function onPlayerCommand(id, name, cmd, args)
+    if cmd == "bulan" then
+        romp.setGravity(0.002)
+        romp.setWeather(17)          -- hujan
+        romp.setWorldTime(0, 0)      -- tengah malam
+        return true
+    end
+    return false
+end
 ```
 
 ### Database SQLite untuk gamemode (skor, akun)

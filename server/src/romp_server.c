@@ -20,6 +20,7 @@
 #include "romp_object.h"
 #include "romp_actor.h"
 #include "romp_audio.h"
+#include "romp_world.h"
 
 #include <time.h>
 #include <pthread.h>
@@ -54,7 +55,11 @@ Config g_cfg = {
     "",     /* rcon_password */
     1,      /* anticheat */
     3,      /* ac_maxwarnings (0 = tidak pernah kick otomatis) */
-    ""      /* database (kosong = fitur SQLite mati) */
+    ""      /* database (kosong = fitur SQLite mati) */,
+    0.0f,   /* gravity (<=0 = default 0.008) */
+    -1,     /* weather (<0 = default 10) */
+    -1,     /* world_hour (<0 = default 12) */
+    -1      /* world_minute (<0 = default 0) */
 };
 
 static void cfg_load(const char *path) {
@@ -95,6 +100,16 @@ static void cfg_load(const char *path) {
             if (g_cfg.ac_maxwarnings < 0) g_cfg.ac_maxwarnings = 0;
         }
         else if (!strcmp(key, "database")) { strncpy(g_cfg.database, val, sizeof(g_cfg.database)-1); }
+        else if (!strcmp(key, "gravity")) g_cfg.gravity = (float)atof(val);
+        else if (!strcmp(key, "weather")) g_cfg.weather = atoi(val);
+        else if (!strcmp(key, "worldtime")) {
+            /* format "HH:MM" atau "HH" saja ala SA-MP SetWorldTime */
+            int h = -1, m = 0;
+            if (sscanf(val, "%d:%d", &h, &m) >= 1 && h >= 0) {
+                g_cfg.world_hour = h;
+                g_cfg.world_minute = m;
+            }
+        }
     }
     fclose(f);
 }
@@ -516,6 +531,9 @@ static void do_join(Client *c) {
 
     /* stream actor yang sudah ada ke pemain baru */
     actor_sync_join(c);
+
+    /* resync world settings (gravity/weather/time) ke pemain baru */
+    world_send_to(c);
 
     /* beritahu yang lain (hanya yang se-vw & se-interior) */
     size_t jn = build_join(b, c);
@@ -1566,6 +1584,9 @@ int main(int argc, char **argv) {
         }
     }
     cfg_load(cfg_path);
+
+    /* Terapkan world settings dari server.cfg sebelum gamemode di-load. */
+    world_init_from_config();
 
 #ifdef _WIN32
     WSADATA wd;

@@ -88,6 +88,9 @@ typedef int SOCKET;
 #define P_AUDIO_PLAY    0x37  /* server -> client: putar URL audio */
 #define P_AUDIO_STOP    0x38  /* server -> client: hentikan audio */
 
+/* ---- World settings ala SA-MP (lihat romp_world.h & PROTOCOL.md) ---- */
+#define P_WORLD_SET     0x39  /* server -> client: gravity/weather/time dunia */
+
 /* ---- Protokol UDP query (server browser), port sama dengan TCP ---- */
 #define QUERY_MAGIC   "ROMP"
 #define QUERY_MAGIC_LEN 4
@@ -147,6 +150,10 @@ typedef struct {
     int  anticheat;      /* 1 = anti-cheat dasar aktif (default 1) */
     int  ac_maxwarnings;  /* peringatan sebelum auto-kick, 0 = tidak pernah kick */
     char database[256];   /* path file SQLite gamemode; kosong = fitur DB mati */
+    float gravity;        /* world setting awal (ala SA-MP SetGravity; <=0 = default) */
+    int   weather;        /* world setting awal (ala SA-MP SetWeather; <0 = default) */
+    int   world_hour;     /* jam awal dunia (ala SA-MP SetWorldTime; <0 = default) */
+    int   world_minute;   /* menit awal dunia (<0 = default) */
 } Config;
 
 extern Config g_cfg;

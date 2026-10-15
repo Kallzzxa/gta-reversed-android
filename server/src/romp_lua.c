@@ -13,6 +13,7 @@
 #include "romp_object.h"
 #include "romp_actor.h"
 #include "romp_audio.h"
+#include "romp_world.h"
 
 #include "../vendor/sqlite/sqlite3.h"
 
@@ -1246,6 +1247,58 @@ static int l_romp_get_player_audio_stream(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- API world settings ala SA-MP ----------------
+ * romp.setGravity(gravity) -> bool
+ *   ala SA-MP SetGravity; default GTA:SA 0.008. Valid 0.001..0.5,
+ *   di luar rentang -> false dan state tak berubah.
+ * romp.getGravity() -> float
+ * romp.setWeather(weatherid) -> bool
+ *   ala SA-MP SetWeather; valid 0..255 (GTA:SA: 10 = Sunny).
+ * romp.getWeather() -> int
+ * romp.setWorldTime(hour [, minute]) -> bool
+ *   ala SA-MP SetWorldTime (jam saja) + menit; hour 0..23, minute 0..59.
+ * romp.getWorldTime() -> hour, minute
+ * Perubahan di-broadcast (0x39 WORLD_SET) ke semua client dan di-resync
+ * ke pemain yang baru join. Global seperti di SA-MP (bukan per-vw).
+ */
+
+static int l_romp_set_gravity(lua_State *Ls) {
+    float g = (float)luaL_checknumber(Ls, 1);
+    lua_pushboolean(Ls, world_set_gravity(g));
+    return 1;
+}
+
+static int l_romp_get_gravity(lua_State *Ls) {
+    lua_pushnumber(Ls, (lua_Number)world_get_gravity());
+    return 1;
+}
+
+static int l_romp_set_weather(lua_State *Ls) {
+    int w = (int)luaL_checkinteger(Ls, 1);
+    lua_pushboolean(Ls, world_set_weather(w));
+    return 1;
+}
+
+static int l_romp_get_weather(lua_State *Ls) {
+    lua_pushinteger(Ls, (lua_Integer)world_get_weather());
+    return 1;
+}
+
+static int l_romp_set_world_time(lua_State *Ls) {
+    int hour = (int)luaL_checkinteger(Ls, 1);
+    int minute = (int)luaL_optinteger(Ls, 2, 0);
+    lua_pushboolean(Ls, world_set_time(hour, minute));
+    return 1;
+}
+
+static int l_romp_get_world_time(lua_State *Ls) {
+    int hour, minute;
+    world_get_time(&hour, &minute);
+    lua_pushinteger(Ls, (lua_Integer)hour);
+    lua_pushinteger(Ls, (lua_Integer)minute);
+    return 2;
+}
+
 static int l_romp_give_weapon(lua_State *Ls) {
     int pid = (int)luaL_checkinteger(Ls, 1);
     int wid = (int)luaL_checkinteger(Ls, 2);
@@ -1564,6 +1617,13 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_play_audio_stream); lua_setfield(Ls, -2, "playAudioStreamForPlayer");
     lua_pushcfunction(Ls, l_romp_stop_audio_stream); lua_setfield(Ls, -2, "stopAudioStreamForPlayer");
     lua_pushcfunction(Ls, l_romp_get_player_audio_stream); lua_setfield(Ls, -2, "getPlayerAudioStream");
+    /* world settings ala SA-MP (SetGravity/SetWeather/SetWorldTime) */
+    lua_pushcfunction(Ls, l_romp_set_gravity); lua_setfield(Ls, -2, "setGravity");
+    lua_pushcfunction(Ls, l_romp_get_gravity); lua_setfield(Ls, -2, "getGravity");
+    lua_pushcfunction(Ls, l_romp_set_weather); lua_setfield(Ls, -2, "setWeather");
+    lua_pushcfunction(Ls, l_romp_get_weather); lua_setfield(Ls, -2, "getWeather");
+    lua_pushcfunction(Ls, l_romp_set_world_time); lua_setfield(Ls, -2, "setWorldTime");
+    lua_pushcfunction(Ls, l_romp_get_world_time); lua_setfield(Ls, -2, "getWorldTime");
     /* sentinel rotasi MoveObject "tak berubah" ala SA-MP (-1000.0) */
     lua_pushnumber(Ls, (lua_Number)OBJECT_NO_ROT); lua_setfield(Ls, -2, "OBJECT_NO_ROT");
     /* konstanta attach label: 0=statis, 1=pemain, 2=kendaraan */
