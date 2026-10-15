@@ -29,11 +29,13 @@ import org.json.JSONObject;
  *
  * TODO(GAME):
  *  - Tampilkan dari menu/launcher (mis. tombol "Multiplayer" di MainActivity).
- *  - Implementasikan native methods via JNI:
- *      nativeFetchMasterList -> ROMP::ROMPBrowser::FetchMasterList
- *      nativeQueryServer     -> ROMP::ROMPBrowser::QueryServer
- *      nativeConnect         -> ROMP::Client::Instance().Connect(ip, port, nick)
- *    Kembalikan JSON dengan format yang dipakai di bawah.
+ *    Nick diambil dari ROMPClient.get(activity).setNick(...) — default
+ *    "RO-MP_Player" bila tidak di-set.
+ *
+ * Method native di bawah diimplementasikan di
+ * android/app/src/main/cpp/src/Code/ROMP/ROMP_JNI.cpp
+ * (Java_com_regta_romp_ROMPServerBrowser_native*). Connect dirutekan
+ * lewat ROMPClient (satu-satunya pemilik koneksi).
  */
 public class ROMPServerBrowser {
     private final Activity activity;
@@ -132,13 +134,21 @@ public class ROMPServerBrowser {
     private class Bridge {
         /** Dipanggil halaman saat user mengetuk server / tombol connect manual.
          *  Password sudah ditanyakan halaman lewat dialog ala
-         *  DIALOG_STYLE_PASSWORD bila server punya password. */
+         *  DIALOG_STYLE_PASSWORD bila server punya password.
+         *  Connect dirutekan lewat ROMPClient (pemilik tunggal koneksi);
+         *  nick diambil dari ROMPClient.get(activity).setNick(...). */
         @JavascriptInterface
         public void connect(String ip, int port, String password) {
-            // TODO(GAME): nativeConnect -> Client::Connect(ip, port, nick, password).
-            // Password diteruskan ke handshake (u8 pwlen + byte password).
-            nativeConnect(ip, port, password == null ? "" : password);
-            hide();
+            ROMPClient client = ROMPClient.get(activity);
+            client.connect(ip, port, password == null ? "" : password,
+                    (ok, msg) -> {
+                        if (ok) {
+                            hide();
+                        } else {
+                            android.widget.Toast.makeText(activity, msg,
+                                    android.widget.Toast.LENGTH_LONG).show();
+                        }
+                    });
         }
 
         /** Versi lama tanpa password (backward compat): connect tanpa password. */
@@ -179,20 +189,16 @@ public class ROMPServerBrowser {
         postToPage("onFavorites", json);
     }
 
-    // TODO(GAME): implementasikan via JNI -> ROMP::ROMPBrowser.
+    // Diimplementasikan di ROMP_JNI.cpp
+    // (Java_com_regta_romp_ROMPServerBrowser_native*).
     // Format JSON:
     //   FetchMasterList -> [{"ip":"1.2.3.4","port":7777,"hostname":"..","motd":"..","players":3,"maxplayers":50}, ...]
     //   QueryServer     -> {"ip":"..","port":7777,"hostname":"..","motd":"..","version":"romp1",
     //                       "players":3,"maxplayers":50,"has_password":false,"ping_ms":12,
     //                       "player_list":[{"id":0,"name":"Andi"}]}
-    // Connect: browser.html menampilkan dialog password ala DIALOG_STYLE_PASSWORD
-    //   bila has_password=1 (atau selalu untuk connect manual), lalu panggil
-    //   nativeConnect(ip, port, password) — password dimasukkan ke handshake:
-    //   u8 pwlen + char pw[pwlen] (0 bila tanpa password), diverifikasi server
-    //   terhadap `password` di server.cfg (PROTOCOL.md).
+    //   ListenLan       -> array format QueryServer.
     private static native String nativeFetchMasterList(String host, int port);
     private static native String nativeQueryServer(String host, int port);
     // Dengarkan beacon LAN (JSON array, format sama seperti QueryServer).
     private static native String nativeListenLan(int timeoutMs);
-    private static native void nativeConnect(String ip, int port, String password);
 }

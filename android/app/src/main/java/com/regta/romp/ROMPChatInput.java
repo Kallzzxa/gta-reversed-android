@@ -15,21 +15,10 @@ import android.widget.LinearLayout;
  * mengetik pesan + tombol "Kirim". Saat dikirim, teks diteruskan ke
  * method native {@link #sendChatNative(String)}.
  *
- * <p><b>PENTING — JNI BELUM DISAMBUNG (TODO):</b>
- * Method {@code sendChatNative} di bawah ini hanya dideklarasikan sebagai
- * {@code native}. Implementasi JNI-nya
- * ({@code Java_com_regta_romp_ROMPChatInput_sendChatNative} di reGTA.cpp)
- * <b>belum ditulis</b> — itu pekerjaan lanjutan. Fungsi JNI tersebut
- * nantinya cukup memanggil:
- * <pre>
- *   ROMP::Client::Instance().SendChat(pesan);
- * </pre>
- * Sampai JNI-nya ada, memanggil dialog ini akan melempar
- * UnsatisfiedLinkError saat tombol Kirim ditekan (ditangkap dan diabaikan
- * di bawah supaya tidak crash).</p>
- *
- * <p>File ini CONTOH dan tidak di-reference dari file lain, jadi aman
- * terhadap build yang sudah ada.</p>
+ * <p>Method {@code sendChatNative} diimplementasikan di
+ * android/app/src/main/cpp/src/Code/ROMP/ROMP_JNI.cpp
+ * ({@code Java_com_regta_romp_ROMPChatInput_sendChatNative}) yang memanggil
+ * {@code ROMP::Client::Instance().SendChat(pesan)}.</p>
  */
 public class ROMPChatInput extends Dialog {
 
@@ -84,10 +73,9 @@ public class ROMPChatInput extends Dialog {
     }
 
     /**
-     * Meneruskan teks chat ke native.
-     * TODO(JNI): implementasikan di reGTA.cpp sebagai
-     * Java_com_regta_romp_ROMPChatInput_sendChatNative, isinya panggil
-     * ROMP::Client::Instance().SendChat(...).
+     * Meneruskan teks chat ke native (ROMP::Client::SendChat).
+     * Diimplementasikan di ROMP_JNI.cpp sebagai
+     * Java_com_regta_romp_ROMPChatInput_sendChatNative.
      */
     public native void sendChatNative(String text);
 

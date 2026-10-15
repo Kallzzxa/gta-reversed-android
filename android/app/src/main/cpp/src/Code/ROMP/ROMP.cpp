@@ -96,6 +96,7 @@ void Client::Disconnect() {
     }
     players_.Clear();
     state_ = ConnState::Disconnected;
+    ping_ms_ = -1;
     net_.Close();
     hs_waiting_ = false;
     hs_ok_ = false;
@@ -237,7 +238,14 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
             break;
         }
         case PacketType::PONG: {
-            // TODO(GAME, opsional): hitung RTT dari tick untuk ditampilkan.
+            // Server meng-echo client_tick yang kita kirim di PING (0x30).
+            uint32_t tick = 0;
+            if (parse_pong(payload, len, tick)) {
+                uint64_t now = NowMs();
+                uint64_t sent = static_cast<uint64_t>(tick);
+                // Guard: abaikan echo basi/aneh (tick dari masa depan).
+                if (sent <= now) ping_ms_ = static_cast<int32_t>(now - sent);
+            }
             break;
         }
         case PacketType::NUI_MESSAGE: {

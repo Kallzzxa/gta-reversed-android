@@ -149,6 +149,8 @@ public:
 
     uint16_t LocalPlayerId() const { return local_id_; }
     const std::string& LocalNick() const { return nick_; }
+    // RTT (ms) dari PONG terakhir; -1 = belum terukur.
+    int32_t GetPingMs() const { return ping_ms_; }
     const WelcomeInfo& ServerInfo() const { return server_info_; }
     const std::string& LastRejectReason() const { return reject_reason_; }
 
@@ -176,6 +178,7 @@ private:
     uint16_t local_id_ = 0;
     WelcomeInfo server_info_;
     std::string reject_reason_;
+    int32_t ping_ms_ = -1;  // RTT dari PONG terakhir (server echo client_tick)
 
     // Flag handshake Connect(): menunggu WELCOME/REJECT.
     bool hs_waiting_ = false;

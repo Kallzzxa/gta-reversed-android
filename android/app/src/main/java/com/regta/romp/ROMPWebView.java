@@ -27,11 +27,13 @@ import android.widget.FrameLayout;
  * sentuhan diteruskan ke game.
  *
  * TODO(GAME):
- *  - Panggil attach(activity) sekali dari activity game (GTASA).
- *  - Implementasikan native nuiCallbackNative(String, String) via JNI
- *    yang memanggil ROMP::Client::Instance().SendNuiCallback(...).
- *  - Panggil postToUI() dari implementasi IROMPPlatform::OnNuiMessage
- *    (via JNI ke method ini), dan setFocus() dari OnNuiFocus.
+ *  - Panggil attach(activity) sekali dari activity game (GTASA), atau lewat
+ *    ROMPClient.get(activity).init(webView) yang otomatis memakai instance
+ *    ini untuk callback NUI.
+ *
+ * Callback JS -&gt; native (window.romp.postMessage) diimplementasikan di
+ * ROMP_JNI.cpp (Java_com_regta_romp_ROMPWebView_nuiCallbackNative) yang
+ * memanggil ROMP::Client::SendNuiCallback.
  */
 public class ROMPWebView {
     private final Activity activity;
@@ -110,6 +112,7 @@ public class ROMPWebView {
         }
     }
 
-    // TODO(GAME): implementasikan via JNI -> ROMP::Client::SendNuiCallback.
+    // Diimplementasikan di ROMP_JNI.cpp ->
+    // ROMP::Client::SendNuiCallback (paket 0x41 NUI_CALLBACK ke server).
     private static native void nuiCallbackNative(String name, String dataJson);
 }
