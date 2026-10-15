@@ -71,6 +71,9 @@ enum class PacketType : uint8_t {
     VEH_COMP        = 0x3A,  // komponen dipasang: vid + compid + slot
     VEH_COMP_REMOVE = 0x3B,  // komponen dilepas: vid + compid
     VEH_PAINTJOB    = 0x3C,  // paintjob berubah: vid + paintjob
+    // Params kendaraan ala SA-MP (SetVehicleParamsEx/ForPlayer).
+    VEH_PARAMS   = 0x3D,  // params global berubah: vid + 7x int8
+    VEH_PARAMS_P = 0x3E,  // params per-pemain: vid + pid + 2x int8
 };
 
 // Alasan PLAYER_LEAVE (u8 reason).
@@ -604,6 +607,54 @@ inline bool parse_vehicle_paintjob(const uint8_t* data, size_t len,
     Reader r(data, len);
     if (!r.get_u16(out.vid)) return false;
     if (!r.get_u8(out.paintjob)) return false;
+    return true;
+}
+
+struct VehicleParamsInfo {
+    uint16_t vid = 0;
+    // -1 = unset, 0 = mati, 1 = nyala (ala SA-MP SetVehicleParamsEx).
+    int8_t engine = -1;
+    int8_t lights = -1;
+    int8_t alarm = -1;
+    int8_t doors = -1;
+    int8_t bonnet = -1;
+    int8_t boot = -1;
+    int8_t objective = -1;
+};
+
+// 0x3D VEH_PARAMS: vid(u16) + 7x int8.
+inline bool parse_vehicle_params(const uint8_t* data, size_t len,
+                                 VehicleParamsInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u16(out.vid)) return false;
+    uint8_t v;
+    int8_t* f[7] = {&out.engine, &out.lights, &out.alarm, &out.doors,
+                    &out.bonnet, &out.boot, &out.objective};
+    for (int i = 0; i < 7; ++i) {
+        if (!r.get_u8(v)) return false;
+        *f[i] = static_cast<int8_t>(v);
+    }
+    return true;
+}
+
+struct VehicleParamsForPlayerInfo {
+    uint16_t vid = 0;
+    uint16_t pid = 0;
+    int8_t objective = -1;    // -1 = unset, 0 = mati, 1 = nyala
+    int8_t doorslocked = -1;  // -1 = unset, 0 = buka, 1 = kunci
+};
+
+// 0x3E VEH_PARAMS_P: vid(u16) + pid(u16) + 2x int8.
+inline bool parse_vehicle_params_p(const uint8_t* data, size_t len,
+                                   VehicleParamsForPlayerInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u16(out.vid)) return false;
+    if (!r.get_u16(out.pid)) return false;
+    uint8_t v;
+    if (!r.get_u8(v)) return false;
+    out.objective = static_cast<int8_t>(v);
+    if (!r.get_u8(v)) return false;
+    out.doorslocked = static_cast<int8_t>(v);
     return true;
 }
 

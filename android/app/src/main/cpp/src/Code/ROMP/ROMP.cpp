@@ -396,6 +396,23 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
             platform_->OnVehiclePaintjob(vp.vid, vp.paintjob);
             break;
         }
+        case PacketType::VEH_PARAMS: {
+            // Params global berubah (romp.setVehicleParamsEx).
+            VehicleParamsInfo vp;
+            if (!parse_vehicle_params(payload, len, vp)) break;
+            platform_->OnVehicleParams(vp.vid, vp.engine, vp.lights, vp.alarm,
+                                       vp.doors, vp.bonnet, vp.boot,
+                                       vp.objective);
+            break;
+        }
+        case PacketType::VEH_PARAMS_P: {
+            // Params per-pemain (romp.setVehicleParamsForPlayer).
+            VehicleParamsForPlayerInfo vp;
+            if (!parse_vehicle_params_p(payload, len, vp)) break;
+            platform_->OnVehicleParamsForPlayer(vp.vid, vp.pid, vp.objective,
+                                                vp.doorslocked);
+            break;
+        }
         default:
             // Tipe tak dikenal: abaikan (forward-compat protokol).
             break;

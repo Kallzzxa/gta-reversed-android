@@ -62,6 +62,9 @@ typedef int SOCKET;
 #define P_VEH_COMP    0x3A  /* server -> client: komponen dipasang */
 #define P_VEH_COMP_REMOVE 0x3B /* server -> client: komponen dilepas */
 #define P_VEH_PAINTJOB 0x3C /* server -> client: paintjob berubah */
+#define P_VEH_PARAMS  0x3D  /* server -> client: params berubah (SetVehicleParamsEx) */
+#define P_VEH_PARAMS_P 0x3E /* server -> client: params per-pemain
+                               (SetVehicleParamsForPlayer), hanya ke 1 pemain */
 
 /* ---- Sinkronisasi senjata & tembakan ala SA-MP (lihat PROTOCOL.md) ---- */
 #define P_WPN         0x17  /* client -> server: event tembakan */

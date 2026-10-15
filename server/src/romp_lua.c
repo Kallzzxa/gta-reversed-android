@@ -849,6 +849,71 @@ static int l_romp_get_vehicle_paintjob(lua_State *Ls) {
     return 1;
 }
 
+/* romp.setVehicleParamsEx(vid, engine, lights, alarm, doors, bonnet, boot, objective) -> bool
+ *   (ala SA-MP SetVehicleParamsEx: tiap param -1 = jangan ubah, 0 = mati, 1 = nyala)
+ * romp.getVehicleParamsEx(vid) -> table|nil {engine,lights,alarm,doors,bonnet,boot,objective} */
+static int l_romp_set_vehicle_params_ex(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    int engine    = (int)luaL_checkinteger(Ls, 2);
+    int lights    = (int)luaL_checkinteger(Ls, 3);
+    int alarm     = (int)luaL_checkinteger(Ls, 4);
+    int doors     = (int)luaL_checkinteger(Ls, 5);
+    int bonnet    = (int)luaL_checkinteger(Ls, 6);
+    int boot      = (int)luaL_checkinteger(Ls, 7);
+    int objective = (int)luaL_checkinteger(Ls, 8);
+    lua_pushboolean(Ls, vehicle_set_params_ex(vid, engine, lights, alarm,
+                                              doors, bonnet, boot, objective));
+    return 1;
+}
+
+static int l_romp_get_vehicle_params_ex(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    int engine, lights, alarm, doors, bonnet, boot, objective;
+    if (!vehicle_get_params_ex(vid, &engine, &lights, &alarm,
+                               &doors, &bonnet, &boot, &objective)) {
+        lua_pushnil(Ls);
+        return 1;
+    }
+    lua_newtable(Ls);
+    lua_pushinteger(Ls, engine);    lua_setfield(Ls, -2, "engine");
+    lua_pushinteger(Ls, lights);    lua_setfield(Ls, -2, "lights");
+    lua_pushinteger(Ls, alarm);     lua_setfield(Ls, -2, "alarm");
+    lua_pushinteger(Ls, doors);     lua_setfield(Ls, -2, "doors");
+    lua_pushinteger(Ls, bonnet);    lua_setfield(Ls, -2, "bonnet");
+    lua_pushinteger(Ls, boot);      lua_setfield(Ls, -2, "boot");
+    lua_pushinteger(Ls, objective); lua_setfield(Ls, -2, "objective");
+    return 1;
+}
+
+/* romp.setVehicleParamsForPlayer(vid, pid, objective, doorslocked) -> bool
+ *   (ala SA-MP SetVehicleParamsForPlayer: tiap param -1 = jangan ubah,
+ *   0 = mati, 1 = nyala; hanya dikirim ke pemain tsb via 0x3E)
+ * romp.getVehicleParamsForPlayer(vid, pid) -> table|nil {objective,doorslocked}
+ *   (tanpa entri = -1/-1) */
+static int l_romp_set_vehicle_params_for_player(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    int pid = (int)luaL_checkinteger(Ls, 2);
+    int objective   = (int)luaL_checkinteger(Ls, 3);
+    int doorslocked = (int)luaL_checkinteger(Ls, 4);
+    lua_pushboolean(Ls, vehicle_set_params_for_player(vid, pid, objective,
+                                                      doorslocked));
+    return 1;
+}
+
+static int l_romp_get_vehicle_params_for_player(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    int pid = (int)luaL_checkinteger(Ls, 2);
+    int objective, doorslocked;
+    if (!vehicle_get_params_for_player(vid, pid, &objective, &doorslocked)) {
+        lua_pushnil(Ls);
+        return 1;
+    }
+    lua_newtable(Ls);
+    lua_pushinteger(Ls, objective);   lua_setfield(Ls, -2, "objective");
+    lua_pushinteger(Ls, doorslocked); lua_setfield(Ls, -2, "doorslocked");
+    return 1;
+}
+
 static int l_romp_get_vehicle_components(lua_State *Ls) {
     int vid = (int)luaL_checkinteger(Ls, 1);
     Vehicle *v = vehicle_by_id(vid);
@@ -1670,6 +1735,10 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_get_vehicle_component_type); lua_setfield(Ls, -2, "getVehicleComponentType");
     lua_pushcfunction(Ls, l_romp_change_vehicle_paintjob);   lua_setfield(Ls, -2, "changeVehiclePaintjob");
     lua_pushcfunction(Ls, l_romp_get_vehicle_paintjob);      lua_setfield(Ls, -2, "getVehiclePaintjob");
+    lua_pushcfunction(Ls, l_romp_set_vehicle_params_ex);     lua_setfield(Ls, -2, "setVehicleParamsEx");
+    lua_pushcfunction(Ls, l_romp_get_vehicle_params_ex);     lua_setfield(Ls, -2, "getVehicleParamsEx");
+    lua_pushcfunction(Ls, l_romp_set_vehicle_params_for_player); lua_setfield(Ls, -2, "setVehicleParamsForPlayer");
+    lua_pushcfunction(Ls, l_romp_get_vehicle_params_for_player); lua_setfield(Ls, -2, "getVehicleParamsForPlayer");
     lua_pushcfunction(Ls, l_romp_get_vehicle_components);    lua_setfield(Ls, -2, "getVehicleComponents");
     /* 3D text label ala SA-MP (Create3DTextLabel) */
     lua_pushcfunction(Ls, l_romp_create_label);       lua_setfield(Ls, -2, "create3DTextLabel");

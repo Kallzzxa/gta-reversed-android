@@ -132,6 +132,8 @@ func _setup_multiplayer() -> void:
 	net.vehicle_component.connect(_on_vehicle_component)
 	net.vehicle_component_remove.connect(_on_vehicle_component_remove)
 	net.vehicle_paintjob.connect(_on_vehicle_paintjob)
+	net.vehicle_params.connect(_on_vehicle_params)
+	net.vehicle_params_p.connect(_on_vehicle_params_p)
 	net.teleport.connect(_on_teleport)
 	net.ping_updated.connect(_on_ping_updated)
 	net.label_spawn.connect(_on_label_spawn)
@@ -284,6 +286,21 @@ func _on_vehicle_paintjob(vid: int, paintjob: int) -> void:
 	# 0x3C VEH_PAINTJOB ala SA-MP ChangeVehiclePaintjob.
 	if _remote_cars.has(vid):
 		_remote_cars[vid].set_paintjob(paintjob)
+
+
+func _on_vehicle_params(vid: int, engine: int, lights: int, alarm: int,
+		doors: int, bonnet: int, boot: int, objective: int) -> void:
+	# 0x3D VEH_PARAMS ala SA-MP SetVehicleParamsEx.
+	if _remote_cars.has(vid):
+		_remote_cars[vid].set_params(engine, lights, alarm, doors,
+			bonnet, boot, objective)
+
+
+func _on_vehicle_params_p(vid: int, pid: int, objective: int,
+		doorslocked: int) -> void:
+	# 0x3E VEH_PARAMS_P ala SA-MP SetVehicleParamsForPlayer.
+	if _remote_cars.has(vid):
+		_remote_cars[vid].set_params_for_player(pid, objective, doorslocked)
 
 
 func _on_teleport(x: float, y: float, z: float) -> void:

@@ -107,6 +107,18 @@ public:
                                           uint16_t /*compid*/) {}
     virtual void OnVehiclePaintjob(uint16_t /*vid*/, uint8_t /*paintjob*/) {}
 
+    // Params kendaraan ala SA-MP (paket 0x3D/0x3E,
+    // dari romp.setVehicleParamsEx/setVehicleParamsForPlayer).
+    // Default no-op; platform game menimpa untuk terapkan ke dunia.
+    // TODO(GAME): engine/lights/doors via pool kendaraan game.
+    virtual void OnVehicleParams(uint16_t /*vid*/, int8_t /*engine*/,
+                                 int8_t /*lights*/, int8_t /*alarm*/,
+                                 int8_t /*doors*/, int8_t /*bonnet*/,
+                                 int8_t /*boot*/, int8_t /*objective*/) {}
+    virtual void OnVehicleParamsForPlayer(uint16_t /*vid*/, uint16_t /*pid*/,
+                                          int8_t /*objective*/,
+                                          int8_t /*doorslocked*/) {}
+
     // Log ke konsol game / logcat.
     virtual void Log(const std::string& msg) = 0;
 

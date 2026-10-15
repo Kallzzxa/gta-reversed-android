@@ -46,6 +46,8 @@ const T_WORLD_SET := 0x39
 const T_VEH_COMP := 0x3A
 const T_VEH_COMP_REMOVE := 0x3B
 const T_VEH_PAINTJOB := 0x3C
+const T_VEH_PARAMS := 0x3D
+const T_VEH_PARAMS_P := 0x3E
 const T_NUI := 0x40
 
 const VER := 1
@@ -97,6 +99,8 @@ signal world_settings(gravity: float, weather: int, hour: int, minute: int)
 signal vehicle_component(vid: int, compid: int, slot: int)
 signal vehicle_component_remove(vid: int, compid: int)
 signal vehicle_paintjob(vid: int, paintjob: int)
+signal vehicle_params(vid: int, engine: int, lights: int, alarm: int, doors: int, bonnet: int, boot: int, objective: int)
+signal vehicle_params_p(vid: int, pid: int, objective: int, doorslocked: int)
 signal nui_message(json_text: String)
 signal ping_updated(ms: int)
 
@@ -126,6 +130,11 @@ class Reader:
 
 	func u8() -> int:
 		return _spb.get_u8()
+
+	## Baca int8 bertanda (-1 = unset ala SA-MP SetVehicleParamsEx).
+	func i8() -> int:
+		var v := _spb.get_u8()
+		return v - 256 if v >= 128 else v
 
 	func u16() -> int:
 		return _spb.get_u16()
@@ -361,6 +370,11 @@ func _dispatch(ftype: int, payload: PackedByteArray) -> void:
 			vehicle_component_remove.emit(r.u16(), r.u16())
 		T_VEH_PAINTJOB:
 			vehicle_paintjob.emit(r.u16(), r.u8())
+		T_VEH_PARAMS:
+			vehicle_params.emit(r.u16(), r.i8(), r.i8(), r.i8(), r.i8(),
+				r.i8(), r.i8(), r.i8())
+		T_VEH_PARAMS_P:
+			vehicle_params_p.emit(r.u16(), r.u16(), r.i8(), r.i8())
 		T_WPN_SYNC:
 			var shooter := r.u16()
 			var weapon := r.u16()

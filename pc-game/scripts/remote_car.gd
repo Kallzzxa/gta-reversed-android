@@ -19,6 +19,9 @@ var _spoiler: Node3D  # visual spoiler (slot 0) — v1: kotak sederhana
 var _components: Dictionary = {}  # slot -> compid
 var _last_c1 := 0
 var _last_c2 := 0
+var _headlight_mats: Array = []  # material lampu depan (untuk params lights)
+var _param_tag: Label3D  # indikator 🔒/🎯 dari params doors/objective
+var _params: Dictionary = {}  # engine/lights/alarm/doors/bonnet/boot/objective
 
 
 func _ready() -> void:
@@ -29,10 +32,11 @@ func _ready() -> void:
 	_add_box(Vector3(1.7, 0.55, 2.1), Vector3(0, 1.28, 0.25),
 		_make_mat(Color(0.08, 0.1, 0.14)))
 	# Lampu depan.
-	_add_box(Vector3(0.35, 0.18, 0.1), Vector3(-0.6, 0.85, -2.12),
-		_make_mat(Color(1, 1, 0.9), true))
-	_add_box(Vector3(0.35, 0.18, 0.1), Vector3(0.6, 0.85, -2.12),
-		_make_mat(Color(1, 1, 0.9), true))
+	var hl1 := _make_mat(Color(1, 1, 0.9), true)
+	var hl2 := _make_mat(Color(1, 1, 0.9), true)
+	_headlight_mats = [hl1, hl2]
+	_add_box(Vector3(0.35, 0.18, 0.1), Vector3(-0.6, 0.85, -2.12), hl1)
+	_add_box(Vector3(0.35, 0.18, 0.1), Vector3(0.6, 0.85, -2.12), hl2)
 	# Roda (statis untuk remote).
 	for sx in [-1.0, 1.0]:
 		for sz in [-1.35, 1.35]:
@@ -76,6 +80,16 @@ func _ready() -> void:
 	_spoiler.visible = false
 	add_child(_spoiler)
 
+	# Tag indikator params ala SA-MP (🔒 pintu terkunci, 🎯 objective).
+	_param_tag = Label3D.new()
+	_param_tag.text = ""
+	_param_tag.position = Vector3(0, 2.9, 0)
+	_param_tag.font_size = 96
+	_param_tag.pixel_size = 0.01
+	_param_tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_param_tag.no_depth_test = true
+	add_child(_param_tag)
+
 
 func set_component(slot: int, compid: int) -> void:
 	# 0x3A VEH_COMP — v1: hanya slot 0 (spoiler) yang divisualkan.
@@ -104,6 +118,40 @@ func set_paintjob(paintjob: int) -> void:
 	_body_mat.albedo_color = Color.from_hsv(
 		base.h + float(paintjob) * 0.33, minf(base.s + 0.2, 1.0),
 		minf(base.v + 0.15, 1.0))
+
+
+func set_params(engine: int, lights: int, _alarm: int, doors: int,
+		_bonnet: int, _boot: int, objective: int) -> void:
+	# 0x3D VEH_PARAMS ala SA-MP SetVehicleParamsEx (-1 = jangan ubah).
+	var vals := {"engine": engine, "lights": lights, "doors": doors,
+		"objective": objective}
+	for k in vals.keys():
+		if vals[k] != -1:
+			_params[k] = vals[k]
+	if lights != -1:
+		for m in _headlight_mats:
+			m.emission_enabled = lights == 1
+	_refresh_param_tag()
+
+
+func set_params_for_player(_pid: int, objective: int, doorslocked: int) -> void:
+	# 0x3E VEH_PARAMS_P ala SA-MP SetVehicleParamsForPlayer.
+	if objective != -1:
+		_params["objective"] = objective
+	if doorslocked != -1:
+		_params["doors"] = doorslocked
+	_refresh_param_tag()
+
+
+func _refresh_param_tag() -> void:
+	var t := ""
+	if _params.get("doors", -1) == 1:
+		t += "🔒"
+	if _params.get("objective", -1) == 1:
+		t += "🎯"
+	if _params.get("engine", -1) == 0:
+		t += "🚫"
+	_param_tag.text = t
 
 
 func setup(p_vid: int, p_model: int, x: float, y: float, z: float,

@@ -334,6 +334,22 @@ static void bcast_veh_paintjob(Vehicle *v) {
     broadcast_frame_vw(b, 4, NULL, v->vw);
 }
 
+/* Broadcast params kendaraan (0x3D): vid u16 + 7x int8 (engine, lights,
+ * alarm, doors, bonnet, boot, objective). Nilai -1 = unset. */
+static void bcast_veh_params(Vehicle *v) {
+    uint8_t b[10];
+    b[0] = P_VEH_PARAMS;
+    vput_u16(b + 1, (uint16_t)v->id);
+    b[3] = (uint8_t)(int8_t)v->prm_engine;
+    b[4] = (uint8_t)(int8_t)v->prm_lights;
+    b[5] = (uint8_t)(int8_t)v->prm_alarm;
+    b[6] = (uint8_t)(int8_t)v->prm_doors;
+    b[7] = (uint8_t)(int8_t)v->prm_bonnet;
+    b[8] = (uint8_t)(int8_t)v->prm_boot;
+    b[9] = (uint8_t)(int8_t)v->prm_objective;
+    broadcast_frame_vw(b, 10, NULL, v->vw);
+}
+
 /* Kirim komponen + paintjob satu kendaraan ke satu client (resync join/pindah
  * vw). Dipanggil setelah 0x14 + 0x16 di send_veh_to. */
 static void send_veh_mods_to(Client *c, Vehicle *v) {
@@ -352,6 +368,22 @@ static void send_veh_mods_to(Client *c, Vehicle *v) {
         vput_u16(b + 1, (uint16_t)v->id);
         b[3] = v->paintjob;
         client_send_frame(c, b, 4);
+    }
+    /* Kirim params bila ada yang di-set (bukan -1 semua). */
+    if (v->prm_engine != -1 || v->prm_lights != -1 || v->prm_alarm != -1 ||
+        v->prm_doors != -1 || v->prm_bonnet != -1 || v->prm_boot != -1 ||
+        v->prm_objective != -1) {
+        uint8_t b[10];
+        b[0] = P_VEH_PARAMS;
+        vput_u16(b + 1, (uint16_t)v->id);
+        b[3] = (uint8_t)(int8_t)v->prm_engine;
+        b[4] = (uint8_t)(int8_t)v->prm_lights;
+        b[5] = (uint8_t)(int8_t)v->prm_alarm;
+        b[6] = (uint8_t)(int8_t)v->prm_doors;
+        b[7] = (uint8_t)(int8_t)v->prm_bonnet;
+        b[8] = (uint8_t)(int8_t)v->prm_boot;
+        b[9] = (uint8_t)(int8_t)v->prm_objective;
+        client_send_frame(c, b, 10);
     }
 }
 
@@ -392,6 +424,8 @@ int vehicle_create(uint16_t model, float x, float y, float z, float angle,
     v->driver = -1;
     v->pass[0] = v->pass[1] = v->pass[2] = -1;
     v->paintjob = VEH_PAINTJOB_NONE; /* comp[] = 0 via calloc */
+    v->prm_engine = v->prm_lights = v->prm_alarm = v->prm_doors =
+        v->prm_bonnet = v->prm_boot = v->prm_objective = -1;
     v->respawn_ms = respawn_ms;
     v->next = g_vehicles;
     g_vehicles = v;
@@ -424,6 +458,8 @@ int vehicle_destroy(int id) {
             eject_all(v, 1);
             /* 3D text label yang di-attach ikut terhapus (ala SA-MP) */
             label_on_vehicle_destroy(id);
+            /* params per-pemain kendaraan ini ikut dibersihkan */
+            vehicle_params_vehicle_cleanup(id);
             bcast_veh_despawn(id, v->vw);
             *pp = v->next;
             free(v);
@@ -556,6 +592,154 @@ int vehicle_get_paintjob(int vid) {
     return (int)v->paintjob;
 }
 
+/* ---------------- Params ala SA-MP (SetVehicleParamsEx) ---------------- */
+
+/* Validasi nilai param: -1 (unset), 0 (mati), 1 (nyala). */
+static int params_valid(int p) { return p >= -1 && p <= 1; }
+
+/* Forward declaration: dipanggil vehicle_destroy() yang ada di atas. */
+void vehicle_params_vehicle_cleanup(int vid);
+
+int vehicle_set_params_ex(int vid, int engine, int lights, int alarm,
+                          int doors, int bonnet, int boot, int objective) {
+    Vehicle *v = vehicle_by_id(vid);
+    if (!v || v->destroyed) return 0;
+    if (!params_valid(engine) || !params_valid(lights) || !params_valid(alarm) ||
+        !params_valid(doors) || !params_valid(bonnet) || !params_valid(boot) ||
+        !params_valid(objective)) return 0;
+    /* -1 = jangan ubah (ala SA-MP: param -1 = tidak disentuh). */
+    if (engine != -1)    v->prm_engine    = (int8_t)engine;
+    if (lights != -1)    v->prm_lights    = (int8_t)lights;
+    if (alarm != -1)     v->prm_alarm     = (int8_t)alarm;
+    if (doors != -1)     v->prm_doors     = (int8_t)doors;
+    if (bonnet != -1)    v->prm_bonnet    = (int8_t)bonnet;
+    if (boot != -1)      v->prm_boot      = (int8_t)boot;
+    if (objective != -1) v->prm_objective = (int8_t)objective;
+    bcast_veh_params(v);
+    return 1;
+}
+
+int vehicle_get_params_ex(int vid, int *engine, int *lights, int *alarm,
+                          int *doors, int *bonnet, int *boot, int *objective) {
+    Vehicle *v = vehicle_by_id(vid);
+    if (!v) return 0;
+    if (engine)    *engine    = (int)v->prm_engine;
+    if (lights)    *lights    = (int)v->prm_lights;
+    if (alarm)     *alarm     = (int)v->prm_alarm;
+    if (doors)     *doors     = (int)v->prm_doors;
+    if (bonnet)    *bonnet    = (int)v->prm_bonnet;
+    if (boot)      *boot      = (int)v->prm_boot;
+    if (objective) *objective = (int)v->prm_objective;
+    return 1;
+}
+
+/* ------------- Params per-pemain ala SA-MP (SetVehicleParamsForPlayer) ------------- */
+/* objective: -1 = unset, 0 = mati, 1 = nyala (marker objective);
+ * doorslocked: -1 = unset, 0 = buka, 1 = kunci. */
+
+typedef struct VehPlayerParam {
+    int vid;
+    int pid;
+    int8_t objective;
+    int8_t doorslocked;
+    struct VehPlayerParam *next;
+} VehPlayerParam;
+
+static VehPlayerParam *g_pparams = NULL;
+
+/* Kirim satu entri 0x3E ke pemain target: vid u16 + pid u16 +
+ * objective i8 + doorslocked i8. */
+static void send_veh_pparam_to(Client *c, const VehPlayerParam *e) {
+    uint8_t b[7];
+    b[0] = P_VEH_PARAMS_P;
+    vput_u16(b + 1, (uint16_t)e->vid);
+    vput_u16(b + 3, (uint16_t)e->pid);
+    b[5] = (uint8_t)e->objective;
+    b[6] = (uint8_t)e->doorslocked;
+    client_send_frame(c, b, 7);
+}
+
+/* Resync semua entri per-pemain milik pid ke client (join / pindah vw). */
+static void send_veh_pparams_to(Client *c, int pid) {
+    for (VehPlayerParam *e = g_pparams; e; e = e->next) {
+        if (e->pid == pid)
+            send_veh_pparam_to(c, e);
+    }
+}
+
+int vehicle_set_params_for_player(int vid, int pid, int objective,
+                                  int doorslocked) {
+    Vehicle *v = vehicle_by_id(vid);
+    if (!v || v->destroyed) return 0;
+    Client *c = client_by_id(pid);
+    if (!c) return 0;
+    if (!params_valid(objective) || !params_valid(doorslocked)) return 0;
+    VehPlayerParam *e;
+    for (e = g_pparams; e; e = e->next) {
+        if (e->vid == vid && e->pid == pid) break;
+    }
+    if (!e) {
+        e = (VehPlayerParam *)calloc(1, sizeof(*e));
+        if (!e) return 0;
+        e->vid = vid;
+        e->pid = pid;
+        e->objective = -1;
+        e->doorslocked = -1;
+        e->next = g_pparams;
+        g_pparams = e;
+    }
+    /* -1 = jangan ubah (konsisten dengan SetVehicleParamsEx). */
+    if (objective != -1)   e->objective   = (int8_t)objective;
+    if (doorslocked != -1) e->doorslocked = (int8_t)doorslocked;
+    send_veh_pparam_to(c, e);
+    return 1;
+}
+
+int vehicle_get_params_for_player(int vid, int pid, int *objective,
+                                  int *doorslocked) {
+    if (!vehicle_by_id(vid)) return 0;
+    if (!client_by_id(pid)) return 0;
+    int8_t obj = -1, dl = -1;
+    for (VehPlayerParam *e = g_pparams; e; e = e->next) {
+        if (e->vid == vid && e->pid == pid) {
+            obj = e->objective;
+            dl = e->doorslocked;
+            break;
+        }
+    }
+    if (objective)   *objective   = (int)obj;
+    if (doorslocked) *doorslocked = (int)dl;
+    return 1;
+}
+
+/* Hapus semua entri params per-pemain kendaraan vid (dipanggil saat destroy). */
+void vehicle_params_vehicle_cleanup(int vid) {
+    VehPlayerParam **pp = &g_pparams;
+    while (*pp) {
+        VehPlayerParam *e = *pp;
+        if (e->vid == vid) {
+            *pp = e->next;
+            free(e);
+        } else {
+            pp = &e->next;
+        }
+    }
+}
+
+/* Hapus semua entri params per-pemain milik pid (dipanggil saat disconnect). */
+void vehicle_params_player_cleanup(int pid) {
+    VehPlayerParam **pp = &g_pparams;
+    while (*pp) {
+        VehPlayerParam *e = *pp;
+        if (e->pid == pid) {
+            *pp = e->next;
+            free(e);
+        } else {
+            pp = &e->next;
+        }
+    }
+}
+
 /* ---------------- Penumpang ---------------- */
 
 int vehicle_put_player(int pid, int vid, int seat) {
@@ -658,6 +842,8 @@ void vehicle_sync_join(Client *c) {
         if (v->vw != c->vw) continue;
         send_veh_to(c, v);
     }
+    /* Params per-pemain milik pemain ini (0x3E, tak di-scope vw). */
+    send_veh_pparams_to(c, c->id);
 }
 
 /* Resync kendaraan saat pemain pindah vw: despawn yang vw lama,

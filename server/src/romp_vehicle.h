@@ -39,6 +39,13 @@ typedef struct Vehicle {
     uint16_t comp[VEH_COMP_SLOTS]; /* compid per slot (ala AddVehicleComponent),
                                     * 0 = slot kosong */
     uint8_t  paintjob;           /* 0..2, 255 = tak ada (ala SA-MP) */
+    int8_t   prm_engine;         /* -1 = unset, 0 = mati, 1 = nyala (ala SA-MP) */
+    int8_t   prm_lights;         /* -1 = unset, 0 = mati, 1 = nyala */
+    int8_t   prm_alarm;          /* -1 = unset, 0 = mati, 1 = nyala */
+    int8_t   prm_doors;          /* -1 = unset, 0 = buka, 1 = kunci */
+    int8_t   prm_bonnet;         /* -1 = unset, 0 = tutup, 1 = buka */
+    int8_t   prm_boot;           /* -1 = unset, 0 = tutup, 1 = buka */
+    int8_t   prm_objective;      /* -1 = unset, 0 = mati, 1 = nyala */
     uint64_t dead_at;            /* now_ms() saat hancur */
     int      destroyed;          /* 1 = sedang hancur, menunggu respawn */
     uint64_t last_sync_ms;       /* rate limit paket VEH */
@@ -87,6 +94,32 @@ int vehicle_get_component_in_slot(int vid, int slot);
 int vehicle_set_paintjob(int vid, uint8_t paintjob);
 /* Paintjob kendaraan (0..2 | 255 = tak ada), -1 bila vid invalid. */
 int vehicle_get_paintjob(int vid);
+
+/* ---- Params kendaraan ala SA-MP (SetVehicleParamsEx) ---- */
+/* Set params kendaraan. Tiap param: -1 = unset (jangan ubah), 0 = mati,
+ * 1 = nyala. Broadcast 0x3D ke vw kendaraan. 1 = sukses, 0 = vid invalid. */
+int vehicle_set_params_ex(int vid, int engine, int lights, int alarm,
+                          int doors, int bonnet, int boot, int objective);
+/* Ambil params kendaraan ke pointer (boleh NULL bila tidak peduli).
+ * 1 = sukses, 0 = vid invalid. */
+int vehicle_get_params_ex(int vid, int *engine, int *lights, int *alarm,
+                          int *doors, int *bonnet, int *boot, int *objective);
+
+/* ---- Params per-pemain ala SA-MP (SetVehicleParamsForPlayer) ---- */
+/* Set params kendaraan khusus untuk satu pemain (objective = marker objective,
+ * doorslocked = pintu terkunci). Tiap param: -1 = jangan ubah, 0 = mati,
+ * 1 = nyala. Dikirim 0x3E HANYA ke pemain tersebut (tak di-broadcast).
+ * 1 = sukses, 0 = vid/pid invalid atau kendaraan hancur. */
+int vehicle_set_params_for_player(int vid, int pid, int objective,
+                                  int doorslocked);
+/* Ambil params per-pemain (tanpa entri = -1/-1). 1 = sukses,
+ * 0 = vid/pid invalid. */
+int vehicle_get_params_for_player(int vid, int pid, int *objective,
+                                  int *doorslocked);
+/* Hapus semua entri params per-pemain milik pid (dipanggil saat disconnect). */
+void vehicle_params_player_cleanup(int pid);
+/* Hapus semua entri params per-pemain kendaraan vid (dipanggil saat destroy). */
+void vehicle_params_vehicle_cleanup(int vid);
 
 /* ---- Penumpang ---- */
 /* Masukkan pemain ke kendaraan (seat 0..3). Broadcast 0x16 + event

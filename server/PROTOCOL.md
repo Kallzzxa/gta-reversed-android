@@ -225,6 +225,53 @@ Tak ada event Lua (modifikasi bersifat pasif, seperti di SA-MP).
 Test: `~/workspace/romp/tests/test_vehiclecomp.py`
 (+ `test_vehiclecomp_gamemode.lua`) — cek add/remove/type/paintjob/resync/vw.
 
+### 0x3D VEH_PARAMS (Server -> Client)
+Params kendaraan berubah (ala SA-MP `SetVehicleParamsEx`).
+
+```
+u16 vehicleid
+i8  engine    // -1 = unset, 0 = mati, 1 = nyala
+i8  lights    // -1 = unset, 0 = mati, 1 = nyala
+i8  alarm     // -1 = unset, 0 = mati, 1 = nyala
+i8  doors     // -1 = unset, 0 = buka, 1 = kunci
+i8  bonnet    // -1 = unset, 0 = tutup, 1 = buka
+i8  boot      // -1 = unset, 0 = tutup, 1 = buka
+i8  objective // -1 = unset, 0 = mati, 1 = nyala
+```
+
+Di-broadcast (scope virtual world) tiap `setVehicleParamsEx` dipanggil;
+nilai `-1` di argumen berarti "jangan ubah" (state sebelumnya dipertahankan).
+Server menyimpan state per kendaraan — di-resync ke pemain yang baru join /
+pindah virtual world (setelah `0x14` + `0x16`, hanya bila ada param yang
+di-set). Nilai di luar -1..1 ditolak (tanpa broadcast).
+
+### 0x3E VEH_PARAMS_P (Server -> Client)
+Params kendaraan khusus satu pemain (ala SA-MP
+`SetVehicleParamsForPlayer`). Hanya dikirim ke pemain tersebut, tidak
+di-broadcast, tidak di-scope virtual world.
+
+```
+u16 vehicleid
+u16 playerid
+i8  objective   // -1 = unset, 0 = mati, 1 = nyala (marker objective)
+i8  doorslocked // -1 = unset, 0 = buka, 1 = kunci
+```
+
+Server menyimpan entri per pasangan (vid, pid) — di-resync saat pemain
+join / pindah virtual world. Entri dibersihkan saat pemain disconnect atau
+kendaraan di-destroy.
+
+API Lua (lihat `server/README.md`):
+`romp.setVehicleParamsEx(vid, engine, lights, alarm, doors, bonnet, boot, objective)` -> bool,
+`romp.getVehicleParamsEx(vid)` -> tabel `{engine,lights,alarm,doors,bonnet,boot,objective}` | nil,
+`romp.setVehicleParamsForPlayer(vid, pid, objective, doorslocked)` -> bool,
+`romp.getVehicleParamsForPlayer(vid, pid)` -> tabel `{objective,doorslocked}` | nil
+(tanpa entri = `-1`/`-1`).
+Tak ada event Lua (params bersifat pasif, seperti di SA-MP).
+
+Test: `~/workspace/romp/tests/test_vehicleparams.py`
+(+ `test_vehicleparams_gamemode.lua`) — cek set/get/validasi/broadcast/resync/vw/per-player.
+
 ### 0x21 CHAT_MSG
 
 ```

@@ -500,6 +500,74 @@ function onPlayerCommand(id, name, cmd, args)
                 "*** Kamu belum punya kendaraan modif (/modif dulu).")
         end
         return true
+    elseif cmd == "vparams" then
+        -- Params kendaraan ala SA-MP (SetVehicleParamsEx/ForPlayer):
+        -- /vparams <field> <0|1> -> set param demoVeh (field: engine|lights|
+        -- alarm|doors|bonnet|boot|objective); /vparams -> tampilkan params.
+        -- /vparamsfor <objective> <doorslocked> -> params per-pemain.
+        local vid = demoVeh[id]
+        if not vid then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Kamu belum punya kendaraan modif (/modif dulu).")
+            return true
+        end
+        local fields = { engine = 1, lights = 1, alarm = 1, doors = 1,
+            bonnet = 1, boot = 1, objective = 1 }
+        local f, v = args:match("^(%a+)%s+(%-?%d+)$")
+        if f and fields[f] then
+            local vals = { -1, -1, -1, -1, -1, -1, -1 }
+            local order = { "engine", "lights", "alarm", "doors",
+                "bonnet", "boot", "objective" }
+            for i, name in ipairs(order) do
+                if name == f then vals[i] = tonumber(v) end
+            end
+            local ok = romp.setVehicleParamsEx(vid, vals[1], vals[2], vals[3],
+                vals[4], vals[5], vals[6], vals[7])
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** setVehicleParamsEx(" .. f .. "=" .. v .. "): " ..
+                tostring(ok))
+        else
+            local p = romp.getVehicleParamsEx(vid)
+            if p then
+                romp.sendChatToPlayer(id, romp.KIND_INFO,
+                    "*** params: engine=" .. p.engine .. " lights=" ..
+                    p.lights .. " alarm=" .. p.alarm .. " doors=" .. p.doors ..
+                    " bonnet=" .. p.bonnet .. " boot=" .. p.boot ..
+                    " objective=" .. p.objective)
+            else
+                romp.sendChatToPlayer(id, romp.KIND_INFO,
+                    "*** getVehicleParamsEx: nil")
+            end
+        end
+        return true
+    elseif cmd == "vparamsfor" then
+        -- /vparamsfor <objective> <doorslocked> -> params per-pemain
+        -- ala SA-MP SetVehicleParamsForPlayer pada demoVeh.
+        local vid = demoVeh[id]
+        if not vid then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Kamu belum punya kendaraan modif (/modif dulu).")
+            return true
+        end
+        local o, d = args:match("^(%-?%d+)%s+(%-?%d+)$")
+        if o then
+            local ok = romp.setVehicleParamsForPlayer(vid, id,
+                tonumber(o), tonumber(d))
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** setVehicleParamsForPlayer(objective=" .. o ..
+                ", doorslocked=" .. d .. "): " .. tostring(ok))
+        else
+            local p = romp.getVehicleParamsForPlayer(vid, id)
+            if p then
+                romp.sendChatToPlayer(id, romp.KIND_INFO,
+                    "*** params per-pemain: objective=" .. p.objective ..
+                    " doorslocked=" .. p.doorslocked)
+            else
+                romp.sendChatToPlayer(id, romp.KIND_INFO,
+                    "*** getVehicleParamsForPlayer: nil")
+            end
+        end
+        return true
     elseif cmd == "gz" then
         -- GangZone ala SA-MP (kotak warna di radar):
         -- /gz create <minx> <miny> <maxx> <maxy>

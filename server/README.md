@@ -295,6 +295,31 @@ function onPlayerCommand(id, name, cmd, args)
 end
 ```
 
+### Vehicle params ala SA-MP (SetVehicleParamsEx / SetVehicleParamsForPlayer)
+
+State params kendaraan otoritatif di server. Params global (engine, lights,
+alarm, doors, bonnet, boot, objective) di-broadcast ke virtual world
+kendaraan tiap berubah dan di-resync ke pemain yang baru join / pindah
+world. Params per-pemain (objective, doorslocked) hanya dikirim ke pemain
+tersebut. Nilai tiap param: `-1` = jangan ubah / unset, `0` = mati,
+`1` = nyala.
+
+| API | Keterangan |
+|-----|------------|
+| `romp.setVehicleParamsEx(vid, engine, lights, alarm, doors, bonnet, boot, objective)` | → `true`/`false`; nilai valid -1/0/1 |
+| `romp.getVehicleParamsEx(vid)` | `{engine,lights,alarm,doors,bonnet,boot,objective}` / nil |
+| `romp.setVehicleParamsForPlayer(vid, pid, objective, doorslocked)` | → `true`/`false`; hanya ke pemain tsb |
+| `romp.getVehicleParamsForPlayer(vid, pid)` | `{objective,doorslocked}` / nil (tanpa entri = -1/-1) |
+
+Paket: `0x3D` VEH_PARAMS / `0x3E` VEH_PARAMS_P (lihat `PROTOCOL.md`).
+Tak ada event (params bersifat pasif, seperti di SA-MP).
+
+```lua
+-- Contoh: matikan mesin + kunci pintu Infernus demo.
+romp.setVehicleParamsEx(vid, 0, -1, -1, 1, -1, -1, -1)  -- engine mati, doors kunci
+romp.setVehicleParamsForPlayer(vid, pid, 1, -1)         -- marker objective utk 1 pemain
+```
+
 ### Database SQLite untuk gamemode (skor, akun)
 
 Tanpa server eksternal: cukup set `database <path>` di `server.cfg`

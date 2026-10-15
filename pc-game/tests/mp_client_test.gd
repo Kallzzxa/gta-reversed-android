@@ -53,6 +53,8 @@ func _run() -> void:
 	_net.vehicle_spawn.connect(_on_vspawn)
 	_net.vehicle_component.connect(_on_vcomp)
 	_net.vehicle_paintjob.connect(_on_vpj)
+	_net.vehicle_params.connect(_on_vparams)
+	_net.vehicle_params_p.connect(_on_vparamsp)
 	_net.label_spawn.connect(_on_lspawn)
 	_net.actor_spawn.connect(_on_aspawn)
 	_net.audio_play.connect(_on_aplay)
@@ -78,6 +80,11 @@ func _run() -> void:
 	_net.send_chat("/compgodot")
 	_check(await _wait("comp", 10.0), "veh_comp_diterima")
 	_check(await _wait("vpj", 10.0), "veh_paintjob_diterima")
+
+	# --- 3a2. Vehicle params: /paramgodot -> VEH_PARAMS (0x3D) + VEH_PARAMS_P (0x3E) ---
+	_net.send_chat("/paramgodot")
+	_check(await _wait("vprm", 10.0), "veh_params_diterima")
+	_check(await _wait("vprmp", 10.0), "veh_params_p_diterima")
 
 	# --- 3b. 3D text label: peer kirim /lblgodot -> LABEL_SPAWN (0x28) ---
 	_check(await _wait("label", 10.0), "label_spawn_diterima")
@@ -161,6 +168,18 @@ func _on_vcomp(_vid: int, compid: int, slot: int) -> void:
 func _on_vpj(_vid: int, paintjob: int) -> void:
 	if paintjob == 2:
 		_ev["vpj"] = true
+
+
+func _on_vparams(_vid: int, engine: int, lights: int, _alarm: int,
+		doors: int, _bonnet: int, _boot: int, objective: int) -> void:
+	if engine == 1 and lights == 0 and doors == 1 and objective == 0:
+		_ev["vprm"] = true
+
+
+func _on_vparamsp(_vid: int, pid: int, objective: int,
+		doorslocked: int) -> void:
+	if pid == _net.player_id and objective == 1 and doorslocked == 0:
+		_ev["vprmp"] = true
 
 
 func _on_lspawn(_lid: int, atype: int, _aid: int, x: float, y: float,

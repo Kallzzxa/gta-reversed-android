@@ -554,6 +554,8 @@ static void do_leave(Client *c, int reason) {
     label_on_player_leave(c->id);
     /* bersihkan state audio stream pemain ini (ala SA-MP) */
     audio_on_player_leave(c);
+    /* bersihkan params kendaraan per-pemain miliknya (ala SA-MP) */
+    vehicle_params_player_cleanup(c->id);
     uint8_t b[4];
     b[0] = P_LEAVE;
     put_u16(b + 1, (uint16_t)c->id);
@@ -639,6 +641,8 @@ void npc_disconnect(int id, int reason) {
     vehicle_remove_player_silent(id);
     /* hapus 3D text label yang di-attach ke NPC ini (ala SA-MP) */
     label_on_player_leave(id);
+    /* bersihkan params kendaraan per-pemain milik NPC ini */
+    vehicle_params_player_cleanup(id);
     /* salin field yang dipakai setelah free */
     int nid = c->id;
     uint8_t interior = c->interior;
