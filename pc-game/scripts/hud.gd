@@ -5,11 +5,17 @@ var _player: CharacterBody3D
 var _cars: Array = []
 var _speed_label: Label
 var _hint_label: Label
+var _mp_label: Label
 
 
 func bind(player: CharacterBody3D, cars: Array) -> void:
 	_player = player
 	_cars = cars
+
+
+## Status koneksi multiplayer (dipanggil main.gd), mis. "● Online | 3 pemain | 42ms".
+func set_mp_status(text: String) -> void:
+	_mp_label.text = text
 
 
 func _ready() -> void:
@@ -40,6 +46,19 @@ func _ready() -> void:
 	_hint_label.add_theme_constant_override("shadow_offset_x", 1)
 	_hint_label.add_theme_constant_override("shadow_offset_y", 1)
 	add_child(_hint_label)
+
+	_mp_label = Label.new()
+	_mp_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_mp_label.position = Vector2(-316, 12)
+	_mp_label.size = Vector2(300, 30)
+	_mp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_mp_label.text = "○ Offline"
+	_mp_label.add_theme_font_size_override("font_size", 18)
+	_mp_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
+	_mp_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
+	_mp_label.add_theme_constant_override("shadow_offset_x", 1)
+	_mp_label.add_theme_constant_override("shadow_offset_y", 1)
+	add_child(_mp_label)
 
 
 func _process(_delta: float) -> void:
