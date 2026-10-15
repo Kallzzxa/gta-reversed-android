@@ -62,6 +62,9 @@ enum class PacketType : uint8_t {
     ACTOR_POS      = 0x34,  // pindah actor (set pos+angle)
     ACTOR_ANIM     = 0x35,  // terapkan animasi actor
     ACTOR_HEALTH   = 0x36,  // health actor berubah
+    // Audio stream ala SA-MP (PlayAudioStreamForPlayer), server -> client.
+    AUDIO_PLAY     = 0x37,  // putar URL audio
+    AUDIO_STOP     = 0x38,  // hentikan audio yang diputar
 };
 
 // Alasan PLAYER_LEAVE (u8 reason).
@@ -505,6 +508,34 @@ inline bool parse_actor_health(const uint8_t* data, size_t len,
     Reader r(data, len);
     if (!r.get_u16(out.actorid)) return false;
     if (!r.get_u16(out.health)) return false;
+    return true;
+}
+
+struct AudioPlayInfo {
+    std::string url;        // URL audio (UTF-8), tanpa null-terminator
+    bool usepos = false;    // true = posisional 3D
+    float x = 0, y = 0, z = 0;  // posisi sumber (bila posisional)
+    float distance = 50;    // jarak dengar maksimal (bila posisional)
+    bool loop = false;      // true = putar ulang terus
+};
+
+// 0x37 AUDIO_PLAY: urllen(u16) + url + usepos(u8) + x,y,z(float) +
+//   distance(float) + loop(u8).
+inline bool parse_audio_play(const uint8_t* data, size_t len,
+                             AudioPlayInfo& out) {
+    Reader r(data, len);
+    uint16_t ulen = 0;
+    uint8_t usepos = 0, loop = 0;
+    if (!r.get_u16(ulen)) return false;
+    if (!r.get_str(out.url, ulen)) return false;
+    if (!r.get_u8(usepos)) return false;
+    if (!r.get_float(out.x)) return false;
+    if (!r.get_float(out.y)) return false;
+    if (!r.get_float(out.z)) return false;
+    if (!r.get_float(out.distance)) return false;
+    if (!r.get_u8(loop)) return false;
+    out.usepos = (usepos != 0);
+    out.loop = (loop != 0);
     return true;
 }
 

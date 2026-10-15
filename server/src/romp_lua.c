@@ -12,6 +12,7 @@
 #include "romp_timer.h"
 #include "romp_object.h"
 #include "romp_actor.h"
+#include "romp_audio.h"
 
 #include "../vendor/sqlite/sqlite3.h"
 
@@ -1195,6 +1196,56 @@ static int l_romp_get_actors(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- API audio stream ala SA-MP ----------------
+ * romp.playAudioStreamForPlayer(pid, url [, x, y, z, distance, usepos, loop])
+ *   -> bool. Mirip SA-MP PlayAudioStreamForPlayer: url = link audio
+ *   (mp3/ogg; client memutar sendiri via WebView/MediaPlayer).
+ *   usepos=1 -> posisional 3D di (x,y,z) dengan jarak dengar `distance`
+ *   (default 50.0 ala SA-MP); loop=1 -> putar ulang terus.
+ *   Stream lama otomatis diganti (implicit stop).
+ * romp.stopAudioStreamForPlayer(pid) -> bool
+ *   (ala SA-MP StopAudioStreamForPlayer; false bila tak ada stream)
+ * romp.getPlayerAudioStream(pid)
+ *   -> tabel {url, x, y, z, distance, usepos, loop} | nil
+ * Tak ada event: audio bersifat pasif seperti di SA-MP.
+ */
+
+static int l_romp_play_audio_stream(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    const char *url = luaL_checkstring(Ls, 2);
+    float x = (float)luaL_optnumber(Ls, 3, 0.0);
+    float y = (float)luaL_optnumber(Ls, 4, 0.0);
+    float z = (float)luaL_optnumber(Ls, 5, 0.0);
+    float distance = (float)luaL_optnumber(Ls, 6, 50.0);
+    int usepos = (int)luaL_optinteger(Ls, 7, 0);
+    int loop = (int)luaL_optinteger(Ls, 8, 0);
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && audio_play(c, url, usepos, x, y, z, distance, loop));
+    return 1;
+}
+
+static int l_romp_stop_audio_stream(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && audio_stop(c));
+    return 1;
+}
+
+static int l_romp_get_player_audio_stream(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(pid);
+    if (!c || !c->audio_playing) { lua_pushnil(Ls); return 1; }
+    lua_newtable(Ls);
+    lua_pushstring(Ls, c->audio_url);   lua_setfield(Ls, -2, "url");
+    lua_pushnumber(Ls, (lua_Number)c->audio_x); lua_setfield(Ls, -2, "x");
+    lua_pushnumber(Ls, (lua_Number)c->audio_y); lua_setfield(Ls, -2, "y");
+    lua_pushnumber(Ls, (lua_Number)c->audio_z); lua_setfield(Ls, -2, "z");
+    lua_pushnumber(Ls, (lua_Number)c->audio_dist); lua_setfield(Ls, -2, "distance");
+    lua_pushboolean(Ls, c->audio_usepos); lua_setfield(Ls, -2, "usepos");
+    lua_pushboolean(Ls, c->audio_loop);   lua_setfield(Ls, -2, "loop");
+    return 1;
+}
+
 static int l_romp_give_weapon(lua_State *Ls) {
     int pid = (int)luaL_checkinteger(Ls, 1);
     int wid = (int)luaL_checkinteger(Ls, 2);
@@ -1509,6 +1560,10 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_get_actor_vw);    lua_setfield(Ls, -2, "getActorVirtualWorld");
     lua_pushcfunction(Ls, l_romp_set_actor_vw);    lua_setfield(Ls, -2, "setActorVirtualWorld");
     lua_pushcfunction(Ls, l_romp_get_actors);      lua_setfield(Ls, -2, "getActors");
+    /* audio stream ala SA-MP (PlayAudioStreamForPlayer/StopAudioStreamForPlayer) */
+    lua_pushcfunction(Ls, l_romp_play_audio_stream); lua_setfield(Ls, -2, "playAudioStreamForPlayer");
+    lua_pushcfunction(Ls, l_romp_stop_audio_stream); lua_setfield(Ls, -2, "stopAudioStreamForPlayer");
+    lua_pushcfunction(Ls, l_romp_get_player_audio_stream); lua_setfield(Ls, -2, "getPlayerAudioStream");
     /* sentinel rotasi MoveObject "tak berubah" ala SA-MP (-1000.0) */
     lua_pushnumber(Ls, (lua_Number)OBJECT_NO_ROT); lua_setfield(Ls, -2, "OBJECT_NO_ROT");
     /* konstanta attach label: 0=statis, 1=pemain, 2=kendaraan */

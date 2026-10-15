@@ -19,6 +19,7 @@
 #include "romp_timer.h"
 #include "romp_object.h"
 #include "romp_actor.h"
+#include "romp_audio.h"
 
 #include <time.h>
 #include <pthread.h>
@@ -533,6 +534,8 @@ static void do_leave(Client *c, int reason) {
     c->handshaked = 0;
     /* hapus 3D text label yang di-attach ke pemain ini (ala SA-MP) */
     label_on_player_leave(c->id);
+    /* bersihkan state audio stream pemain ini (ala SA-MP) */
+    audio_on_player_leave(c);
     uint8_t b[4];
     b[0] = P_LEAVE;
     put_u16(b + 1, (uint16_t)c->id);

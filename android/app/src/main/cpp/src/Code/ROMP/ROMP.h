@@ -84,6 +84,13 @@ public:
                              const std::string& /*anim*/) {}
     virtual void OnActorHealth(uint16_t /*actorid*/, uint16_t /*health*/) {}
 
+    // Audio stream ala SA-MP (paket 0x37-0x38, dari romp.playAudioStreamForPlayer).
+    // Default no-op; platform game menimpa untuk memutar audio.
+    // TODO(GAME): putar URL (mp3/ogg) via WebView (HTML5 <audio>) atau
+    //   MediaPlayer; usepos=true -> atur volume/pan dari posisi sumber.
+    virtual void OnAudioPlay(const AudioPlayInfo& /*info*/) {}
+    virtual void OnAudioStop() {}
+
     // Log ke konsol game / logcat.
     virtual void Log(const std::string& msg) = 0;
 

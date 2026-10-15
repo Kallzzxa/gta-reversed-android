@@ -344,6 +344,38 @@ function onPlayerCommand(id, name, cmd, args)
                 "*** Kamu belum punya label (/label dulu).")
         end
         return true
+    elseif cmd == "playaudio" then
+        -- Audio stream ala SA-MP (PlayAudioStreamForPlayer):
+        -- /playaudio <url> -> putar global; /playaudio <url> pos -> posisional
+        -- di posisi pemain (jarak dengar 50); /playaudio <url> loop -> ulang.
+        local url, mode = args:match("^(%S+)%s*(%S*)$")
+        if not url or url == "" then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Pakai: /playaudio <url mp3/ogg> [pos|loop]")
+            return true
+        end
+        local usepos, loop = 0, 0
+        if mode == "pos" then usepos = 1 elseif mode == "loop" then loop = 1 end
+        local x, y, z = romp.getPlayerPos(id)
+        if romp.playAudioStreamForPlayer(id, url, x or 0, y or 0, z or 0,
+                                        50.0, usepos, loop) then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Audio diputar: " .. url)
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal memutar audio.")
+        end
+        return true
+    elseif cmd == "stopaudio" then
+        -- Hentikan audio stream (ala SA-MP StopAudioStreamForPlayer).
+        if romp.stopAudioStreamForPlayer(id) then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Audio dihentikan.")
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Tidak ada audio yang diputar (/playaudio dulu).")
+        end
+        return true
     elseif cmd == "object" then
         -- Objek ala SA-MP (CreateObject/MoveObject):
         -- /object [modelid] -> buat di posisi pemain, /object move -> geser,

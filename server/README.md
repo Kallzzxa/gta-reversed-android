@@ -231,6 +231,35 @@ function onActorDeath(aid, killerid)
 end
 ```
 
+**Audio stream ala SA-MP (`PlayAudioStreamForPlayer`):**
+
+Server mengirim URL audio ke satu pemain; client memutarnya sendiri
+(WebView/HTML5 audio atau MediaPlayer — klien Godot `pc-game/` sudah
+memutar via `AudioStreamPlayer` setelah mengunduh URL-nya). Satu stream
+per pemain: URL baru otomatis menggantikan yang lama (implicit stop).
+Tidak di-broadcast dan tidak di-scope virtual world. State dibersihkan
+saat pemain keluar. Maks 255 byte URL (dipotong bila lebih panjang).
+
+| API | Keterangan |
+|-----|------------|
+| `romp.playAudioStreamForPlayer(pid, url [, x, y, z, distance, usepos, loop])` | Putar URL audio → `true`/`false`. `usepos=1` = posisional 3D di `(x, y, z)` dengan jarak dengar `distance` (default 50.0 ala SA-MP); `loop=1` = ulang terus. |
+| `romp.stopAudioStreamForPlayer(pid)` | Hentikan stream → `true` bila ada stream yang dihentikan, `false` bila tidak ada |
+| `romp.getPlayerAudioStream(pid)` | `{url, x, y, z, distance, usepos, loop}` / nil |
+
+Paket: `0x37` AUDIO_PLAY / `0x38` AUDIO_STOP (lihat `PROTOCOL.md`).
+Tak ada event (audio bersifat pasif, seperti di SA-MP).
+
+```lua
+-- Contoh: musik lobby global + efek posisional di pintu masuk.
+function onPlayerJoin(id, name)
+    romp.playAudioStreamForPlayer(id, "https://contoh.test/lobby.ogg",
+                                 0, 0, 0, 50.0, 0, 1)  -- loop
+end
+-- /audiofx: bunyi bel di posisi pemain, jarak dengar 30 unit.
+romp.playAudioStreamForPlayer(id, "https://contoh.test/bel.mp3",
+                              x, y, z, 30.0, 1, 0)
+```
+
 ### Database SQLite untuk gamemode (skor, akun)
 
 Tanpa server eksternal: cukup set `database <path>` di `server.cfg`

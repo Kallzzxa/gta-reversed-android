@@ -415,6 +415,31 @@ Event: `onPlayerGiveDamageActor(pid, actorid, amount, weaponid, bodypart=0)`
 `onActorDeath(actorid, killerid)` saat damage membuat health mencapai 0.
 Konstanta hittype baru: `romp.WPN_HIT_ACTOR = 4` untuk `0x17 WPN_SHOT`.
 
+### 0x37 AUDIO_PLAY (Server -> Client)
+Server memutar URL audio untuk satu pemain
+(`romp.playAudioStreamForPlayer`). Client memutarnya sendiri (WebView /
+HTML5 audio atau MediaPlayer). Stream bersifat per-pemain seperti di
+SA-MP: tidak di-broadcast, tidak di-scope virtual world. URL baru
+otomatis menggantikan stream lama (implicit stop).
+
+```
+u16 urllen | char url[urllen]   // URL audio (mp3/ogg), maks 255 byte
+u8  usepos                      // 0 = global, 1 = posisional 3D
+f32 x, y, z                     // posisi sumber (bila posisional)
+f32 distance                    // jarak dengar maks (bila posisional; default 50.0 ala SA-MP)
+u8  loop                        // 0 = sekali, 1 = ulang terus
+```
+
+### 0x38 AUDIO_STOP (Server -> Client)
+Hentikan stream yang sedang diputar (`romp.stopAudioStreamForPlayer`).
+Tanpa payload; hanya dikirim ke pemain yang memang punya stream aktif.
+
+API Lua (lihat `server/README.md`):
+`romp.playAudioStreamForPlayer(pid, url [, x, y, z, distance, usepos, loop])`,
+`romp.stopAudioStreamForPlayer(pid)`,
+`romp.getPlayerAudioStream(pid)` -> tabel `{url, x, y, z, distance, usepos, loop}` | nil.
+Tak ada event Lua (audio bersifat pasif, seperti di SA-MP).
+
 API Lua (lihat `server/README.md`):
 `romp.create3DTextLabel(text, color, x, y, z, drawDist [, vw])`,
 `romp.delete3DTextLabel(id)`, `romp.update3DTextLabelText(id, color, text)`,

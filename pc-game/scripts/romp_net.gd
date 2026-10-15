@@ -40,6 +40,8 @@ const T_ACTOR_DESPAWN := 0x33
 const T_ACTOR_POS := 0x34
 const T_ACTOR_ANIM := 0x35
 const T_ACTOR_HEALTH := 0x36
+const T_AUDIO_PLAY := 0x37
+const T_AUDIO_STOP := 0x38
 const T_NUI := 0x40
 
 const VER := 1
@@ -85,6 +87,8 @@ signal actor_despawn(actorid: int)
 signal actor_pos(actorid: int, x: float, y: float, z: float, angle: float)
 signal actor_anim(actorid: int, anim: String)
 signal actor_health(actorid: int, health: int)
+signal audio_play(url: String, usepos: bool, x: float, y: float, z: float, distance: float, loop: bool)
+signal audio_stop()
 signal nui_message(json_text: String)
 signal ping_updated(ms: int)
 
@@ -428,6 +432,17 @@ func _dispatch(ftype: int, payload: PackedByteArray) -> void:
 			actor_anim.emit(r.u16(), r.str8())
 		T_ACTOR_HEALTH:
 			actor_health.emit(r.u16(), r.u16())
+		T_AUDIO_PLAY:
+			var aurl := r.str16()
+			var ausepos := r.u8() != 0
+			var ax := r.f32()
+			var ay := r.f32()
+			var az := r.f32()
+			var adist := r.f32()
+			var aloop := r.u8() != 0
+			audio_play.emit(aurl, ausepos, ax, ay, az, adist, aloop)
+		T_AUDIO_STOP:
+			audio_stop.emit()
 		T_PING:
 			_reply_pong(r.u32())
 		T_PONG:

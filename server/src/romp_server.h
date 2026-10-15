@@ -84,6 +84,10 @@ typedef int SOCKET;
 #define P_ACTOR_ANIM    0x35  /* server -> client: terapkan animasi actor */
 #define P_ACTOR_HEALTH  0x36  /* server -> client: health actor berubah */
 
+/* ---- Audio stream ala SA-MP (lihat romp_audio.h & PROTOCOL.md) ---- */
+#define P_AUDIO_PLAY    0x37  /* server -> client: putar URL audio */
+#define P_AUDIO_STOP    0x38  /* server -> client: hentikan audio */
+
 /* ---- Protokol UDP query (server browser), port sama dengan TCP ---- */
 #define QUERY_MAGIC   "ROMP"
 #define QUERY_MAGIC_LEN 4
@@ -199,6 +203,14 @@ typedef struct Client {
     uint64_t ac_set_ms;      /* timestamp terakhir server set health/armour */
     int      ac_warnings;    /* jumlah peringatan cheat */
     int      ac_stat_known;  /* 1 = client pernah kirim P_STAT */
+    /* Audio stream ala SA-MP (lihat romp_audio.h): satu stream per pemain,
+     * otoritatif server. Client memutar URL (0x37) & berhenti via 0x38. */
+    int      audio_playing;  /* 1 = ada stream aktif */
+    char     audio_url[256]; /* URL yang sedang diputar (maks 255 byte) */
+    int      audio_usepos;   /* 1 = posisional (3D), 0 = global */
+    float    audio_x, audio_y, audio_z; /* posisi sumber bila posisional */
+    float    audio_dist;     /* jarak dengar maksimal bila posisional */
+    int      audio_loop;     /* 1 = putar ulang terus */
     struct Client *next;
 } Client;
 

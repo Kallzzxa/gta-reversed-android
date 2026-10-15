@@ -354,6 +354,20 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
             platform_->OnActorHealth(ah.actorid, ah.health);
             break;
         }
+        case PacketType::AUDIO_PLAY: {
+            // Server memutar URL audio untuk pemain ini
+            // (romp.playAudioStreamForPlayer).
+            AudioPlayInfo ap;
+            if (!parse_audio_play(payload, len, ap)) break;
+            platform_->OnAudioPlay(ap);
+            break;
+        }
+        case PacketType::AUDIO_STOP: {
+            // Server menghentikan audio pemain ini
+            // (romp.stopAudioStreamForPlayer).
+            platform_->OnAudioStop();
+            break;
+        }
         default:
             // Tipe tak dikenal: abaikan (forward-compat protokol).
             break;

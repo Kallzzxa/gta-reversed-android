@@ -53,6 +53,8 @@ func _run() -> void:
 	_net.vehicle_spawn.connect(_on_vspawn)
 	_net.label_spawn.connect(_on_lspawn)
 	_net.actor_spawn.connect(_on_aspawn)
+	_net.audio_play.connect(_on_aplay)
+	_net.audio_stop.connect(_on_astop)
 	_net.teleport.connect(_on_teleport)
 	_net.ping_updated.connect(_on_ping)
 
@@ -74,6 +76,9 @@ func _run() -> void:
 
 	# --- 3c. Actor statis: peer kirim /actorgodot -> ACTOR_SPAWN (0x32) ---
 	_check(await _wait("actor", 10.0), "actor_spawn_diterima")
+
+	# --- 3d. Audio stream: peer kirim /audiogodot -> AUDIO_PLAY (0x37) ---
+	_check(await _wait("audio", 10.0), "audio_play_diterima")
 
 	# --- 4. Teleport 0x27 via /tpgodot ---
 	_net.send_chat("/tpgodot 500 600 70")
@@ -151,6 +156,16 @@ func _on_aspawn(_aid: int, model: int, x: float, y: float,
 			and absf(z - 3.0) < 0.5 and absf(angle - 90.0) < 0.5 \
 			and health == 100 and not invuln and vw == 0:
 		_ev["actor"] = true
+
+
+func _on_aplay(url: String, usepos: bool, _x: float, _y: float, _z: float,
+		_dist: float, _loop: bool) -> void:
+	if url == "http://x.test/godot.mp3" and not usepos:
+		_ev["audio"] = true
+
+
+func _on_astop() -> void:
+	_ev["audio_stop"] = true
 
 
 func _on_teleport(x: float, y: float, z: float) -> void:

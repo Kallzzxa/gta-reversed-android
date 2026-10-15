@@ -137,6 +137,8 @@ func _setup_multiplayer() -> void:
 	net.actor_pos.connect(_on_actor_pos)
 	net.actor_anim.connect(_on_actor_anim)
 	net.actor_health.connect(_on_actor_health)
+	net.audio_play.connect(_on_audio_play)
+	net.audio_stop.connect(_on_audio_stop)
 
 	mp_chat = MpChatScript.new()
 	add_child(mp_chat)
@@ -431,6 +433,87 @@ func _on_actor_anim(actorid: int, anim: String) -> void:
 func _on_actor_health(actorid: int, health: int) -> void:
 	if _actors.has(actorid):
 		_actors[actorid].set_health(health)
+
+
+# --- Audio stream ala SA-MP (PlayAudioStreamForPlayer) ---
+# URL diunduh via HTTPRequest lalu diputar sebagai AudioStream
+# (format terdeteksi dari magic byte: mp3/ogg/wav).
+
+var _audio_player: AudioStreamPlayer  # dibuat saat dibutuhkan
+
+
+func _audio_ensure_player() -> AudioStreamPlayer:
+	if _audio_player == null:
+		_audio_player = AudioStreamPlayer.new()
+		_audio_player.bus = "Master"
+		add_child(_audio_player)
+	return _audio_player
+
+
+func _on_audio_play(url: String, usepos: bool, x: float, y: float, z: float,
+		distance: float, loop: bool) -> void:
+	if url == "":
+		return
+	if usepos:
+		# TODO: atenuasi volume dari jarak ke posisi sumber (x,y,z,distance).
+		print("[audio] posisional (%.1f, %.1f, %.1f dist %.0f): %s"
+				% [x, y, z, distance, url])
+	var pl := _audio_ensure_player()
+	pl.stop()
+	var req := HTTPRequest.new()
+	add_child(req)
+	var err := req.request(url)
+	if err != OK:
+		push_warning("[audio] gagal request: " + url)
+		req.queue_free()
+		return
+	var res: Array = await req.request_completed
+	req.queue_free()
+	if res[0] != HTTPRequest.RESULT_SUCCESS or res[1] != 200:
+		push_warning("[audio] unduh gagal (%s): %s" % [str(res[1]), url])
+		return
+	var data: PackedByteArray = res[3]
+	var stream: AudioStream = _audio_make_stream(url, data)
+	if stream == null:
+		push_warning("[audio] format tak dikenali: " + url)
+		return
+	if "loop" in stream:
+		stream.set("loop", loop)
+	pl.stream = stream
+	pl.play()
+
+
+func _audio_make_stream(url: String, data: PackedByteArray) -> AudioStream:
+	# Deteksi format dari magic byte dulu, fallback ke ekstensi URL.
+	var ext := url.get_extension().to_lower()
+	if data.size() >= 4 and data.slice(0, 4) == PackedByteArray([0x4F, 0x67, 0x67, 0x53]):  # "OggS"
+		ext = "ogg"
+	elif data.size() >= 3 and data.slice(0, 3) == PackedByteArray([0x49, 0x44, 0x33]):  # "ID3"
+		ext = "mp3"
+	elif data.size() >= 2 and data[0] == 0xFF and (data[1] & 0xE0) == 0xE0:  # frame sync mp3
+		ext = "mp3"
+	elif data.size() >= 12 and data.slice(0, 4) == PackedByteArray([0x52, 0x49, 0x46, 0x46]):  # "RIFF"
+		ext = "wav"
+	match ext:
+		"mp3":
+			var s := AudioStreamMP3.new()
+			s.data = data
+			return s
+		"ogg":
+			var s := AudioStreamOggVorbis.new()
+			s.data = data
+			return s
+		"wav":
+			var s := AudioStreamWAV.new()
+			s.data = data
+			return s
+	return null
+
+
+func _on_audio_stop() -> void:
+	if _audio_player != null:
+		_audio_player.stop()
+
 
 
 func _process_objects(delta: float) -> void:
