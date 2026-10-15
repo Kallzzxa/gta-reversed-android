@@ -334,6 +334,30 @@ static void bcast_veh_paintjob(Vehicle *v) {
     broadcast_frame_vw(b, 4, NULL, v->vw);
 }
 
+/* 0x4A VEH_PLATE: u16 vid | u8 len | bytes(len) — plat nomor ala SA-MP
+ * SetVehicleNumberPlate. vw-scoped seperti properti kendaraan lain. */
+static void bcast_veh_plate(Vehicle *v) {
+    size_t len = strlen(v->plate);
+    uint8_t b[1 + 2 + 1 + VEH_PLATE_MAX];
+    b[0] = P_VEH_PLATE;
+    vput_u16(b + 1, (uint16_t)v->id);
+    b[3] = (uint8_t)len;
+    memcpy(b + 4, v->plate, len);
+    broadcast_frame_vw(b, 4 + len, NULL, v->vw);
+}
+
+/* Kirim plat satu kendaraan ke satu client (resync join/pindah vw) —
+ * dipanggil dari send_veh_mods_to bila plat tidak kosong. */
+static void send_veh_plate_to(Client *c, Vehicle *v) {
+    size_t len = strlen(v->plate);
+    uint8_t b[1 + 2 + 1 + VEH_PLATE_MAX];
+    b[0] = P_VEH_PLATE;
+    vput_u16(b + 1, (uint16_t)v->id);
+    b[3] = (uint8_t)len;
+    memcpy(b + 4, v->plate, len);
+    client_send_frame(c, b, 4 + len);
+}
+
 /* Broadcast params kendaraan (0x3D): vid u16 + 7x int8 (engine, lights,
  * alarm, doors, bonnet, boot, objective). Nilai -1 = unset. */
 static void bcast_veh_params(Vehicle *v) {
@@ -350,8 +374,8 @@ static void bcast_veh_params(Vehicle *v) {
     broadcast_frame_vw(b, 10, NULL, v->vw);
 }
 
-/* Kirim komponen + paintjob satu kendaraan ke satu client (resync join/pindah
- * vw). Dipanggil setelah 0x14 + 0x16 di send_veh_to. */
+/* Kirim komponen + paintjob + plat nomor satu kendaraan ke satu client
+ * (resync join/pindah vw). Dipanggil setelah 0x14 + 0x16 di send_veh_to. */
 static void send_veh_mods_to(Client *c, Vehicle *v) {
     for (int s = 0; s < VEH_COMP_SLOTS; s++) {
         if (v->comp[s] == 0) continue;
@@ -369,6 +393,8 @@ static void send_veh_mods_to(Client *c, Vehicle *v) {
         b[3] = v->paintjob;
         client_send_frame(c, b, 4);
     }
+    /* Kirim plat nomor bila tidak kosong. */
+    if (v->plate[0] != '\0') send_veh_plate_to(c, v);
     /* Kirim params bila ada yang di-set (bukan -1 semua). */
     if (v->prm_engine != -1 || v->prm_lights != -1 || v->prm_alarm != -1 ||
         v->prm_doors != -1 || v->prm_bonnet != -1 || v->prm_boot != -1 ||
@@ -590,6 +616,31 @@ int vehicle_get_paintjob(int vid) {
     Vehicle *v = vehicle_by_id(vid);
     if (!v) return -1;
     return (int)v->paintjob;
+}
+
+/* ---------------- Plat nomor ala SA-MP (SetVehicleNumberPlate) ---------------- */
+
+int vehicle_set_number_plate(int vid, const char *plate) {
+    Vehicle *v = vehicle_by_id(vid);
+    if (!v || v->destroyed) return 0;
+    if (!plate) return 0;
+    char buf[VEH_PLATE_MAX + 1];
+    /* Potong ke VEH_PLATE_MAX char ala SA-MP (maks 32). */
+    strncpy(buf, plate, VEH_PLATE_MAX);
+    buf[VEH_PLATE_MAX] = '\0';
+    if (strcmp(v->plate, buf) == 0) return 1; /* tak berubah: tak perlu broadcast */
+    strcpy(v->plate, buf);
+    log_msg("[vehicle] id %d: plat \"%s\"", v->id, v->plate);
+    bcast_veh_plate(v);
+    return 1;
+}
+
+int vehicle_get_number_plate(int vid, char *out, size_t outlen) {
+    Vehicle *v = vehicle_by_id(vid);
+    if (!v || !out || outlen == 0) return 0;
+    strncpy(out, v->plate, outlen - 1);
+    out[outlen - 1] = '\0';
+    return 1;
 }
 
 /* ---------------- Params ala SA-MP (SetVehicleParamsEx) ---------------- */

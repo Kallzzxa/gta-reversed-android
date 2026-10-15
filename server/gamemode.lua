@@ -824,6 +824,26 @@ function onPlayerCommand(id, name, cmd, args)
                 "*** Kamu belum punya kendaraan modif (/modif dulu).")
         end
         return true
+    elseif cmd == "plat" then
+        -- Plat nomor ala SA-MP (SetVehicleNumberPlate): /plat <teks> -> set
+        -- plat demoVeh (maks 32 char, dipotong server bila lebih panjang);
+        -- /plat tanpa argumen -> hapus plat.
+        local vid = demoVeh[id]
+        if not vid then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Kamu belum punya kendaraan modif (/modif dulu).")
+            return true
+        end
+        local plate = args:match("^%s*(.-)%s*$")
+        if romp.setVehicleNumberPlate(vid, plate) then
+            local cur = romp.getVehicleNumberPlate(vid)
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Plat kendaraan id " .. vid .. " kini: \"" .. cur .. "\".")
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal mengganti plat nomor.")
+        end
+        return true
     elseif cmd == "vparams" then
         -- Params kendaraan ala SA-MP (SetVehicleParamsEx/ForPlayer):
         -- /vparams <field> <0|1> -> set param demoVeh (field: engine|lights|

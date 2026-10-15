@@ -99,6 +99,10 @@ enum class PacketType : uint8_t {
     // hanya ke pemilik — uang hanya tampil di HUD milik sendiri).
     MONEY_SET    = 0x49,  // saldo berubah: u8 pid + s32 amount LE
                           // (-999999999..999999999) (5B payload)
+    // Plat nomor kendaraan ala SA-MP (SetVehicleNumberPlate), server ->
+    // client (broadcast vw-scoped + resync saat join / pindah vw).
+    VEH_PLATE    = 0x4A,  // plat berubah: u16 vid + u8 len + bytes(len)
+                          // (len 0..32, "" = tak ada plat)
 };
 
 // Alasan PLAYER_LEAVE (u8 reason).
@@ -813,6 +817,26 @@ inline bool parse_money_set(const uint8_t* data, size_t len,
     if (!r.get_u32(u)) return false;
     out.amount = static_cast<int32_t>(u);
     return len == 5;  // tolak payload kepanjangan/kependekan
+}
+
+// ---- Plat nomor kendaraan ala SA-MP (server -> client) ----
+
+// Info plat nomor kendaraan ala SA-MP (0x4A VEH_PLATE).
+struct PlateInfo {
+    uint16_t vid = 0;      // id kendaraan (u16 LE)
+    std::string plate;     // teks plat, maks 32 char ("" = tak ada plat)
+};
+
+// 0x4A VEH_PLATE: u16 vid | u8 len | bytes(len) (payload 3..35 byte).
+inline bool parse_plate(const uint8_t* data, size_t len,
+                        PlateInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u16(out.vid)) return false;
+    uint8_t plen;
+    if (!r.get_u8(plen)) return false;
+    if (plen > 32) return false;
+    if (!r.get_str(out.plate, plen)) return false;
+    return len == 3 + plen;  // tolak payload kepanjangan/kependekan
 }
 
 struct ChatMsgInfo {

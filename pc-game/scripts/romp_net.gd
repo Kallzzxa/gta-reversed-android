@@ -56,6 +56,7 @@ const T_DEATH_REPORT := 0x46
 const T_DEATH_MSG := 0x47
 const T_WANTED_SET := 0x48
 const T_MONEY_SET := 0x49
+const T_VEH_PLATE := 0x4A
 const T_NUI := 0x40
 
 const VER := 1
@@ -117,6 +118,7 @@ signal marker_mode(mode: int)
 signal death_msg(killerid: int, victimid: int, weaponid: int)
 signal wanted_set(pid: int, level: int)
 signal money_set(pid: int, amount: int)
+signal veh_plate(vid: int, plate: String)
 signal nui_message(json_text: String)
 signal ping_updated(ms: int)
 
@@ -431,6 +433,11 @@ func _dispatch(ftype: int, payload: PackedByteArray) -> void:
 			# Uang pemain otoritatif ala SA-MP (0x49): u8 pid + s32 amount
 			# LE. Per-pemain — hanya saldo milik sendiri yang diterima.
 			money_set.emit(r.u8(), r.i32())
+		T_VEH_PLATE:
+			# Plat nomor kendaraan ala SA-MP (0x4A): u16 vid + u8 len +
+			# bytes(len). Broadcast vw-scoped + resync saat join / pindah
+			# vw. "" = tak ada plat.
+			veh_plate.emit(r.u16(), r.str8())
 		T_WPN_SYNC:
 			var shooter := r.u16()
 			var weapon := r.u16()

@@ -22,6 +22,7 @@ var _last_c2 := 0
 var _headlight_mats: Array = []  # material lampu depan (untuk params lights)
 var _param_tag: Label3D  # indikator 🔒/🎯 dari params doors/objective
 var _params: Dictionary = {}  # engine/lights/alarm/doors/bonnet/boot/objective
+var _plate := ""  # plat nomor ala SA-MP (0x4A VEH_PLATE)
 
 
 func _ready() -> void:
@@ -134,6 +135,13 @@ func set_params(engine: int, lights: int, _alarm: int, doors: int,
 	_refresh_param_tag()
 
 
+## 0x4A VEH_PLATE ala SA-MP SetVehicleNumberPlate.
+## v1: plat ditampilkan sebagai suffix tag param mobil.
+func set_number_plate(plate: String) -> void:
+	_plate = plate
+	_refresh_param_tag()
+
+
 func set_params_for_player(_pid: int, objective: int, doorslocked: int) -> void:
 	# 0x3E VEH_PARAMS_P ala SA-MP SetVehicleParamsForPlayer.
 	if objective != -1:
@@ -151,6 +159,8 @@ func _refresh_param_tag() -> void:
 		t += "🎯"
 	if _params.get("engine", -1) == 0:
 		t += "🚫"
+	if _plate != "":
+		t += " [" + _plate + "]"
 	_param_tag.text = t
 
 

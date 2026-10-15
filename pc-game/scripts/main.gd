@@ -135,6 +135,7 @@ func _setup_multiplayer() -> void:
 	net.vehicle_paintjob.connect(_on_vehicle_paintjob)
 	net.vehicle_params.connect(_on_vehicle_params)
 	net.vehicle_params_p.connect(_on_vehicle_params_p)
+	net.veh_plate.connect(_on_vehicle_plate)
 	net.attach_obj_set.connect(_on_attach_obj_set)
 	net.attach_obj_remove.connect(_on_attach_obj_remove)
 	net.skill_set.connect(_on_skill_set)
@@ -296,6 +297,12 @@ func _on_vehicle_paintjob(vid: int, paintjob: int) -> void:
 	# 0x3C VEH_PAINTJOB ala SA-MP ChangeVehiclePaintjob.
 	if _remote_cars.has(vid):
 		_remote_cars[vid].set_paintjob(paintjob)
+
+
+func _on_vehicle_plate(vid: int, plate: String) -> void:
+	# 0x4A VEH_PLATE ala SA-MP SetVehicleNumberPlate.
+	if _remote_cars.has(vid):
+		_remote_cars[vid].set_number_plate(plate)
 
 
 func _on_vehicle_params(vid: int, engine: int, lights: int, alarm: int,

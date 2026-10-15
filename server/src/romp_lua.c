@@ -764,6 +764,7 @@ static int l_romp_get_vehicles(lua_State *Ls) {
         lua_pushinteger(Ls, v->health);  lua_setfield(Ls, -2, "health");
         lua_pushboolean(Ls, v->destroyed); lua_setfield(Ls, -2, "destroyed");
         lua_pushinteger(Ls, (int)v->paintjob); lua_setfield(Ls, -2, "paintjob");
+        lua_pushstring(Ls, v->plate); lua_setfield(Ls, -2, "plate");
         lua_newtable(Ls);
         for (int s = 0; s < VEH_COMP_SLOTS; s++) {
             if (v->comp[s] == 0) continue;
@@ -803,6 +804,15 @@ static int l_romp_get_vehicles(lua_State *Ls) {
  * romp.getVehicleComponents(vid) -> tabel {[slot]=compid} | nil
  * romp.getVehicles() kini juga membawa field `paintjob` dan `components`.
  * Tak ada event Lua (modifikasi bersifat pasif, seperti di SA-MP).
+ *
+ * Plat nomor ala SA-MP (SetVehicleNumberPlate):
+ * romp.setVehicleNumberPlate(vid, plate) -> bool
+ *   ala SA-MP SetVehicleNumberPlate: teks plat maks 32 char (dipotong bila
+ *   lebih panjang), string kosong menghapus plat. Otoritatif server —
+ *   broadcast 0x4A ke vw kendaraan bila berubah; resync ke pemain yang
+ *   join / pindah vw.
+ * romp.getVehicleNumberPlate(vid) -> string | nil ("" = tak ada plat)
+ * romp.getVehicles() kini juga membawa field `plate`.
  */
 
 static int l_romp_add_vehicle_component(lua_State *Ls) {
@@ -852,6 +862,25 @@ static int l_romp_get_vehicle_paintjob(lua_State *Ls) {
     int pj = vehicle_get_paintjob(vid);
     if (pj < 0) { lua_pushnil(Ls); return 1; }
     lua_pushinteger(Ls, pj);
+    return 1;
+}
+
+static int l_romp_set_vehicle_number_plate(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    size_t len;
+    const char *plate = luaL_checklstring(Ls, 2, &len);
+    lua_pushboolean(Ls, vehicle_set_number_plate(vid, plate));
+    return 1;
+}
+
+static int l_romp_get_vehicle_number_plate(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    char plate[VEH_PLATE_MAX + 1];
+    if (!vehicle_get_number_plate(vid, plate, sizeof(plate))) {
+        lua_pushnil(Ls);
+        return 1;
+    }
+    lua_pushstring(Ls, plate);
     return 1;
 }
 
@@ -2071,6 +2100,9 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_get_vehicle_component_type); lua_setfield(Ls, -2, "getVehicleComponentType");
     lua_pushcfunction(Ls, l_romp_change_vehicle_paintjob);   lua_setfield(Ls, -2, "changeVehiclePaintjob");
     lua_pushcfunction(Ls, l_romp_get_vehicle_paintjob);      lua_setfield(Ls, -2, "getVehiclePaintjob");
+    /* Plat nomor ala SA-MP (SetVehicleNumberPlate) */
+    lua_pushcfunction(Ls, l_romp_set_vehicle_number_plate);  lua_setfield(Ls, -2, "setVehicleNumberPlate");
+    lua_pushcfunction(Ls, l_romp_get_vehicle_number_plate);  lua_setfield(Ls, -2, "getVehicleNumberPlate");
     lua_pushcfunction(Ls, l_romp_set_vehicle_params_ex);     lua_setfield(Ls, -2, "setVehicleParamsEx");
     lua_pushcfunction(Ls, l_romp_get_vehicle_params_ex);     lua_setfield(Ls, -2, "getVehicleParamsEx");
     lua_pushcfunction(Ls, l_romp_set_vehicle_params_for_player); lua_setfield(Ls, -2, "setVehicleParamsForPlayer");

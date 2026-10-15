@@ -170,6 +170,14 @@ public:
     // TODO(GAME): tampilkan saldo di HUD ala GTA:SA.
     virtual void OnPlayerMoney(uint8_t /*pid*/, int32_t /*amount*/) {}
 
+    // Plat nomor kendaraan ala SA-MP (paket 0x4A VEH_PLATE, dari
+    // romp.setVehicleNumberPlate): teks plat kendaraan vid berubah menjadi
+    // plate ("" = plat dihapus). Broadcast vw-scoped + resync saat join /
+    // pindah vw. Default no-op.
+    // TODO(GAME): tampilkan teks plat pada model kendaraan.
+    virtual void OnVehicleNumberPlate(uint16_t /*vid*/,
+                                      const std::string& /*plate*/) {}
+
     // Log ke konsol game / logcat.
     virtual void Log(const std::string& msg) = 0;
 

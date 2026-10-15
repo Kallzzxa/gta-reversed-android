@@ -558,6 +558,49 @@ killer 255/validasi killer+reason/payload/manual-tanpa-event/NPC/joiner;
 parse unit C++ di `tests/client/test_main.cpp`; cek sinyal Godot di
 `pc-game/tests/mp_client_test.gd` (via `test_godot_mp.py`).
 
+### 0x4A VEH_PLATE (Server -> Client)
+
+Plat nomor kendaraan ala SA-MP (`SetVehicleNumberPlate`): dikirim server
+ke semua pemain di virtual world kendaraan setiap
+`romp.setVehicleNumberPlate(vid, plate)` berhasil (nilai berubah) —
+bersifat otoritatif server, tidak ada paket client -> server untuk plat.
+Plat kendaraan yang join belakangan di-resync bersama paket modifikasi
+lain via `send_veh_mods_to` (setelah `0x14` + `0x16`), dan ikut terhapus
+bersama kendaraannya saat destroy. Kendaraan yang baru join mendapat
+`0x4A` hanya bila plat tidak kosong.
+
+Frame `0x4A` VEH_PLATE (4..36 byte):
+
+```
+u16 vid     // id kendaraan
+u8  len     // panjang teks plat (0..32)
+char plate[len]  // teks plat UTF-8 ("" = tak ada plat)
+```
+
+Validasi: `vid` harus kendaraan yang valid (dan tidak sedang hancur);
+teks dipotong ke `VEH_PLATE_MAX` = 32 char ala SA-MP; string kosong
+menghapus plat. `false` bila kendaraan tak valid (tanpa broadcast,
+state tak berubah); nilai sama dengan yang lama mengembalikan `true`
+tanpa broadcast (idempoten).
+
+API Lua (lihat `server/README.md`):
+`romp.setVehicleNumberPlate(vid, plate)` -> bool,
+`romp.getVehicleNumberPlate(vid)` -> string | nil.
+`romp.getVehicles()` kini membawa field `plate` per kendaraan.
+
+Client game menerapkan plat dari `0x4A` langsung
+(C++: `IROMPPlatform::OnVehicleNumberPlate`; Godot: sinyal `veh_plate`
+-> `remote_car.gd` menampilkan plat sebagai suffix tag mobil).
+Demo: `/plat <teks>` (tanpa argumen = hapus) pada kendaraan demo
+`/modif` di `server/gamemode.lua`.
+
+Test: `~/workspace/romp/tests/test_plate.py`
+(+ `test_plate_gamemode.lua`) — resync join, broadcast, idempotensi,
+truncation 32 char, plat kosong, scope vw, resync pindah vw, kendaraan
+hancur; parse unit C++ di `tests/client/test_plate_parse.cpp`;
+cek sinyal Godot (sintetik + end-to-end `/plategodot`) di
+`pc-game/tests/mp_client_test.gd` (via `test_godot_mp.py`).
+
 ### 0x21 CHAT_MSG
 
 ```

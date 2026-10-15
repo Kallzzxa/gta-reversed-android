@@ -24,6 +24,7 @@
                                   *  11 rear bumper, 12 vent right, 13 vent left)
                                   *  + 14/15 front/rear bullbar (ekstensi vSync) */
 #define VEH_PAINTJOB_NONE 255    /* paintjob = tak ada (ala SA-MP) */
+#define VEH_PLATE_MAX  32       /* panjang plat nomor ala SA-MP (maks 32 char) */
 
 typedef struct Vehicle {
     int      id;                 /* vehicleid, mulai dari 1 */
@@ -39,6 +40,8 @@ typedef struct Vehicle {
     uint16_t comp[VEH_COMP_SLOTS]; /* compid per slot (ala AddVehicleComponent),
                                     * 0 = slot kosong */
     uint8_t  paintjob;           /* 0..2, 255 = tak ada (ala SA-MP) */
+    char     plate[VEH_PLATE_MAX + 1]; /* plat nomor ala SA-MP SetVehicleNumberPlate,
+                                       * string kosong = tak ada plat */
     int8_t   prm_engine;         /* -1 = unset, 0 = mati, 1 = nyala (ala SA-MP) */
     int8_t   prm_lights;         /* -1 = unset, 0 = mati, 1 = nyala */
     int8_t   prm_alarm;          /* -1 = unset, 0 = mati, 1 = nyala */
@@ -94,6 +97,16 @@ int vehicle_get_component_in_slot(int vid, int slot);
 int vehicle_set_paintjob(int vid, uint8_t paintjob);
 /* Paintjob kendaraan (0..2 | 255 = tak ada), -1 bila vid invalid. */
 int vehicle_get_paintjob(int vid);
+
+/* ---- Plat nomor kendaraan ala SA-MP (SetVehicleNumberPlate) ---- */
+/* Set plat nomor kendaraan (maks VEH_PLATE_MAX char — dipotong bila lebih
+ * panjang; string kosong menghapus plat). Plat bersifat otoritatif server
+ * ala SA-MP: tak ada paket client -> server. Broadcast 0x4A ke vw kendaraan
+ * bila berubah. 1 = sukses, 0 = vid invalid. */
+int vehicle_set_number_plate(int vid, const char *plate);
+/* Ambil plat nomor kendaraan ke buffer out (outlen harus > 0).
+ * 1 = sukses, 0 = vid invalid (out tak disentuh). */
+int vehicle_get_number_plate(int vid, char *out, size_t outlen);
 
 /* ---- Params kendaraan ala SA-MP (SetVehicleParamsEx) ---- */
 /* Set params kendaraan. Tiap param: -1 = unset (jangan ubah), 0 = mati,

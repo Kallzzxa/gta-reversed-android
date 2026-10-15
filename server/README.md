@@ -566,6 +566,22 @@ romp.setVehicleParamsEx(vid, 0, -1, -1, 1, -1, -1, -1)  -- engine mati, doors ku
 romp.setVehicleParamsForPlayer(vid, pid, 1, -1)         -- marker objective utk 1 pemain
 ```
 
+### Plat nomor kendaraan ala SA-MP (`SetVehicleNumberPlate`)
+
+Plat nomor teks per kendaraan, otoritatif di server. Setiap
+`romp.setVehicleNumberPlate(vid, plate)` yang berhasil di-broadcast ke
+virtual world kendaraan via paket `0x4A` (dan di-resync ke pemain yang
+baru join / pindah vw bersama modifikasi lain). String kosong menghapus
+plat. Demo: `/plat <teks>` (tanpa argumen = hapus) pada kendaraan demo
+`/modif` di `server/gamemode.lua`.
+
+| API | Keterangan |
+|-----|------------|
+| `romp.setVehicleNumberPlate(vid, plate)` | Teks plat maks 32 char (dipotong bila lebih panjang), `""` = hapus → `true`/`false` |
+| `romp.getVehicleNumberPlate(vid)` | Teks plat saat ini / nil bila kendaraan tak valid |
+
+`romp.getVehicles()` kini membawa field `plate` per kendaraan.
+
 ### Database SQLite untuk gamemode (skor, akun)
 
 Tanpa server eksternal: cukup set `database <path>` di `server.cfg`
@@ -668,7 +684,8 @@ terpisah yang bisa di-load/unload tanpa restart server.
 - Password server opsional
 - Log ke `romp-server.log`
 - Kendaraan: sync posisi, penumpang, health, komponen tuning (spoiler/velg/dsb,
-  paket `0x3A`-`0x3C`) & paintjob ala SA-MP (demo `/modif`)
+  paket `0x3A`-`0x3C`) & paintjob & plat nomor (`0x4A` VEH_PLATE) ala SA-MP
+  (demo `/modif` + `/plat`)
 
 ## Build dari source
 

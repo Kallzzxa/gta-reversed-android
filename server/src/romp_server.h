@@ -88,6 +88,10 @@ typedef int SOCKET;
 #define P_MONEY_SET   0x49  /* server -> client: saldo berubah
                                (pid+s32 amount LE, hanya ke pemilik) */
 
+/* ---- Plat nomor kendaraan ala SA-MP (lihat romp_vehicle.h & PROTOCOL.md) ---- */
+#define P_VEH_PLATE   0x4A  /* server -> client: plat nomor kendaraan berubah
+                               (vid+len+bytes, vw-scoped) */
+
 /* ---- Sinkronisasi senjata & tembakan ala SA-MP (lihat PROTOCOL.md) ---- */
 #define P_WPN         0x17  /* client -> server: event tembakan */
 #define P_WPN_SYNC    0x18  /* server -> client: broadcast tembakan */

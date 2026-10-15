@@ -481,6 +481,14 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
             platform_->OnPlayerMoney(mi.pid, mi.amount);
             break;
         }
+        case PacketType::VEH_PLATE: {
+            // Plat nomor kendaraan ala SA-MP (romp.setVehicleNumberPlate):
+            // broadcast vw-scoped + resync saat join / pindah vw.
+            PlateInfo pi;
+            if (!parse_plate(payload, len, pi)) break;
+            platform_->OnVehicleNumberPlate(pi.vid, pi.plate);
+            break;
+        }
         default:
             // Tipe tak dikenal: abaikan (forward-compat protokol).
             break;
