@@ -59,6 +59,9 @@ typedef int SOCKET;
 #define P_VEH_SPAWN   0x14  /* server -> client: kendaraan muncul */
 #define P_VEH_DESPAWN 0x15  /* server -> client: kendaraan hilang */
 #define P_VEH_SEAT    0x16  /* server -> client: perubahan penumpang */
+#define P_VEH_COMP    0x3A  /* server -> client: komponen dipasang */
+#define P_VEH_COMP_REMOVE 0x3B /* server -> client: komponen dilepas */
+#define P_VEH_PAINTJOB 0x3C /* server -> client: paintjob berubah */
 
 /* ---- Sinkronisasi senjata & tembakan ala SA-MP (lihat PROTOCOL.md) ---- */
 #define P_WPN         0x17  /* client -> server: event tembakan */

@@ -129,6 +129,9 @@ func _setup_multiplayer() -> void:
 	net.vehicle_despawn.connect(_on_vehicle_despawn)
 	net.vehicle_sync.connect(_on_vehicle_sync)
 	net.vehicle_seat.connect(_on_vehicle_seat)
+	net.vehicle_component.connect(_on_vehicle_component)
+	net.vehicle_component_remove.connect(_on_vehicle_component_remove)
+	net.vehicle_paintjob.connect(_on_vehicle_paintjob)
 	net.teleport.connect(_on_teleport)
 	net.ping_updated.connect(_on_ping_updated)
 	net.label_spawn.connect(_on_label_spawn)
@@ -263,6 +266,24 @@ func _on_vehicle_sync(_driverid: int, vid: int, x: float, y: float, z: float,
 
 func _on_vehicle_seat(_vid: int, _seat: int, _pid: int) -> void:
 	pass  # v1: kursi tidak divisualkan; slot untuk iterasi berikut
+
+
+func _on_vehicle_component(vid: int, compid: int, slot: int) -> void:
+	# 0x3A VEH_COMP ala SA-MP AddVehicleComponent.
+	if _remote_cars.has(vid):
+		_remote_cars[vid].set_component(slot, compid)
+
+
+func _on_vehicle_component_remove(vid: int, compid: int) -> void:
+	# 0x3B VEH_COMP_REMOVE ala SA-MP RemoveVehicleComponent.
+	if _remote_cars.has(vid):
+		_remote_cars[vid].remove_component(compid)
+
+
+func _on_vehicle_paintjob(vid: int, paintjob: int) -> void:
+	# 0x3C VEH_PAINTJOB ala SA-MP ChangeVehiclePaintjob.
+	if _remote_cars.has(vid):
+		_remote_cars[vid].set_paintjob(paintjob)
 
 
 func _on_teleport(x: float, y: float, z: float) -> void:

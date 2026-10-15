@@ -18,6 +18,202 @@ static float vget_f32(const uint8_t *b) {
     float f; memcpy(&f, &u, 4); return f;
 }
 
+/* Tabel compid -> slot komponen ala SA-MP.
+ * Data dari open.mp wiki via markski1/SAMP-vModData (lisensi MIT).
+ * Slot 0..13 standar SA-MP, 14/15 bullbar (ekstensi vSync).
+ */
+
+/* compid 1000..1179 -> slot 0..15, -1 = invalid. */
+/* Sumber data: open.mp wiki via markski1/SAMP-vModData (MIT). */
+static const int8_t g_comp_slot[180] = {
+     0, /* 1000 Pro spoiler                  */
+     0, /* 1001 Win spoiler                  */
+     0, /* 1002 Drag spoiler                 */
+     0, /* 1003 Alpha spoiler                */
+     1, /* 1004 Champhood                    */
+     1, /* 1005 Fury hood                    */
+     2, /* 1006 Scoop roof                   */
+     3, /* 1007 Right Sideskirt              */
+     5, /* 1008 5 times                      */
+     5, /* 1009 2 times                      */
+     5, /* 1010 10 times                     */
+     1, /* 1011 Race hood                    */
+     1, /* 1012 Worx hood                    */
+     4, /* 1013 Round Fog                    */
+     0, /* 1014 Champ spoiler                */
+     0, /* 1015 Race spoiler                 */
+     0, /* 1016 Worx spoiler                 */
+     3, /* 1017 Left Sideskirt               */
+     6, /* 1018 Upswept exhaust              */
+     6, /* 1019 Twin exhaust                 */
+     6, /* 1020 Large exhaust                */
+     6, /* 1021 Medium exhaust               */
+     6, /* 1022 Small exhaust                */
+     0, /* 1023 Fury spoiler                 */
+     4, /* 1024 Square Fog                   */
+     7, /* 1025 Offroad                      */
+     3, /* 1026 Right Alien Sideskirt        */
+     3, /* 1027 Left Alien Sideskirt         */
+     6, /* 1028 Alien exhaust                */
+     6, /* 1029 X-Flow exhaust               */
+     3, /* 1030 Left X-Flow Sideskirt        */
+     3, /* 1031 Right X-Flow Sideskirt       */
+     2, /* 1032 Alien roof                   */
+     2, /* 1033 X-Flow roof                  */
+     6, /* 1034 Alien exhaust                */
+     2, /* 1035 X-Flow roof                  */
+     3, /* 1036 Right Alien Sideskirt        */
+     6, /* 1037 X-Flow exhaust               */
+     2, /* 1038 Alien roof                   */
+     3, /* 1039 Left X-Flow Sideskirt        */
+     3, /* 1040 Left Alien Sideskirt         */
+     3, /* 1041 Right X-Flow Sideskirt       */
+     3, /* 1042 Right Chrome Sideskirt       */
+     6, /* 1043 Slamin exhaust               */
+     6, /* 1044 Chrome exhaust               */
+     6, /* 1045 X-Flow exhaust               */
+     6, /* 1046 Alien exhaust                */
+     3, /* 1047 Right Alien Sideskirt        */
+     3, /* 1048 Right X-Flow Sideskirt       */
+     0, /* 1049 Alien spoiler                */
+     0, /* 1050 X-Flow spoiler               */
+     3, /* 1051 Left Alien Sideskirt         */
+     3, /* 1052 Left X-Flow Sideskirt        */
+     2, /* 1053 X-Flow roof                  */
+     2, /* 1054 Alien roof                   */
+     2, /* 1055 Alien roof                   */
+     3, /* 1056 Right Alien Sideskirt        */
+     3, /* 1057 Right X-Flow Sideskirt       */
+     0, /* 1058 Alien spoiler                */
+     6, /* 1059 X-Flow exhaust               */
+     0, /* 1060 X-Flow spoiler               */
+     2, /* 1061 X-Flow roof                  */
+     3, /* 1062 Left Alien Sideskirt         */
+     3, /* 1063 Left X-Flow Sideskirt        */
+     6, /* 1064 Alien exhaust                */
+     6, /* 1065 Alien exhaust                */
+     6, /* 1066 X-Flow exhaust               */
+     2, /* 1067 Alien roof                   */
+     2, /* 1068 X-Flow roof                  */
+     3, /* 1069 Right Alien Sideskirt        */
+     3, /* 1070 Right X-Flow Sideskirt       */
+     3, /* 1071 Left Alien Sideskirt         */
+     3, /* 1072 Left X-Flow Sideskirt        */
+     7, /* 1073 Shadow                       */
+     7, /* 1074 Mega                         */
+     7, /* 1075 Rimshine                     */
+     7, /* 1076 Wires                        */
+     7, /* 1077 Classic                      */
+     7, /* 1078 Twist                        */
+     7, /* 1079 Cutter                       */
+     7, /* 1080 Switch                       */
+     7, /* 1081 Grove                        */
+     7, /* 1082 Import                       */
+     7, /* 1083 Dollar                       */
+     7, /* 1084 Trance                       */
+     7, /* 1085 Atomic                       */
+     8, /* 1086 Stereo                       */
+     9, /* 1087 Hydraulics                   */
+     2, /* 1088 Alien roof                   */
+     6, /* 1089 X-Flow exhaust               */
+     3, /* 1090 Right Alien Sideskirt        */
+     2, /* 1091 X-Flow roof                  */
+     6, /* 1092 Alien exhaust                */
+     3, /* 1093 Right X-Flow Sideskirt       */
+     3, /* 1094 Left Alien Sideskirt         */
+     3, /* 1095 Right X-Flow Sideskirt       */
+     7, /* 1096 Ahab                         */
+     7, /* 1097 Virtual                      */
+     7, /* 1098 Access                       */
+     3, /* 1099 Left Chrome Sideskirt        */
+    14, /* 1100 Chrome Grill                 */
+     2, /* 1101 Covertible roof              */
+     6, /* 1102 Chrome exhaust               */
+     6, /* 1103 Slamin exhaust               */
+    15, /* 1104 Chrome                       */
+    15, /* 1105 Slamin                       */
+    -1, /* 1106 Invalid                      */
+    -1, /* 1107 Invalid                      */
+     6, /* 1108 Chrome exhaust               */
+     6, /* 1109 Slamin exhaust               */
+    14, /* 1110 Chrome                       */
+    14, /* 1111 Slamin                       */
+    10, /* 1112 Chrome                       */
+    14, /* 1113 Bullbar Chrome Bars          */
+    14, /* 1114 Bullbar Chrome Lights        */
+     6, /* 1115 Chrome exhaust               */
+     6, /* 1116 Slamin exhaust               */
+     2, /* 1117 Vinyl roof Hardtop           */
+     6, /* 1118 Chrome exhaust               */
+     2, /* 1119 Hardtop roof                 */
+     2, /* 1120 Softtop roof                 */
+     6, /* 1121 Slamin exhaust               */
+     6, /* 1122 Slamin exhaust               */
+     6, /* 1123 Chrome exhaust               */
+     0, /* 1124 Alien spoiler                */
+     0, /* 1125 X-Flow spoiler               */
+    11, /* 1126 X-Flow rear bumper           */
+    11, /* 1127 Alien rear bumper            */
+    13, /* 1128 Left Oval Vents              */
+    12, /* 1129 Right Oval Vents             */
+    13, /* 1130 Left Square Vents            */
+    12, /* 1131 Right Square Vents           */
+     0, /* 1132 X-Flow spoiler               */
+     0, /* 1133 Alien spoiler                */
+    11, /* 1134 X-Flow rear bumper           */
+    11, /* 1135 Alien rear bumper            */
+    11, /* 1136 Alien rear bumper            */
+    11, /* 1137 X-Flow rear bumper           */
+    10, /* 1138 X-Flow front bumper          */
+    10, /* 1139 Alien front bumper           */
+    11, /* 1140 Alien rear bumper            */
+    10, /* 1141 Alien front bumper           */
+    11, /* 1142 X-Flow rear bumper           */
+    10, /* 1143 X-Flow front bumper          */
+     0, /* 1144 X-Flow spoiler               */
+    11, /* 1145 Alien rear bumper            */
+    10, /* 1146 Alien front bumper           */
+    11, /* 1147 X-Flow rear bumper           */
+     0, /* 1148 Alien spoiler                */
+     0, /* 1149 X-Flow spoiler               */
+     0, /* 1150 Alien spoiler                */
+    10, /* 1151 X-Flow front bumper          */
+    10, /* 1152 Alien front bumper           */
+    11, /* 1153 X-Flow rear bumper           */
+    11, /* 1154 Alien rear bumper            */
+    10, /* 1155 Alien front bumper           */
+    10, /* 1156 X-Flow front bumper          */
+    10, /* 1157 Alien front bumper           */
+    10, /* 1158 X-Flow front bumper          */
+    10, /* 1159 X-Flow front bumper          */
+    10, /* 1160 Chrome front bumper          */
+    10, /* 1161 Slamin front bumper          */
+    11, /* 1162 Chrome front bumper          */
+    11, /* 1163 Slamin front bumper          */
+    11, /* 1164 Slamin front bumper          */
+    10, /* 1165 Chrome front bumper          */
+    11, /* 1166 Chrome front bumper          */
+    10, /* 1167 Slamin front bumper          */
+    10, /* 1168 Chrome front bumper          */
+    11, /* 1169 Slamin front bumper          */
+    11, /* 1170 Chrome front bumper          */
+    10, /* 1171 Slamin front bumper          */
+    11, /* 1172 Slamin front bumper          */
+    11, /* 1173 Chrome front bumper          */
+    10, /* 1174 Slamin front bumper          */
+    10, /* 1175 Chrome front bumper          */
+    10, /* 1176 Slamin front bumper          */
+    10, /* 1177 Chrome front bumper          */
+    11, /* 1178 Chrome front bumper          */
+    11, /* 1179 Slamin front bumper          */
+};
+
+/* Slot komponen untuk compid (0..15), -1 bila invalid/tak terdaftar. */
+int vehicle_component_type(uint16_t compid) {
+    if (compid < 1000 || compid > 1179) return -1;
+    return (int)g_comp_slot[compid - 1000];
+}
+
 /* ---------------- Registry ---------------- */
 
 Vehicle *vehicle_by_id(int id) {
@@ -110,7 +306,57 @@ static void bcast_veh_seat(Vehicle *v, int seat, int pid) {
     broadcast_frame_vw(b, 6, NULL, v->vw);
 }
 
-/* Kirim 0x14 (+ 0x16 untuk kursi terisi) satu kendaraan ke satu client. */
+/* 0x3A VEH_COMP: u16 vid | u16 compid | u8 slot */
+static void bcast_veh_comp(Vehicle *v, uint16_t compid, int slot) {
+    uint8_t b[6];
+    b[0] = P_VEH_COMP;
+    vput_u16(b + 1, (uint16_t)v->id);
+    vput_u16(b + 3, compid);
+    b[5] = (uint8_t)slot;
+    broadcast_frame_vw(b, 6, NULL, v->vw);
+}
+
+/* 0x3B VEH_COMP_REMOVE: u16 vid | u16 compid */
+static void bcast_veh_comp_remove(Vehicle *v, uint16_t compid) {
+    uint8_t b[5];
+    b[0] = P_VEH_COMP_REMOVE;
+    vput_u16(b + 1, (uint16_t)v->id);
+    vput_u16(b + 3, compid);
+    broadcast_frame_vw(b, 5, NULL, v->vw);
+}
+
+/* 0x3C VEH_PAINTJOB: u16 vid | u8 paintjob */
+static void bcast_veh_paintjob(Vehicle *v) {
+    uint8_t b[4];
+    b[0] = P_VEH_PAINTJOB;
+    vput_u16(b + 1, (uint16_t)v->id);
+    b[3] = v->paintjob;
+    broadcast_frame_vw(b, 4, NULL, v->vw);
+}
+
+/* Kirim komponen + paintjob satu kendaraan ke satu client (resync join/pindah
+ * vw). Dipanggil setelah 0x14 + 0x16 di send_veh_to. */
+static void send_veh_mods_to(Client *c, Vehicle *v) {
+    for (int s = 0; s < VEH_COMP_SLOTS; s++) {
+        if (v->comp[s] == 0) continue;
+        uint8_t b[6];
+        b[0] = P_VEH_COMP;
+        vput_u16(b + 1, (uint16_t)v->id);
+        vput_u16(b + 3, v->comp[s]);
+        b[5] = (uint8_t)s;
+        client_send_frame(c, b, 6);
+    }
+    if (v->paintjob != VEH_PAINTJOB_NONE) {
+        uint8_t b[4];
+        b[0] = P_VEH_PAINTJOB;
+        vput_u16(b + 1, (uint16_t)v->id);
+        b[3] = v->paintjob;
+        client_send_frame(c, b, 4);
+    }
+}
+
+/* Kirim 0x14 (+ 0x16 untuk kursi terisi, + 0x3A/0x3C untuk modifikasi)
+ * satu kendaraan ke satu client. */
 static void send_veh_to(Client *c, Vehicle *v) {
     uint8_t b[27];
     client_send_frame(c, b, veh_spawn_frame(v, b));
@@ -124,6 +370,7 @@ static void send_veh_to(Client *c, Vehicle *v) {
         vput_u16(sb + 4, (uint16_t)occ);
         client_send_frame(c, sb, 6);
     }
+    send_veh_mods_to(c, v);
 }
 
 /* ---------------- API inti ---------------- */
@@ -144,6 +391,7 @@ int vehicle_create(uint16_t model, float x, float y, float z, float angle,
     v->health = VEH_HEALTH_MAX;
     v->driver = -1;
     v->pass[0] = v->pass[1] = v->pass[2] = -1;
+    v->paintjob = VEH_PAINTJOB_NONE; /* comp[] = 0 via calloc */
     v->respawn_ms = respawn_ms;
     v->next = g_vehicles;
     g_vehicles = v;
@@ -258,6 +506,54 @@ int vehicle_set_colors(int id, uint8_t c1, uint8_t c2) {
     v->c1 = c1; v->c2 = c2;
     bcast_veh_spawn(v); /* spawn ulang di client = warna baru */
     return 1;
+}
+
+/* ---------------- Komponen kendaraan ala SA-MP (tuning) ---------------- */
+
+int vehicle_add_component(int vid, uint16_t compid) {
+    Vehicle *v = vehicle_by_id(vid);
+    if (!v || v->destroyed) return 0;
+    int slot = vehicle_component_type(compid);
+    if (slot < 0 || slot >= VEH_COMP_SLOTS) return 0;
+    v->comp[slot] = compid; /* menimpa yang lama di slot yang sama (ala SA-MP) */
+    bcast_veh_comp(v, compid, slot);
+    log_msg("[veh] komponen %u (slot %d) dipasang di kendaraan %d",
+            compid, slot, vid);
+    return 1;
+}
+
+int vehicle_remove_component(int vid, uint16_t compid) {
+    Vehicle *v = vehicle_by_id(vid);
+    if (!v || v->destroyed) return 0;
+    int slot = vehicle_component_type(compid);
+    if (slot < 0 || slot >= VEH_COMP_SLOTS) return 0;
+    if (v->comp[slot] != compid) return 0; /* tidak terpasang */
+    v->comp[slot] = 0;
+    bcast_veh_comp_remove(v, compid);
+    log_msg("[veh] komponen %u dilepas dari kendaraan %d", compid, vid);
+    return 1;
+}
+
+int vehicle_get_component_in_slot(int vid, int slot) {
+    Vehicle *v = vehicle_by_id(vid);
+    if (!v || slot < 0 || slot >= VEH_COMP_SLOTS) return -1;
+    if (v->comp[slot] == 0) return -1;
+    return (int)v->comp[slot];
+}
+
+int vehicle_set_paintjob(int vid, uint8_t paintjob) {
+    Vehicle *v = vehicle_by_id(vid);
+    if (!v || v->destroyed) return 0;
+    if (paintjob > 2 && paintjob != VEH_PAINTJOB_NONE) return 0;
+    v->paintjob = paintjob;
+    bcast_veh_paintjob(v);
+    return 1;
+}
+
+int vehicle_get_paintjob(int vid) {
+    Vehicle *v = vehicle_by_id(vid);
+    if (!v) return -1;
+    return (int)v->paintjob;
 }
 
 /* ---------------- Penumpang ---------------- */

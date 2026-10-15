@@ -1,5 +1,6 @@
 extends Node3D
-## Mobil remote dari server (0x14 VEH_SPAWN / 0x13 VEH_SYNC / 0x15 VEH_DESPAWN).
+## Mobil remote dari server (0x14 VEH_SPAWN / 0x13 VEH_SYNC / 0x15 VEH_DESPAWN /
+## 0x3A-0x3C komponen & paintjob ala SA-MP).
 ## Render + interpolasi; tanpa physics/input.
 
 const LERP_RATE := 10.0
@@ -14,6 +15,10 @@ var _target_pos := Vector3.ZERO
 var _target_heading := 0.0
 var _body_mat: StandardMaterial3D
 var _smoke: Label3D
+var _spoiler: Node3D  # visual spoiler (slot 0) — v1: kotak sederhana
+var _components: Dictionary = {}  # slot -> compid
+var _last_c1 := 0
+var _last_c2 := 0
 
 
 func _ready() -> void:
@@ -51,11 +56,62 @@ func _ready() -> void:
 	_smoke.no_depth_test = true
 	add_child(_smoke)
 
+	# Spoiler sederhana (slot 0); disembunyikan sampai ada komponen spoiler.
+	_spoiler = Node3D.new()
+	_spoiler.position = Vector3(0, 1.55, 2.0)
+	var blade := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(1.8, 0.08, 0.5)
+	blade.mesh = bm
+	blade.material_override = _make_mat(Color(0.12, 0.12, 0.14))
+	_spoiler.add_child(blade)
+	for sx in [-0.7, 0.7]:
+		var leg := MeshInstance3D.new()
+		var lm := BoxMesh.new()
+		lm.size = Vector3(0.08, 0.45, 0.08)
+		leg.mesh = lm
+		leg.position = Vector3(sx, -0.25, 0.1)
+		leg.material_override = _make_mat(Color(0.12, 0.12, 0.14))
+		_spoiler.add_child(leg)
+	_spoiler.visible = false
+	add_child(_spoiler)
+
+
+func set_component(slot: int, compid: int) -> void:
+	# 0x3A VEH_COMP — v1: hanya slot 0 (spoiler) yang divisualkan.
+	_components[slot] = compid
+	if slot == 0 and _spoiler != null:
+		_spoiler.visible = true
+
+
+func remove_component(compid: int) -> void:
+	# 0x3B VEH_COMP_REMOVE.
+	for s in _components.keys():
+		if _components[s] == compid:
+			_components.erase(s)
+			if s == 0 and _spoiler != null:
+				_spoiler.visible = false
+			break
+
+
+func set_paintjob(paintjob: int) -> void:
+	# 0x3C VEH_PAINTJOB ala SA-MP ChangeVehiclePaintjob.
+	# v1: paintjob mengganti saturasi warna bodi sebagai penanda visual.
+	if paintjob == 255:
+		_body_mat.albedo_color = _samp_color(_last_c1, _last_c2)
+		return
+	var base := _samp_color(_last_c1, _last_c2)
+	_body_mat.albedo_color = Color.from_hsv(
+		base.h + float(paintjob) * 0.33, minf(base.s + 0.2, 1.0),
+		minf(base.v + 0.15, 1.0))
+
 
 func setup(p_vid: int, p_model: int, x: float, y: float, z: float,
 		angle_deg: float, c1: int, c2: int, p_health: int) -> void:
 	vid = p_vid
 	model = p_model
+	_last_c1 = c1
+	_last_c2 = c2
 	_body_mat.albedo_color = _samp_color(c1, c2)
 	set_sync(x, y, z, angle_deg, p_health, true)
 

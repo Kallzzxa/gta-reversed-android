@@ -125,6 +125,7 @@ local demoTds = {}  -- id textdraw global demo
 local demoLabel = {}  -- id pemain -> id 3D text label demo
 local demoObj = {}  -- id pemain -> id objek demo
 local demoActor = {}  -- id pemain -> id actor demo
+local demoVeh = {}    -- id pemain -> id kendaraan modif demo
 
 local function hapusDemoTd()
     for _, tdid in ipairs(demoTds) do romp.destroyTextDraw(tdid) end
@@ -184,6 +185,7 @@ function onPlayerLeave(id, name, reason)
     demoLabel[id] = nil
     demoObj[id] = nil
     demoActor[id] = nil
+    demoVeh[id] = nil
     return true
 end
 
@@ -456,6 +458,46 @@ function onPlayerCommand(id, name, cmd, args)
         else
             romp.sendChatToPlayer(id, romp.KIND_INFO,
                 "*** Kamu belum punya actor (/actor dulu).")
+        end
+        return true
+    elseif cmd == "modif" then
+        -- Komponen kendaraan ala SA-MP (AddVehicleComponent/paintjob):
+        -- /modif -> buat Infernus (411) di depan pemain + pasang spoiler
+        -- (1000) & velg (1073) + paintjob 1; /modifdel -> hapus.
+        local x, y, z = romp.getPlayerPos(id)
+        if not x then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Posisi kamu belum diketahui server.")
+            return true
+        end
+        if demoVeh[id] then romp.destroyVehicle(demoVeh[id]) end
+        local vid = romp.createVehicle(411, x + 3.0, y, z, 90.0, 6, 6, 0)
+        if not vid then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal membuat kendaraan.")
+            return true
+        end
+        demoVeh[id] = vid
+        romp.addVehicleComponent(vid, 1000)   -- Pro spoiler (slot 0)
+        romp.addVehicleComponent(vid, 1073)   -- Arch Angels wheel (slot 7)
+        romp.changeVehiclePaintjob(vid, 1)
+        local slot0 = romp.getVehicleComponentInSlot(vid, 0)
+        local pj = romp.getVehiclePaintjob(vid)
+        romp.sendChatToPlayer(id, romp.KIND_INFO,
+            "*** Infernus dimodif (id " .. vid .. "): spoiler=" ..
+            tostring(slot0) .. ", paintjob=" .. tostring(pj) ..
+            ". /modifdel = hapus.")
+        return true
+    elseif cmd == "modifdel" then
+        -- Hapus kendaraan modif demo milik pemain.
+        local vid = demoVeh[id]
+        if vid and romp.destroyVehicle(vid) then
+            demoVeh[id] = nil
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Kendaraan modif dihapus.")
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Kamu belum punya kendaraan modif (/modif dulu).")
         end
         return true
     elseif cmd == "gz" then

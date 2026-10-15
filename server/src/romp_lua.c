@@ -576,7 +576,8 @@ static int l_romp_hide_dialog(lua_State *Ls) {
  * romp.getVehiclePassenger(vid, seat) -> pid | nil
  * romp.respawnVehicle(vid) -> bool
  * romp.getVehicles() -> tabel {id,model,x,y,z,heading,c1,c2,health,
- *                              destroyed,driver,seats[0..3]}
+ *                              destroyed,paintjob,components{[slot1]=compid,...},
+ *                              driver,seats[0..3]}
  * Event: onPlayerEnterVehicle(pid, vid, seat), onPlayerExitVehicle(pid, vid),
  *        onVehicleDamage(vid, damagerid, newhealth),
  *        onVehicleDeath(vid, killerid), onVehicleSpawn(vid)
@@ -756,6 +757,14 @@ static int l_romp_get_vehicles(lua_State *Ls) {
         lua_pushinteger(Ls, v->c2);      lua_setfield(Ls, -2, "c2");
         lua_pushinteger(Ls, v->health);  lua_setfield(Ls, -2, "health");
         lua_pushboolean(Ls, v->destroyed); lua_setfield(Ls, -2, "destroyed");
+        lua_pushinteger(Ls, (int)v->paintjob); lua_setfield(Ls, -2, "paintjob");
+        lua_newtable(Ls);
+        for (int s = 0; s < VEH_COMP_SLOTS; s++) {
+            if (v->comp[s] == 0) continue;
+            lua_pushinteger(Ls, v->comp[s]);
+            lua_rawseti(Ls, -2, s + 1); /* slot 0 -> indeks 1 (ala Lua) */
+        }
+        lua_setfield(Ls, -2, "components");
         if (v->driver >= 0) { lua_pushinteger(Ls, v->driver); }
         else { lua_pushnil(Ls); }
         lua_setfield(Ls, -2, "driver");
@@ -768,6 +777,87 @@ static int l_romp_get_vehicles(lua_State *Ls) {
         }
         lua_setfield(Ls, -2, "seats");
         lua_rawseti(Ls, -2, i++);
+    }
+    return 1;
+}
+
+/* ---------------- Komponen kendaraan ala SA-MP (tuning) ----------------
+ * romp.addVehicleComponent(vid, compid) -> bool
+ *   (compid 1000..1179 valid ala SA-MP; menimpa slot yang sama)
+ * romp.removeVehicleComponent(vid, compid) -> bool
+ * romp.getVehicleComponentInSlot(vid, slot) -> compid | nil
+ *   (slot 0..15: 0 spoiler, 1 hood, 2 roof, 3 sideskirt, 4 lamps, 5 nitro,
+ *    6 exhaust, 7 wheels, 8 stereo, 9 hydraulics, 10 front bumper,
+ *    11 rear bumper, 12 vent right, 13 vent left, 14/15 bullbar)
+ * romp.getVehicleComponentType(compid) -> slot | nil
+ *   (ala SA-MP GetVehicleComponentType; nil bila invalid)
+ * romp.changeVehiclePaintjob(vid, paintjob) -> bool
+ *   (ala SA-MP ChangeVehiclePaintjob: 0..2, 255 = lepas)
+ * romp.getVehiclePaintjob(vid) -> int | nil (255 = tak ada)
+ * romp.getVehicleComponents(vid) -> tabel {[slot]=compid} | nil
+ * romp.getVehicles() kini juga membawa field `paintjob` dan `components`.
+ * Tak ada event Lua (modifikasi bersifat pasif, seperti di SA-MP).
+ */
+
+static int l_romp_add_vehicle_component(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    lua_Integer cid = luaL_checkinteger(Ls, 2);
+    if (cid < 0 || cid > 65535) { lua_pushboolean(Ls, 0); return 1; }
+    lua_pushboolean(Ls, vehicle_add_component(vid, (uint16_t)cid));
+    return 1;
+}
+
+static int l_romp_remove_vehicle_component(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    lua_Integer cid = luaL_checkinteger(Ls, 2);
+    if (cid < 0 || cid > 65535) { lua_pushboolean(Ls, 0); return 1; }
+    lua_pushboolean(Ls, vehicle_remove_component(vid, (uint16_t)cid));
+    return 1;
+}
+
+static int l_romp_get_vehicle_component_in_slot(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    int slot = (int)luaL_checkinteger(Ls, 2);
+    int cid = vehicle_get_component_in_slot(vid, slot);
+    if (cid < 0) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, cid);
+    return 1;
+}
+
+static int l_romp_get_vehicle_component_type(lua_State *Ls) {
+    lua_Integer cid = luaL_checkinteger(Ls, 1);
+    if (cid < 0 || cid > 65535) { lua_pushnil(Ls); return 1; }
+    int slot = vehicle_component_type((uint16_t)cid);
+    if (slot < 0) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, slot);
+    return 1;
+}
+
+static int l_romp_change_vehicle_paintjob(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    lua_Integer pj = luaL_checkinteger(Ls, 2);
+    if (pj < 0 || pj > 255) { lua_pushboolean(Ls, 0); return 1; }
+    lua_pushboolean(Ls, vehicle_set_paintjob(vid, (uint8_t)pj));
+    return 1;
+}
+
+static int l_romp_get_vehicle_paintjob(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    int pj = vehicle_get_paintjob(vid);
+    if (pj < 0) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, pj);
+    return 1;
+}
+
+static int l_romp_get_vehicle_components(lua_State *Ls) {
+    int vid = (int)luaL_checkinteger(Ls, 1);
+    Vehicle *v = vehicle_by_id(vid);
+    if (!v) { lua_pushnil(Ls); return 1; }
+    lua_newtable(Ls);
+    for (int s = 0; s < VEH_COMP_SLOTS; s++) {
+        if (v->comp[s] == 0) continue;
+        lua_pushinteger(Ls, v->comp[s]);
+        lua_rawseti(Ls, -2, s + 1); /* slot 0 -> indeks 1 (ala Lua) */
     }
     return 1;
 }
@@ -1573,6 +1663,14 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_get_vehicle_passenger); lua_setfield(Ls, -2, "getVehiclePassenger");
     lua_pushcfunction(Ls, l_romp_respawn_vehicle);  lua_setfield(Ls, -2, "respawnVehicle");
     lua_pushcfunction(Ls, l_romp_get_vehicles);      lua_setfield(Ls, -2, "getVehicles");
+    /* Komponen kendaraan ala SA-MP (tuning) */
+    lua_pushcfunction(Ls, l_romp_add_vehicle_component);    lua_setfield(Ls, -2, "addVehicleComponent");
+    lua_pushcfunction(Ls, l_romp_remove_vehicle_component);  lua_setfield(Ls, -2, "removeVehicleComponent");
+    lua_pushcfunction(Ls, l_romp_get_vehicle_component_in_slot); lua_setfield(Ls, -2, "getVehicleComponentInSlot");
+    lua_pushcfunction(Ls, l_romp_get_vehicle_component_type); lua_setfield(Ls, -2, "getVehicleComponentType");
+    lua_pushcfunction(Ls, l_romp_change_vehicle_paintjob);   lua_setfield(Ls, -2, "changeVehiclePaintjob");
+    lua_pushcfunction(Ls, l_romp_get_vehicle_paintjob);      lua_setfield(Ls, -2, "getVehiclePaintjob");
+    lua_pushcfunction(Ls, l_romp_get_vehicle_components);    lua_setfield(Ls, -2, "getVehicleComponents");
     /* 3D text label ala SA-MP (Create3DTextLabel) */
     lua_pushcfunction(Ls, l_romp_create_label);       lua_setfield(Ls, -2, "create3DTextLabel");
     lua_pushcfunction(Ls, l_romp_delete_label);       lua_setfield(Ls, -2, "delete3DTextLabel");

@@ -375,6 +375,27 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
             platform_->OnWorldSettings(ws);
             break;
         }
+        case PacketType::VEH_COMP: {
+            // Komponen dipasang (romp.addVehicleComponent).
+            VehicleCompInfo vc;
+            if (!parse_vehicle_comp(payload, len, vc)) break;
+            platform_->OnVehicleComponent(vc.vid, vc.compid, vc.slot);
+            break;
+        }
+        case PacketType::VEH_COMP_REMOVE: {
+            // Komponen dilepas (romp.removeVehicleComponent).
+            VehicleCompRemoveInfo vr;
+            if (!parse_vehicle_comp_remove(payload, len, vr)) break;
+            platform_->OnVehicleComponentRemove(vr.vid, vr.compid);
+            break;
+        }
+        case PacketType::VEH_PAINTJOB: {
+            // Paintjob berubah (romp.changeVehiclePaintjob).
+            VehiclePaintjobInfo vp;
+            if (!parse_vehicle_paintjob(payload, len, vp)) break;
+            platform_->OnVehiclePaintjob(vp.vid, vp.paintjob);
+            break;
+        }
         default:
             // Tipe tak dikenal: abaikan (forward-compat protokol).
             break;

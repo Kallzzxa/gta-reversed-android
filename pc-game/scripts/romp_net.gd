@@ -43,6 +43,9 @@ const T_ACTOR_HEALTH := 0x36
 const T_AUDIO_PLAY := 0x37
 const T_AUDIO_STOP := 0x38
 const T_WORLD_SET := 0x39
+const T_VEH_COMP := 0x3A
+const T_VEH_COMP_REMOVE := 0x3B
+const T_VEH_PAINTJOB := 0x3C
 const T_NUI := 0x40
 
 const VER := 1
@@ -91,6 +94,9 @@ signal actor_health(actorid: int, health: int)
 signal audio_play(url: String, usepos: bool, x: float, y: float, z: float, distance: float, loop: bool)
 signal audio_stop()
 signal world_settings(gravity: float, weather: int, hour: int, minute: int)
+signal vehicle_component(vid: int, compid: int, slot: int)
+signal vehicle_component_remove(vid: int, compid: int)
+signal vehicle_paintjob(vid: int, paintjob: int)
 signal nui_message(json_text: String)
 signal ping_updated(ms: int)
 
@@ -349,6 +355,12 @@ func _dispatch(ftype: int, payload: PackedByteArray) -> void:
 			var vid := r.u16()
 			var seat := r.u8()
 			vehicle_seat.emit(vid, seat, r.u16())
+		T_VEH_COMP:
+			vehicle_component.emit(r.u16(), r.u16(), r.u8())
+		T_VEH_COMP_REMOVE:
+			vehicle_component_remove.emit(r.u16(), r.u16())
+		T_VEH_PAINTJOB:
+			vehicle_paintjob.emit(r.u16(), r.u8())
 		T_WPN_SYNC:
 			var shooter := r.u16()
 			var weapon := r.u16()

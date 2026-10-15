@@ -396,6 +396,8 @@ terpisah yang bisa di-load/unload tanpa restart server.
 - Anti-spam chat (maks 3 pesan / 2 detik)
 - Password server opsional
 - Log ke `romp-server.log`
+- Kendaraan: sync posisi, penumpang, health, komponen tuning (spoiler/velg/dsb,
+  paket `0x3A`-`0x3C`) & paintjob ala SA-MP (demo `/modif`)
 
 ## Build dari source
 

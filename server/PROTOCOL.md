@@ -178,6 +178,53 @@ Event: `onPlayerEnterVehicle(pid, vid, seat)`,
 Health <= 250 = hancur: penumpang dikeluarkan, event death, lalu respawn
 otomatis ke posisi spawn setelah `respawnDelayMs` (0 = tidak respawn).
 
+### 0x3A VEH_COMP (Server -> Client)
+Komponen kendaraan dipasang (ala SA-MP `AddVehicleComponent`).
+Di-scope virtual world kendaraan.
+
+```
+u16 vehicleid
+u16 compid   // id komponen SA-MP (1000..1179)
+u8  slot     // 0..15 (0=spoiler, 1=hood, 2=roof, 3=sideskirt, 4=lamps,
+             // 5=nitro, 6=exhaust, 7=wheels, 8=stereo, 9=hydraulics,
+             // 10=front bumper, 11=rear bumper, 12=vent right, 13=vent left,
+             // 14/15=bullbar ala vSync)
+```
+
+### 0x3B VEH_COMP_REMOVE (Server -> Client)
+Komponen kendaraan dilepas (ala SA-MP `RemoveVehicleComponent`).
+
+```
+u16 vehicleid
+u16 compid
+```
+
+### 0x3C VEH_PAINTJOB (Server -> Client)
+Paintjob kendaraan berubah (ala SA-MP `ChangeVehiclePaintjob`).
+
+```
+u16 vehicleid
+u8  paintjob  // 0..2, 255 = dilepas
+```
+
+Server menyimpan komponen per slot (menimpa slot yang sama seperti SA-MP)
+dan paintjob per kendaraan — dipertahankan saat respawn, di-resync ke
+pemain yang baru join / pindah virtual world (setelah `0x14` + `0x16`).
+
+API Lua (lihat `server/README.md`):
+`romp.addVehicleComponent(vid, compid)` -> bool,
+`romp.removeVehicleComponent(vid, compid)` -> bool,
+`romp.getVehicleComponentInSlot(vid, slot)` -> compid | nil,
+`romp.getVehicleComponentType(compid)` -> slot | nil,
+`romp.changeVehiclePaintjob(vid, paintjob)` -> bool (0..2, 255 = lepas),
+`romp.getVehiclePaintjob(vid)` -> int | nil,
+`romp.getVehicleComponents(vid)` -> tabel `{[slot1]=compid, ...}` | nil,
+`romp.getVehicles()` kini juga membawa field `paintjob` dan `components`.
+Tak ada event Lua (modifikasi bersifat pasif, seperti di SA-MP).
+
+Test: `~/workspace/romp/tests/test_vehiclecomp.py`
+(+ `test_vehiclecomp_gamemode.lua`) — cek add/remove/type/paintjob/resync/vw.
+
 ### 0x21 CHAT_MSG
 
 ```

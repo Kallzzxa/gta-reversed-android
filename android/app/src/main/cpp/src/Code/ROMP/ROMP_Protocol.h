@@ -67,6 +67,10 @@ enum class PacketType : uint8_t {
     AUDIO_STOP     = 0x38,  // hentikan audio yang diputar
     // World settings ala SA-MP (SetGravity/SetWeather/SetWorldTime).
     WORLD_SET      = 0x39,  // gravity/weather/time dunia (global)
+    // Komponen kendaraan ala SA-MP (AddVehicleComponent, paintjob).
+    VEH_COMP        = 0x3A,  // komponen dipasang: vid + compid + slot
+    VEH_COMP_REMOVE = 0x3B,  // komponen dilepas: vid + compid
+    VEH_PAINTJOB    = 0x3C,  // paintjob berubah: vid + paintjob
 };
 
 // Alasan PLAYER_LEAVE (u8 reason).
@@ -556,6 +560,50 @@ inline bool parse_world_set(const uint8_t* data, size_t len,
     if (!r.get_u8(out.weather)) return false;
     if (!r.get_u8(out.hour)) return false;
     if (!r.get_u8(out.minute)) return false;
+    return true;
+}
+
+struct VehicleCompInfo {
+    uint16_t vid = 0;     // vehicleid
+    uint16_t compid = 0;  // id komponen SA-MP (1000..1179)
+    uint8_t slot = 0;     // slot 0..15 (0=spoiler, 6=exhaust, 7=wheels, ...)
+};
+
+// 0x3A VEH_COMP: vid(u16) + compid(u16) + slot(u8).
+inline bool parse_vehicle_comp(const uint8_t* data, size_t len,
+                               VehicleCompInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u16(out.vid)) return false;
+    if (!r.get_u16(out.compid)) return false;
+    if (!r.get_u8(out.slot)) return false;
+    return true;
+}
+
+struct VehicleCompRemoveInfo {
+    uint16_t vid = 0;
+    uint16_t compid = 0;
+};
+
+// 0x3B VEH_COMP_REMOVE: vid(u16) + compid(u16).
+inline bool parse_vehicle_comp_remove(const uint8_t* data, size_t len,
+                                      VehicleCompRemoveInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u16(out.vid)) return false;
+    if (!r.get_u16(out.compid)) return false;
+    return true;
+}
+
+struct VehiclePaintjobInfo {
+    uint16_t vid = 0;
+    uint8_t paintjob = 255;  // 0..2, 255 = dilepas
+};
+
+// 0x3C VEH_PAINTJOB: vid(u16) + paintjob(u8).
+inline bool parse_vehicle_paintjob(const uint8_t* data, size_t len,
+                                   VehiclePaintjobInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u16(out.vid)) return false;
+    if (!r.get_u8(out.paintjob)) return false;
     return true;
 }
 

@@ -97,6 +97,16 @@ public:
     //   force weather, set waktu via clock). Versi reversal masih stub.
     virtual void OnWorldSettings(const WorldSetInfo& /*info*/) {}
 
+    // Komponen kendaraan ala SA-MP (paket 0x3A-0x3C,
+    // dari romp.addVehicleComponent/changeVehiclePaintjob).
+    // Default no-op; platform game menimpa untuk render modifikasi di dunia.
+    // TODO(GAME): pasang/lepas carmod via pool kendaraan game (CARMOD_*).
+    virtual void OnVehicleComponent(uint16_t /*vid*/, uint16_t /*compid*/,
+                                    uint8_t /*slot*/) {}
+    virtual void OnVehicleComponentRemove(uint16_t /*vid*/,
+                                          uint16_t /*compid*/) {}
+    virtual void OnVehiclePaintjob(uint16_t /*vid*/, uint8_t /*paintjob*/) {}
+
     // Log ke konsol game / logcat.
     virtual void Log(const std::string& msg) = 0;
 
