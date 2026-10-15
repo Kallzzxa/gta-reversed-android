@@ -123,6 +123,11 @@ bool Client::SendDeathReport(uint8_t killerid, uint8_t reason) {
     return net_.SendFrame(make_frame(PacketType::DEATH_REPORT, p));
 }
 
+bool Client::SendKeyState(uint32_t keys) {
+    if (state_ != ConnState::Connected) return false;
+    return net_.SendFrame(build_key_state(keys));
+}
+
 void Client::Update() {
     if (state_ != ConnState::Connected) return;
 
@@ -497,6 +502,15 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
             if (!parse_spectate(payload, len, si)) break;
             platform_->OnPlayerSpectate(si.pid, si.spectating,
                                         si.target_type, si.target, si.mode);
+            break;
+        }
+        case PacketType::KEY_SYNC: {
+            // Key state ala SA-MP (romp.getPlayerKeys /
+            // onPlayerKeyStateChange): broadcast vw-scoped ke viewer yang
+            // melihat pemain itu + resync saat join / pindah vw.
+            KeySyncInfo ki;
+            if (!parse_key_sync(payload, len, ki)) break;
+            platform_->OnPlayerKeys(ki.pid, ki.keys);
             break;
         }
         default:

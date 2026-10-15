@@ -664,6 +664,58 @@ pemain lain).
 Demo: `/spec <id> [mode]`, `/specv <vid> [mode]`, `/unspec` di
 `server/gamemode.lua`.
 
+### 0x4C KEY_STATE (Client -> Server) & 0x4D KEY_SYNC (Server -> Client)
+
+Key state ala SA-MP (`OnPlayerKeyStateChange`): client melaporkan bitmask
+tombol yang ditekan (u16, konstanta `KEY_*` ala `a_samp.inc`) setiap state
+berubah. Server menyimpan state otoritatif per-pemain (`c->keys`, default
+0), lalu broadcast `0x4D KEY_SYNC` ke semua viewer yang melihat pemain itu
+(vw+interior scoped ala relay posisi `0x11`, termasuk dirinya sendiri) +
+menyalakan event Lua `onPlayerKeyStateChange(pid, newkeys, oldkeys)`.
+
+Frame `0x4C` KEY_STATE (3 byte):
+
+```
+u16 keys        // LE bitmask KEY_* yang sedang ditekan
+```
+
+Frame `0x4D` KEY_SYNC (4 byte):
+
+```
+u8  pid         // pemain yang state tombolnya berubah
+u16 keys        // LE bitmask KEY_* terbaru
+```
+
+Validasi server: payload harus pas (2 byte untuk `0x4C`); frame invalid
+dibuang diam-diam. Rate limit: laporan lebih cepat dari 50 ms dibuang
+diam-diam (maks 20/dtk). Nilai sama dengan state terakhir -> diam (tak ada
+broadcast/event). State bersifat momenter ala SA-MP: pemain baru join TIDAK
+menerima resync key (tahu setelah ada perubahan); reset 0 saat leave.
+NPC tak punya socket sehingga tak bisa melapor — `getPlayerKeys` untuk NPC
+selalu 0 (default).
+
+Bitmask tombol (`KEY_*`, sama dengan SA-MP `a_samp.inc`):
+`KEY_ACTION`=1, `KEY_CROUCH`=2, `KEY_FIRE`=4, `KEY_SPRINT`=8,
+`KEY_SECONDARY_ATTACK`=16, `KEY_JUMP`=32, `KEY_LOOK_RIGHT`=64,
+`KEY_HANDBRAKE`=128, `KEY_LOOK_LEFT`=256, `KEY_SUBMISSION`=512,
+`KEY_WALK`=1024, `KEY_ANALOG_UP`=2048, `KEY_ANALOG_DOWN`=4096,
+`KEY_ANALOG_RIGHT`=8192, `KEY_ANALOG_LEFT`=16384, `KEY_YES`=65536,
+`KEY_NO`=131072, `KEY_CTRL_BACK`=262144.
+
+API Lua (lihat `server/README.md`): `romp.getPlayerKeys(pid)` -> int | nil
+(0 = tak ada tombol ditekan; nil bila pemain tak valid/tidak connect).
+Event `onPlayerKeyStateChange(pid, newkeys, oldkeys)` — perpanjangan RO-MP
+(SA-MP menyalakan `OnPlayerKeyStateChange` per paket posisi; di sini hanya
+saat state benar-benar berubah).
+Konstanta: `romp.KEY_ACTION` ... `romp.KEY_CTRL_BACK` (18 buah).
+
+Client game menerapkan key sync dari `0x4D` langsung
+(C++: `IROMPPlatform::OnPlayerKeys`; Godot: sinyal `key_sync` ->
+disimpan per-pemain di `main.gd`; kirim state sendiri via
+`Client::SendKeyState` / frame `0x4C` mentah).
+Demo: `/keys [id]` + handler `onPlayerKeyStateChange` (umumkan tombol yang
+baru ditekan) di `server/gamemode.lua`.
+
 Test: `~/workspace/romp/tests/test_spectate.py`
 (+ `test_spectate_gamemode.lua`) — toggle on/off, broadcast ke penonton &
 viewer, idempotensi, paket posisi dibuang, spectate pemain/kendaraan,

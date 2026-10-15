@@ -28,6 +28,7 @@
 #include "romp_wanted.h"
 #include "romp_money.h"
 #include "romp_spectate.h"
+#include "romp_key.h"
 
 #include <time.h>
 #include <pthread.h>
@@ -675,6 +676,8 @@ int npc_connect(const char *name) {
     money_init(c);
     /* Spectate: mati ala SA-MP. */
     spectate_init(c);
+    /* Key state: tak ada tombol ditekan ala SA-MP. */
+    key_init(c);
     c->last_activity = now_ms();
     strncpy(c->ip, "npc", sizeof(c->ip) - 1);
     c->next = g_clients;
@@ -899,6 +902,8 @@ static void handle_hello(Client *c, const uint8_t *p, size_t n) {
     money_init(c);
     /* Spectate: mati ala SA-MP. */
     spectate_init(c);
+    /* Key state: tak ada tombol ditekan ala SA-MP. */
+    key_init(c);
     c->last_activity = now_ms();
     do_join(c);
 }
@@ -1084,6 +1089,7 @@ static void dispatch(Client *c, uint8_t type, const uint8_t *p, size_t n) {
         case P_VEH:   vehicle_on_packet(c, p, n); break;
         case P_WPN:   weapon_on_packet(c, p, n); break;
         case P_DEATH_REPORT: death_on_report(c, p, n); break;
+        case P_KEY_STATE: key_on_state(c, p, n); break;
         default: break;
     }
 }

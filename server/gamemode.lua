@@ -188,6 +188,49 @@ function onPlayerJoin(id, name)
     return true
 end
 
+-- Key state ala SA-MP (OnPlayerKeyStateChange): perpanjangan RO-MP —
+-- event ini menyala setiap state tombol pemain berubah (0x4C KEY_STATE).
+-- Demo: umumkan tombol yang BARU ditekan (bukan yang dilepas) ke chat.
+local KEY_NAMES = {
+    [romp.KEY_ACTION] = "ACTION", [romp.KEY_CROUCH] = "CROUCH",
+    [romp.KEY_FIRE] = "FIRE", [romp.KEY_SPRINT] = "SPRINT",
+    [romp.KEY_SECONDARY_ATTACK] = "2ND-ATTACK", [romp.KEY_JUMP] = "JUMP",
+    [romp.KEY_LOOK_RIGHT] = "LOOK-R", [romp.KEY_HANDBRAKE] = "HANDBRAKE",
+    [romp.KEY_LOOK_LEFT] = "LOOK-L", [romp.KEY_SUBMISSION] = "SUBMISSION",
+    [romp.KEY_WALK] = "WALK", [romp.KEY_ANALOG_UP] = "ANALOG-UP",
+    [romp.KEY_ANALOG_DOWN] = "ANALOG-DOWN",
+    [romp.KEY_ANALOG_RIGHT] = "ANALOG-RIGHT",
+    [romp.KEY_ANALOG_LEFT] = "ANALOG-L", [romp.KEY_YES] = "YES",
+    [romp.KEY_NO] = "NO", [romp.KEY_CTRL_BACK] = "CTRL-BACK",
+}
+local KEY_ORDER = { 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024,
+    2048, 4096, 8192, 16384, 65536, 131072, 262144 }
+local function key_names(keys)
+    local parts = {}
+    for _, k in ipairs(KEY_ORDER) do
+        -- tanpa bit32 di Lua 5.4: cek bit via aritmetika
+        if math.floor(keys / k) % 2 == 1 then
+            parts[#parts + 1] = KEY_NAMES[k] or ("0x" .. string.format("%X", k))
+        end
+    end
+    return #parts > 0 and table.concat(parts, "+") or "-"
+end
+function onPlayerKeyStateChange(pid, newkeys, oldkeys)
+    -- hanya yang baru ditekan (bit 0->1); pelepas tak diumumkan
+    local pressed = 0
+    for _, k in ipairs(KEY_ORDER) do
+        local n = math.floor(newkeys / k) % 2
+        local o = math.floor(oldkeys / k) % 2
+        if n == 1 and o == 0 then pressed = pressed + k end
+    end
+    if pressed ~= 0 then
+        local name = romp.getPlayerName(pid) or ("id " .. pid)
+        romp.sendChatToAll(romp.KIND_SYS,
+            "*** ⌨ " .. name .. " menekan: " .. key_names(pressed))
+    end
+    return true
+end
+
 -- Kill feed ala SA-MP: menyala hanya untuk laporan kematian dari client
 -- (paket 0x46), TIDAK untuk /deathmsg (romp.sendDeathMessage manual).
 function onPlayerDeath(victimid, killerid, reason)
@@ -1041,6 +1084,22 @@ function onPlayerCommand(id, name, cmd, args)
         else
             romp.sendChatToPlayer(id, romp.KIND_INFO,
                 "*** Kamu tidak sedang spectate.")
+        end
+        return true
+    elseif cmd == "keys" then
+        -- Lihat state tombol terakhir ala SA-MP (romp.getPlayerKeys):
+        -- /keys [id] -> tampilkan bitmask + nama tombol yang ditekan.
+        local tgt = tonumber(args:match("(%d+)")) or id
+        local k = romp.getPlayerKeys(tgt)
+        if k == nil then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Pemain id " .. tgt .. " tidak valid.")
+        else
+            local who = tgt == id and "kamu" or
+                (romp.getPlayerName(tgt) or ("id " .. tgt))
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** ⌨ Tombol " .. who .. ": 0x" ..
+                string.format("%04X", k) .. " (" .. key_names(k) .. ")")
         end
         return true
     end

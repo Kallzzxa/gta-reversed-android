@@ -69,6 +69,7 @@ func _run() -> void:
 	_net.money_set.connect(_on_money)
 	_net.veh_plate.connect(_on_plate)
 	_net.spectate.connect(_on_spectate)
+	_net.key_sync.connect(_on_key_sync)
 
 	# --- 1. Handshake + WELCOME ---
 	_net.connect_to("127.0.0.1", _port, "GodotTes", "rahasia")
@@ -104,6 +105,11 @@ func _run() -> void:
 
 	# --- 3e. World settings: peer kirim /worldgodot -> WORLD_SET (0x39) ---
 	_check(await _wait("world", 10.0), "world_set_diterima")
+
+	# --- 3e2. Key state ala SA-MP (0x4C KEY_STATE -> 0x4D KEY_SYNC):
+	# peer kirim 0x4C keys=0x0025 (ACTION+FIRE+JUMP); server broadcast
+	# 0x4D dengan pid peer ke viewer (Godot) ---
+	_check(await _wait("keysync", 10.0), "key_sync_received")
 
 	# --- 4. Teleport 0x27 via /tpgodot ---
 	_net.send_chat("/tpgodot 500 600 70")
@@ -402,3 +408,10 @@ func _on_spectate(pid: int, spectating: int, target_type: int,
 	if pid == _net.player_id and spectating == 1 \
 			and target_type == 1 and mode == 1:
 		_ev["spec_real"] = true
+
+
+func _on_key_sync(pid: int, keys: int) -> void:
+	# End-to-end: peer Python kirim 0x4C keys=0x0025 (ACTION+FIRE+JUMP);
+	# server broadcast 0x4D dengan pid peer ke viewer (Godot).
+	if keys == 0x0025 and pid == _ev.get("peer_pid", -2):
+		_ev["keysync"] = true

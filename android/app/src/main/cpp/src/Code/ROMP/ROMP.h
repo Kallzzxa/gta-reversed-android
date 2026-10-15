@@ -192,6 +192,16 @@ public:
                                   uint8_t /*target_type*/, uint16_t /*target*/,
                                   uint8_t /*mode*/) {}
 
+    // Key state ala SA-MP (paket 0x4D KEY_SYNC, dari
+    // romp.getPlayerKeys/event onPlayerKeyStateChange): bitmask tombol
+    // pemain pid berubah (KEY_ACTION=1, KEY_FIRE=4, KEY_JUMP=32, dst —
+    // hanya 16 bit terendah yang terkirim). Broadcast vw-scoped ke viewer
+    // yang melihat pemain itu + resync saat join / pindah vw.
+    // Default no-op.
+    // TODO(GAME): visualisasikan key state ped remote (mis. pose
+    //   nembak/jongkok dari bit KEY_FIRE/KEY_CROUCH; chat bubble sprint).
+    virtual void OnPlayerKeys(uint8_t /*pid*/, uint16_t /*keys*/) {}
+
     // Log ke konsol game / logcat.
     virtual void Log(const std::string& msg) = 0;
 
@@ -284,6 +294,14 @@ public:
     // Dipanggil platform saat ped pemain lokal mati di game.
     // TODO(GAME): hubungkan ke hook kematian ped GTA:SA.
     bool SendDeathReport(uint8_t killerid, uint8_t reason);
+
+    // Kirim key state pemain lokal ke server (paket 0x4C KEY_STATE).
+    // keys = bitmask tombol ala SA-MP (hanya 16 bit terendah yang
+    // terkirim, wire u16 LE). Kirim tiap state tombol berubah — bukan
+    // tiap frame.
+    // Dipanggil platform saat input pemain lokal berubah di game.
+    // TODO(GAME): hubungkan ke pembacaan input pad/game ala GTA:SA.
+    bool SendKeyState(uint32_t keys);
 
     // Dipanggil TIAP FRAME game. Menangani: Pump net, kirim POS tiap
     // 100 ms, interpolasi + MoveRemotePlayer, PING tiap 15 detik.

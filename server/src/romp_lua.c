@@ -21,6 +21,7 @@
 #include "romp_wanted.h"
 #include "romp_money.h"
 #include "romp_spectate.h"
+#include "romp_key.h"
 
 #include "../vendor/sqlite/sqlite3.h"
 
@@ -1838,6 +1839,26 @@ static int l_romp_send_death_message(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- API key state ala SA-MP ----------------
+ * romp.getPlayerKeys(pid) -> int | nil
+ *   State tombol terakhir yang dilaporkan client (bitmask KEY_* ala SA-MP),
+ *   0 = tak ada tombol ditekan. nil bila pemain tak valid / tidak connect.
+ *   Client mengirim 0x4C KEY_STATE tiap state berubah; server broadcast
+ *   0x4D KEY_SYNC ke viewer + event onPlayerKeyStateChange(pid, newkeys,
+ *   oldkeys). Konstanta: romp.KEY_ACTION/KEY_CROUCH/KEY_FIRE/KEY_SPRINT/
+ *   KEY_SECONDARY_ATTACK/KEY_JUMP/KEY_LOOK_RIGHT/KEY_HANDBRAKE/KEY_LOOK_LEFT/
+ *   KEY_SUBMISSION/KEY_WALK/KEY_ANALOG_UP/KEY_ANALOG_DOWN/KEY_ANALOG_RIGHT/
+ *   KEY_ANALOG_LEFT/KEY_YES/KEY_NO/KEY_CTRL_BACK (sama dengan a_samp.inc).
+ *   State bersifat momenter: tak di-resync saat pemain baru join.
+ */
+static int l_romp_get_player_keys(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(pid);
+    if (!c || !c->handshaked || c->dead) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, (lua_Integer)key_get(c));
+    return 1;
+}
+
 /* ---------------- API world settings ala SA-MP ----------------
  * romp.setGravity(gravity) -> bool
  *   ala SA-MP SetGravity; default GTA:SA 0.008. Valid 0.001..0.5,
@@ -2281,6 +2302,26 @@ static void script_register_api(lua_State *Ls) {
     /* kill feed ala SA-MP (SendDeathMessage / OnPlayerDeath) */
     lua_pushcfunction(Ls, l_romp_send_death_message); lua_setfield(Ls, -2, "sendDeathMessage");
     lua_pushinteger(Ls, DEATH_KILLER_NONE); lua_setfield(Ls, -2, "DEATH_KILLER_NONE");
+    /* key state ala SA-MP (OnPlayerKeyStateChange) */
+    lua_pushcfunction(Ls, l_romp_get_player_keys); lua_setfield(Ls, -2, "getPlayerKeys");
+    lua_pushinteger(Ls, KEY_ACTION);           lua_setfield(Ls, -2, "KEY_ACTION");
+    lua_pushinteger(Ls, KEY_CROUCH);           lua_setfield(Ls, -2, "KEY_CROUCH");
+    lua_pushinteger(Ls, KEY_FIRE);             lua_setfield(Ls, -2, "KEY_FIRE");
+    lua_pushinteger(Ls, KEY_SPRINT);           lua_setfield(Ls, -2, "KEY_SPRINT");
+    lua_pushinteger(Ls, KEY_SECONDARY_ATTACK); lua_setfield(Ls, -2, "KEY_SECONDARY_ATTACK");
+    lua_pushinteger(Ls, KEY_JUMP);             lua_setfield(Ls, -2, "KEY_JUMP");
+    lua_pushinteger(Ls, KEY_LOOK_RIGHT);       lua_setfield(Ls, -2, "KEY_LOOK_RIGHT");
+    lua_pushinteger(Ls, KEY_HANDBRAKE);        lua_setfield(Ls, -2, "KEY_HANDBRAKE");
+    lua_pushinteger(Ls, KEY_LOOK_LEFT);        lua_setfield(Ls, -2, "KEY_LOOK_LEFT");
+    lua_pushinteger(Ls, KEY_SUBMISSION);       lua_setfield(Ls, -2, "KEY_SUBMISSION");
+    lua_pushinteger(Ls, KEY_WALK);             lua_setfield(Ls, -2, "KEY_WALK");
+    lua_pushinteger(Ls, KEY_ANALOG_UP);        lua_setfield(Ls, -2, "KEY_ANALOG_UP");
+    lua_pushinteger(Ls, KEY_ANALOG_DOWN);      lua_setfield(Ls, -2, "KEY_ANALOG_DOWN");
+    lua_pushinteger(Ls, KEY_ANALOG_RIGHT);     lua_setfield(Ls, -2, "KEY_ANALOG_RIGHT");
+    lua_pushinteger(Ls, KEY_ANALOG_LEFT);      lua_setfield(Ls, -2, "KEY_ANALOG_LEFT");
+    lua_pushinteger(Ls, KEY_YES);              lua_setfield(Ls, -2, "KEY_YES");
+    lua_pushinteger(Ls, KEY_NO);               lua_setfield(Ls, -2, "KEY_NO");
+    lua_pushinteger(Ls, KEY_CTRL_BACK);        lua_setfield(Ls, -2, "KEY_CTRL_BACK");
     /* konstanta mode marker ala SA-MP (PLAYER_MARKERS_MODE_* di a_samp.inc) */
     lua_pushinteger(Ls, MARKER_MODE_OFF);      lua_setfield(Ls, -2, "MARKER_MODE_OFF");
     lua_pushinteger(Ls, MARKER_MODE_GLOBAL);  lua_setfield(Ls, -2, "MARKER_MODE_GLOBAL");
@@ -2914,6 +2955,25 @@ void lua_on_player_spectate(int pid, int spectating, int targettype,
     EvSpectate e = { pid, spectating, targettype, target, mode };
     fs_event("onPlayerSpectate", push_spectate, &e);
     call_event("onPlayerSpectate", push_spectate, &e);
+}
+
+/* Event key state ala SA-MP (OnPlayerKeyStateChange — perpanjangan RO-MP
+ * karena SA-MP menyalakan ini per-paket pos): menyala setiap state tombol
+ * pemain berubah — onPlayerKeyStateChange(pid, newkeys, oldkeys).
+ * newkeys/oldkeys = bitmask KEY_* (0 = tak ada tombol ditekan). */
+typedef struct { int pid; uint16_t newk; uint16_t oldk; } EvKeys;
+static int push_keys(lua_State *Ls, void *ud) {
+    EvKeys *e = (EvKeys *)ud;
+    lua_pushinteger(Ls, e->pid);
+    lua_pushinteger(Ls, (lua_Integer)e->newk);
+    lua_pushinteger(Ls, (lua_Integer)e->oldk);
+    return 3;
+}
+
+void lua_on_player_key_change(int pid, uint16_t newkeys, uint16_t oldkeys) {
+    EvKeys e = { pid, newkeys, oldkeys };
+    fs_event("onPlayerKeyStateChange", push_keys, &e);
+    call_event("onPlayerKeyStateChange", push_keys, &e);
 }
 
 typedef struct { int pid; int oldi; int newi; } EvInt;

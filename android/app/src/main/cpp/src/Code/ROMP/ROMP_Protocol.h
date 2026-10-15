@@ -110,6 +110,14 @@ enum class PacketType : uint8_t {
                           // u16 target LE + u8 mode (6B payload);
                           // target_type 0=none/1=pemain/2=kendaraan,
                           // mode 0=normal/1=fixed/2=side
+    // Key state ala SA-MP (GetPlayerKeys / OnPlayerKeyStateChange):
+    // client -> server kirim key state-nya sendiri; server -> client
+    // broadcast key state pemain lain ke viewer.
+    KEY_STATE    = 0x4C,  // client -> server: u16 keys LE (2B payload)
+    KEY_SYNC     = 0x4D,  // server -> client: u8 pid + u16 keys LE
+                          // (3B payload); broadcast vw-scoped ke viewer
+                          // yang melihat pemain itu + resync saat join /
+                          // pindah vw
 };
 
 // Alasan PLAYER_LEAVE (u8 reason).
@@ -868,6 +876,40 @@ inline bool parse_spectate(const uint8_t* data, size_t len,
     if (!r.get_u16(out.target)) return false;
     if (!r.get_u8(out.mode)) return false;
     return len == 6;  // tolak payload kepanjangan/kependekan
+}
+
+// ---- Key state ala SA-MP (GetPlayerKeys / OnPlayerKeyStateChange) ----
+
+// Info key state pemain ala SA-MP (0x4D KEY_SYNC).
+struct KeySyncInfo {
+    uint8_t pid = 0;    // pemain yang tombolnya berubah (u8)
+    uint16_t keys = 0;  // bitmask tombol ala SA-MP (u16 LE):
+                        // KEY_ACTION=1, KEY_CROUCH=2, KEY_FIRE=4,
+                        // KEY_SPRINT=8, KEY_SECONDARY_ATTACK=16,
+                        // KEY_JUMP=32, KEY_LOOK_RIGHT=64,
+                        // KEY_HANDBRAKE=128, KEY_LOOK_LEFT=256,
+                        // KEY_SUBMISSION=512, KEY_WALK=1024,
+                        // KEY_ANALOG_UP=2048, KEY_ANALOG_DOWN=4096,
+                        // KEY_ANALOG_RIGHT=8192, KEY_ANALOG_LEFT=16384
+                        // (bit >16, mis. KEY_YES=65536, tak muat di
+                        // payload u16 dan dipotong saat kirim)
+};
+
+// 0x4D KEY_SYNC: u8 pid | u16 keys LE (3 byte payload).
+inline bool parse_key_sync(const uint8_t* data, size_t len,
+                           KeySyncInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u8(out.pid)) return false;
+    if (!r.get_u16(out.keys)) return false;
+    return len == 3;  // tolak payload kepanjangan/kependekan
+}
+
+// 0x4C KEY_STATE (C->S): u16 keys LE (2 byte payload). Hanya 16 bit
+// terendah yang dikirim (wire u16); bit >16 ala SA-MP dipotong.
+inline std::vector<uint8_t> build_key_state(uint32_t keys) {
+    std::vector<uint8_t> p;
+    put_u16(p, static_cast<uint16_t>(keys & 0xFFFFu));
+    return make_frame(PacketType::KEY_STATE, p);
 }
 
 struct ChatMsgInfo {

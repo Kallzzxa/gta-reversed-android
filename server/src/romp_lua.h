@@ -92,6 +92,10 @@ void lua_on_player_money_change(int pid, int32_t oldamount, int32_t newamount);
  * target = pid/vid (0 bila none); mode 0=normal/1=fixed/2=side. */
 void lua_on_player_spectate(int pid, int spectating, int targettype,
                             int target, int mode);
+/* Event key state ala SA-MP: menyala setiap state tombol pemain berubah
+ * (0x4C KEY_STATE) — onPlayerKeyStateChange(pid, newkeys, oldkeys).
+ * newkeys/oldkeys = bitmask KEY_* (romp_key.h), 0 = tak ada tombol ditekan. */
+void lua_on_player_key_change(int pid, uint16_t newkeys, uint16_t oldkeys);
 /* Event interior & virtual world ala SA-MP (tidak ada default C):
  * onPlayerInteriorChange(pid, old, new),
  * onPlayerVirtualWorldChange(pid, old, new). */

@@ -137,6 +137,7 @@ func _setup_multiplayer() -> void:
 	net.vehicle_params_p.connect(_on_vehicle_params_p)
 	net.veh_plate.connect(_on_vehicle_plate)
 	net.spectate.connect(_on_spectate)
+	net.key_sync.connect(_on_key_sync)
 	net.attach_obj_set.connect(_on_attach_obj_set)
 	net.attach_obj_remove.connect(_on_attach_obj_remove)
 	net.skill_set.connect(_on_skill_set)
@@ -349,6 +350,18 @@ func _apply_local_spectate(on: bool, target_type: int, target: int) -> void:
 		player.visible = true
 		mp_chat.add_message(RompNet.CHAT_INFO,
 			"*** 👁 Mode spectate berhenti.")
+
+
+## Key state ala SA-MP (0x4D KEY_SYNC): bitmask tombol per pemain
+## (GetPlayerKeys / OnPlayerKeyStateChange ala SA-MP).
+var _keys_state := {}  # pid -> keys (u16 bitmask)
+
+
+func _on_key_sync(pid: int, keys: int) -> void:
+	# 0x4D KEY_SYNC: simpan state per pemain; cukup simpan (anti spam —
+	# tidak ada chat/efek otomatis tiap berubah). Handler game membaca
+	# _keys_state[pid] saat butuh (mis. pose nembak/jongkok ped remote).
+	_keys_state[pid] = keys
 
 
 func _on_vehicle_params(vid: int, engine: int, lights: int, alarm: int,

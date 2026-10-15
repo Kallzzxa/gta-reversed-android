@@ -609,6 +609,34 @@ perpanjangan RO-MP (SA-MP tak punya event ini); `targettype`
 `romp.SPECTATE_TARGET_NONE/PLAYER/VEHICLE`,
 `romp.SPECTATE_MODE_NORMAL/FIXED/SIDE`.
 
+### Key state ala SA-MP (OnPlayerKeyStateChange)
+
+Client melaporkan bitmask tombol yang ditekan (`u16` ala SA-MP `KEY_*`)
+lewat paket `0x4C KEY_STATE` setiap state berubah (client game mengirim
+hanya saat ada perubahan — lihat `Client::SendKeyState`). Server menyimpan
+state otoritatif per-pemain, broadcast `0x4D KEY_SYNC` (vw+interior scoped
+ala relay posisi, termasuk ke pelapor sendiri) tiap ada perubahan, dan
+menyalakan event Lua `onPlayerKeyStateChange(pid, newkeys, oldkeys)`.
+Rate limit 50 ms (maks 20 laporan/dtk), frame invalid dibuang diam-diam.
+State bersifat momenter: pemain baru join tidak menerima resync key;
+di-reset 0 saat leave. NPC tak bisa melapor (selalu 0).
+
+| API | Keterangan |
+|-----|------------|
+| `romp.getPlayerKeys(pid)` | Bitmask `KEY_*` terakhir (0 = tak ada tombol ditekan) / nil bila pemain tak valid |
+
+Event `onPlayerKeyStateChange(pid, newkeys, oldkeys)` — perpanjangan RO-MP
+(SA-MP menyalakan `OnPlayerKeyStateChange` per paket posisi; di sini hanya
+saat state benar-benar berubah). Konstanta (sama dengan `a_samp.inc`):
+`romp.KEY_ACTION`=1, `KEY_CROUCH`=2, `KEY_FIRE`=4, `KEY_SPRINT`=8,
+`KEY_SECONDARY_ATTACK`=16, `KEY_JUMP`=32, `KEY_LOOK_RIGHT`=64,
+`KEY_HANDBRAKE`=128, `KEY_LOOK_LEFT`=256, `KEY_SUBMISSION`=512,
+`KEY_WALK`=1024, `KEY_ANALOG_UP`=2048, `KEY_ANALOG_DOWN`=4096,
+`KEY_ANALOG_RIGHT`=8192, `KEY_ANALOG_LEFT`=16384, `KEY_YES`=65536,
+`KEY_NO`=131072, `KEY_CTRL_BACK`=262144.
+Demo: `/keys [id]` + handler (umumkan tombol yang baru ditekan) di
+`server/gamemode.lua`.
+
 ### Database SQLite untuk gamemode (skor, akun)
 
 Tanpa server eksternal: cukup set `database <path>` di `server.cfg`

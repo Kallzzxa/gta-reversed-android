@@ -97,6 +97,11 @@ typedef int SOCKET;
                                (pid+spectating+type+target+mode,
                                broadcast vw-scoped ke vw penonton) */
 
+/* ---- Key state ala SA-MP (lihat romp_key.h & PROTOCOL.md) ---- */
+#define P_KEY_STATE   0x4C  /* client -> server: state tombol (u16 keys LE) */
+#define P_KEY_SYNC    0x4D  /* server -> client: state tombol pemain berubah
+                               (pid+u16 keys LE, broadcast vw-scoped) */
+
 /* ---- Sinkronisasi senjata & tembakan ala SA-MP (lihat PROTOCOL.md) ---- */
 #define P_WPN         0x17  /* client -> server: event tembakan */
 #define P_WPN_SYNC    0x18  /* server -> client: broadcast tembakan */
@@ -317,6 +322,11 @@ typedef struct Client {
     uint8_t  spectate_type;   /* 0=none, 1=pemain, 2=kendaraan */
     uint16_t spectate_target; /* pid atau vid target */
     uint8_t  spectate_mode;   /* 0=normal, 1=fixed, 2=side */
+    /* Key state ala SA-MP (lihat romp_key.h): bitmask tombol terakhir yang
+     * dilaporkan client (0x4C KEY_STATE), default 0, di-broadcast tiap
+     * berubah (0x4D KEY_SYNC). Momenter: tak di-resync saat join baru. */
+    uint16_t keys;            /* state tombol terakhir */
+    uint64_t last_key_ms;     /* rate limit laporan key state */
     struct Client *next;
 } Client;
 

@@ -58,6 +58,7 @@ const T_WANTED_SET := 0x48
 const T_MONEY_SET := 0x49
 const T_VEH_PLATE := 0x4A
 const T_SPECTATE := 0x4B
+const T_KEY_SYNC := 0x4D
 const T_NUI := 0x40
 
 const VER := 1
@@ -121,6 +122,7 @@ signal wanted_set(pid: int, level: int)
 signal money_set(pid: int, amount: int)
 signal veh_plate(vid: int, plate: String)
 signal spectate(pid: int, spectating: int, target_type: int, target: int, mode: int)
+signal key_sync(pid: int, keys: int)
 signal nui_message(json_text: String)
 signal ping_updated(ms: int)
 
@@ -446,6 +448,11 @@ func _dispatch(ftype: int, payload: PackedByteArray) -> void:
 			# u8 mode (0=normal/1=fixed/2=side). Broadcast vw-scoped ke vw
 			# penonton + resync saat join / pindah vw.
 			spectate.emit(r.u8(), r.u8(), r.u8(), r.u16(), r.u8())
+		T_KEY_SYNC:
+			# Key state ala SA-MP (0x4D): u8 pid + u16 keys LE (bitmask
+			# tombol ala SA-MP). Broadcast vw-scoped ke viewer yang
+			# melihat pemain itu + resync saat join / pindah vw.
+			key_sync.emit(r.u8(), r.u16())
 		T_WPN_SYNC:
 			var shooter := r.u16()
 			var weapon := r.u16()
