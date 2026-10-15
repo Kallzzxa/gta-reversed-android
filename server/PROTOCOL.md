@@ -63,10 +63,19 @@ Command bawaan server:
 ### 0x30 PING
 
 ```
-u32 client_tick
+u32 tick
 ```
 
-Dijawab `PONG`. Client sebaiknya ping tiap 15 detik. Timeout 60 detik.
+Dua arah:
+
+- **Client -> Server**: `tick` = tick client; dijawab `PONG` (echo).
+  Client sebaiknya ping tiap 15 detik. Timeout 60 detik.
+- **Server -> Client** (probe ping ala SA-MP, tiap 5 detik): `tick` = tick
+  server; client WAJIB menjawab `0x31 PONG` dengan echo u32 yang sama.
+  Server mengukur RTT dan menyimpannya sebagai ping pemain
+  (`romp.getPlayerPing`, field `ping` di `romp.getPlayers()`).
+  Echo yang tak cocok dengan probe terakhir diabaikan; client yang tak
+  menjawab tetap `-1` (belum terukur).
 
 ## Server -> Client
 
@@ -304,7 +313,8 @@ Slot senjata ala SA-MP:
 ### 0x31 PONG
 
 ```
-u32 client_tick  // echo dari PING
+u32 tick  // echo dari PING (client->server: tick client;
+          // server->client: WAJIB echo tick probe server agar RTT terukur)
 ```
 
 ## NUI — UI ala FiveM (HTML/JS)
@@ -670,6 +680,47 @@ Kick via console/RCON (`kick <id>`) juga menangani NPC dengan benar
 
 Test: `~/workspace/romp/tests/test_npc.py`
 (+ `test_npc_gamemode.lua`) — 34 checks.
+
+## Scoreboard ala SA-MP (TAB) + ping
+
+Daftar pemain + ping ala scoreboard SA-MP (tombol TAB), dirender lewat NUI
+WebView (`android/.../assets/romp/nui/scoreboard.html`).
+
+### Pengukuran ping (server-side)
+
+Server mengirim probe `0x30 PING` ke tiap client tiap 5 detik; client menjawab
+`0x31 PONG` dengan echo u32 yang sama persis. RTT = waktu jawab − waktu
+kirim probe (clamp 0–9999 ms; `-1` = belum terukur, mis. NPC atau client
+yang tak menjawab probe). NPC tak pernah di-probe (tak punya socket).
+
+### API Lua
+
+```
+romp.getPlayerPing(id)       -- -> int ms, -1 = belum terukur / id tak dikenal
+romp.getPlayers()            -- tiap entri kini juga punya field `ping`
+romp.toggleScoreboard(pid, on)  -- tampil/sembunyikan scoreboard utk pemain
+romp.toggleScoreboardAll(on)    -- untuk semua pemain
+romp.isScoreboardVisible(pid)   -- -> bool
+```
+
+`server/scoreboard.lua` dimuat otomatis (daftar `g_helpers` di `romp_lua.c`).
+Tiap `onTick` (1 detik) daftar pemain di-push ke yang scoreboard-nya tampil,
+di-diff (hanya kirim ulang bila ada perubahan nama/ping/NPC).
+
+### Pesan NUI (0x40, JSON)
+
+```
+{ action="showScoreboard",   hostname, maxplayers, rows=[{id,name,ping,npc}] }
+{ action="updateScoreboard", hostname, maxplayers, rows=[...] }
+{ action="hideScoreboard" }
+```
+
+`ping = -1` dirender sebagai `-`; baris NPC ditandai `[BOT]`.
+Command demo di gamemode default: `/scoreboard` (alias `/sb`) — toggle +
+tampilkan ping sendiri.
+
+Test: `~/workspace/romp/tests/test_scoreboard.py`
+(+ `test_scoreboard_gamemode.lua`) — 27 checks.
 
 ## Master Server (daftar server publik)
 

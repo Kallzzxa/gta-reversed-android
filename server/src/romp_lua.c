@@ -89,8 +89,17 @@ static int l_romp_get_players(lua_State *Ls) {
         lua_pushinteger(Ls, c->interior); lua_setfield(Ls, -2, "interior");
         lua_pushinteger(Ls, (lua_Integer)c->vw); lua_setfield(Ls, -2, "vw");
         lua_pushboolean(Ls, c->is_npc); lua_setfield(Ls, -2, "isnpc");
+        lua_pushinteger(Ls, c->ping_ms); lua_setfield(Ls, -2, "ping");
         lua_rawseti(Ls, -2, i++);
     }
+    return 1;
+}
+
+/* Ping ala SA-MP (RTT terakhir dari probe P_PING, ms; -1 = belum terukur). */
+static int l_romp_get_player_ping(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(id);
+    lua_pushinteger(Ls, c ? c->ping_ms : -1);
     return 1;
 }
 
@@ -981,6 +990,7 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_player_count);     lua_setfield(Ls, -2, "playerCount");
     lua_pushcfunction(Ls, l_romp_get_player_name);  lua_setfield(Ls, -2, "getPlayerName");
     lua_pushcfunction(Ls, l_romp_get_players);      lua_setfield(Ls, -2, "getPlayers");
+    lua_pushcfunction(Ls, l_romp_get_player_ping); lua_setfield(Ls, -2, "getPlayerPing");
     lua_pushcfunction(Ls, l_romp_get_player_pos);  lua_setfield(Ls, -2, "getPlayerPos");
     lua_pushcfunction(Ls, l_romp_send_chat_to_all); lua_setfield(Ls, -2, "sendChatToAll");
     lua_pushcfunction(Ls, l_romp_send_chat_to_player); lua_setfield(Ls, -2, "sendChatToPlayer");
@@ -1125,6 +1135,7 @@ static const struct { const char *file; const char *desc; } g_helpers[] = {
     { "pickup.lua",     "API pickup aktif" },
     { "mapicon.lua",    "API map icon aktif" },
     { "vehicle.lua",    "API kendaraan aktif" },
+    { "scoreboard.lua", "API scoreboard aktif" },
 };
 
 /* Siapkan satu modul script: state baru + API + file + helper.

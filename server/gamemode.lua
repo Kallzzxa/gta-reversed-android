@@ -260,6 +260,19 @@ function onPlayerCommand(id, name, cmd, args)
             romp.sendChatToPlayer(id, romp.KIND_INFO, "*** Pakai: /kick <id> [alasan]")
         end
         return true
+    elseif cmd == "scoreboard" or cmd == "sb" then
+        -- Scoreboard ala SA-MP (TAB): toggle tampil/sembunyi + lihat ping sendiri.
+        if romp.isScoreboardVisible(id) then
+            romp.toggleScoreboard(id, false)
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Scoreboard disembunyikan.")
+        else
+            romp.toggleScoreboard(id, true)
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Scoreboard ditampilkan. Ping kamu: " ..
+                tostring(romp.getPlayerPing(id)) .. " ms.")
+        end
+        return true
     end
     return false
 end

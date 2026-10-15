@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>RO-MP Scoreboard</title>
+<style>
+  /* Scoreboard ala SA-MP (TAB): daftar pemain + ping.
+     Server (scoreboard.lua via 0x40) mengirim showScoreboard /
+     updateScoreboard / hideScoreboard. Ping diukur server via probe
+     P_PING (0x30 -> 0x31); -1 = belum terukur, ditampilkan "-". */
+  * { box-sizing: border-box; margin: 0; padding: 0;
+      -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden;
+      background: transparent; }
+  #sb-panel { position: absolute; top: 8%; left: 50%; transform: translateX(-50%);
+      width: min(420px, 92%); max-height: 70%; overflow: hidden;
+      font-family: Arial, sans-serif; font-size: 13px; color: #fff;
+      background: rgba(0, 0, 0, .72); border: 1px solid rgba(240, 180, 41, .7);
+      border-radius: 6px; display: none; }
+  #sb-panel h4 { font-size: 13px; color: #F0B429; text-align: center;
+      padding: 8px 6px 4px; letter-spacing: 1px; text-shadow: 1px 1px 0 #000;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #sb-count { text-align: center; font-size: 11px; color: #ccc;
+      padding-bottom: 6px; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { background: rgba(240, 180, 41, .18); color: #F0B429;
+      font-size: 11px; letter-spacing: 1px; padding: 4px 8px; text-align: left; }
+  thead th.c-id, thead th.c-ping { text-align: center; }
+  tbody td { padding: 3px 8px; text-shadow: 1px 1px 0 #000;
+      border-top: 1px solid rgba(255, 255, 255, .06); }
+  td.c-id { text-align: center; color: #ccc; width: 36px; }
+  td.c-ping { text-align: center; width: 52px; font-family: monospace; }
+  tr.me td { background: rgba(240, 180, 41, .12); }
+  .bot { color: #9df; font-style: italic; }
+  #sb-body { max-height: 50vh; overflow-y: auto; }
+</style>
+</head>
+<body>
+<div id="sb-panel">
+  <h4 id="sb-host">RO-MP Server</h4>
+  <div id="sb-count"></div>
+  <div id="sb-body">
+    <table>
+      <thead><tr>
+        <th class="c-id">ID</th><th>PLAYER</th><th class="c-ping">PING</th>
+      </tr></thead>
+      <tbody id="sb-rows"></tbody>
+    </table>
+  </div>
+</div>
+<script>
+// Server -> UI: scoreboard.lua (via 0x40) mengirim
+// showScoreboard / updateScoreboard / hideScoreboard.
+window.onRomMessage = function (json) {
+  var msg;
+  try { msg = JSON.parse(json); } catch (e) { return; }
+  if (msg.action === "showScoreboard" || msg.action === "updateScoreboard") {
+    render(msg);
+  } else if (msg.action === "hideScoreboard") {
+    document.getElementById("sb-panel").style.display = "none";
+  }
+};
+
+var panel = document.getElementById("sb-panel");
+
+function pingText(p) {
+  if (p === null || p === undefined || p < 0) return "-";
+  return String(p);
+}
+
+function render(msg) {
+  document.getElementById("sb-host").textContent = msg.hostname || "RO-MP Server";
+  var n = msg.rows ? msg.rows.length : 0;
+  var maxp = msg.maxplayers ? "/" + msg.maxplayers : "";
+  document.getElementById("sb-count").textContent =
+    "Pemain: " + n + maxp;
+  var tb = document.getElementById("sb-rows");
+  tb.innerHTML = "";
+  (msg.rows || []).forEach(function (r) {
+    var tr = document.createElement("tr");
+    var nm = document.createElement("td");
+    nm.textContent = r.npc ? r.name + " [BOT]" : r.name;
+    if (r.npc) nm.className = "bot";
+    var id = document.createElement("td");
+    id.className = "c-id"; id.textContent = r.id;
+    var pg = document.createElement("td");
+    pg.className = "c-ping"; pg.textContent = pingText(r.ping);
+    tr.appendChild(id); tr.appendChild(nm); tr.appendChild(pg);
+    tb.appendChild(tr);
+  });
+  panel.style.display = "block";
+}
+</script>
+</body>
+</html>

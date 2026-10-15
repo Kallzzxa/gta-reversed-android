@@ -573,6 +573,7 @@ int npc_connect(const char *name) {
     c->vw = 0;
     c->vehicle_id = -1;
     c->vehicle_seat = -1;
+    c->ping_ms = -1; /* belum terukur sampai probe pertama dijawab */
     c->last_activity = now_ms();
     strncpy(c->ip, "npc", sizeof(c->ip) - 1);
     c->next = g_clients;
@@ -866,6 +867,31 @@ static void handle_ping(Client *c, const uint8_t *p, size_t n) {
     send_frame(c, b, 5);
 }
 
+/* Balasan probe ping server (0x30 -> 0x31). Echo u32 harus cocok dengan
+ * probe terakhir; tanpa probe aktif (atau tak cocok) paket diabaikan. */
+static void handle_pong(Client *c, const uint8_t *p, size_t n) {
+    if (!c->handshaked || n < 4 || c->ping_probe_ms == 0) return;
+    uint32_t echo; memcpy(&echo, p, 4);
+    if (echo != c->ping_probe_tick) return;
+    uint64_t dt = now_ms() - c->ping_probe_ms;
+    c->ping_probe_ms = 0;
+    c->ping_ms = dt > 9999 ? 9999 : (int)dt;
+}
+
+/* Kirim probe ping (0x30) ke semua client; hasil RTT diukur di handle_pong. */
+static void ping_probe_all(uint64_t now) {
+    for (Client *c = g_clients; c; c = c->next) {
+        if (!c->handshaked || c->dead || c->is_npc) continue;
+        uint32_t tick = (uint32_t)(now & 0xffffffffu);
+        uint8_t b[5];
+        b[0] = P_PING;
+        memcpy(b + 1, &tick, 4);
+        if (send_frame(c, b, 5) < 0) { c->dead = 1; continue; }
+        c->ping_probe_ms = now;
+        c->ping_probe_tick = tick;
+    }
+}
+
 static void handle_nui_callback(Client *c, const uint8_t *p, size_t n) {
     if (!c->handshaked || n < 3) return;
     uint8_t nl = p[0];
@@ -887,6 +913,7 @@ static void dispatch(Client *c, uint8_t type, const uint8_t *p, size_t n) {
         case P_STAT:  handle_stat(c, p, n); break;
         case P_CHAT:  handle_chat(c, p, n); break;
         case P_PING:  handle_ping(c, p, n); break;
+        case P_PONG:  handle_pong(c, p, n); break;
         case P_NUI_CB: handle_nui_callback(c, p, n); break;
         case P_VEH:   vehicle_on_packet(c, p, n); break;
         case P_WPN:   weapon_on_packet(c, p, n); break;
@@ -1430,6 +1457,7 @@ static void accept_new(SOCKET lsock) {
     c->id = -1;
     c->vehicle_id = -1;
     c->vehicle_seat = -1;
+    c->ping_ms = -1; /* belum terukur sampai probe pertama dijawab */
     c->last_activity = now_ms();
     c->next = g_clients;
     g_clients = c;
@@ -1585,6 +1613,7 @@ int main(int argc, char **argv) {
 
     uint64_t last_lua_tick = now_ms();
     uint64_t last_beacon_ms = 0;
+    uint64_t last_ping_ms = 0;
     while (g_running) {
         fd_set rfds;
         FD_ZERO(&rfds);
@@ -1638,6 +1667,12 @@ int main(int argc, char **argv) {
         if (g_cfg.lan_discovery && tnow - last_beacon_ms >= LAN_BEACON_MS) {
             last_beacon_ms = tnow;
             beacon_send();
+        }
+
+        /* probe ping ala SA-MP tiap 5 detik (0x30 -> 0x31, RTT di handle_pong) */
+        if (tnow - last_ping_ms >= 5000) {
+            last_ping_ms = tnow;
+            ping_probe_all(tnow);
         }
 
         sweep_dead();

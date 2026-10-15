@@ -162,6 +162,11 @@ typedef struct Client {
     uint16_t wpn_ammo[13]; /* ammo per slot */
     int    wpn_slot;       /* slot senjata aktif terakhir */
     uint64_t last_shot_ms; /* anti-spam tembakan */
+    /* Ping ala SA-MP (scoreboard TAB): diukur server via probe P_PING.
+     * -1 = belum terukur (mis. NPC / client tak menjawab probe). */
+    int      ping_ms;          /* hasil RTT terakhir, milidetik */
+    uint64_t ping_probe_ms;    /* 0 = tidak ada probe aktif */
+    uint32_t ping_probe_tick;  /* u32 tick yang dikirim di probe terakhir */
     /* Anti-cheat dasar ala SA-MP (lihat romp_anticheat.h): health/armour
      * otoritatif server + jumlah peringatan cheat pemain. */
     float    ac_health;      /* default 100 */

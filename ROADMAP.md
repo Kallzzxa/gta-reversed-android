@@ -32,7 +32,7 @@ Setiap fitur: implementasi → compile/test → commit (English) → push.
 - [ ] JNI penuh: chat, NUI WebView, browser (saat ini contoh saja)
 - [ ] Render pemain remote (ped) di game
 - [ ] Nametag + chat bubble 3D
-- [ ] Scoreboard (TAB): daftar pemain + ping
+- [x] Scoreboard (TAB): daftar pemain + ping — DONE 2026-10-15 (server C: probe P_PING 0x30 tiap 5 dtk ke semua client, RTT diukur dari P_PONG 0x31 echo — echo salah/tanpa probe diabaikan; field ping_ms di struct Client, -1 = belum terukur/NPC; API Lua romp.getPlayerPing + field `ping` di romp.getPlayers(); server/scoreboard.lua auto-load: romp.toggleScoreboard(pid,on)/toggleScoreboardAll/isScoreboardVisible, push diff tiap detik via onTick; NUI scoreboard.html ala SA-MP — header hostname, kolom ID/Player/Ping, baris NPC [BOT], ping -1 jadi "-"; demo /scoreboard (/sb) di gamemode default; PROTOCOL.md dokumentasi; binari linux+windows rebuild; test 27/27 di tests/test_scoreboard.py + semua regresi lolos)
 
 ## Client PC (RO-MP-PC)
 
