@@ -18,6 +18,7 @@
 #include "romp_sqlite.h"
 #include "romp_timer.h"
 #include "romp_object.h"
+#include "romp_actor.h"
 
 #include <time.h>
 #include <pthread.h>
@@ -394,6 +395,7 @@ void player_set_world(Client *c, int interior, uint32_t vw) {
         vehicle_sync_world(c, old_vw);
         label_sync_world(c, old_vw);
         object_sync_world(c, old_vw);
+        actor_sync_world(c, old_vw);
         if (c->vehicle_id >= 0) {
             Vehicle *v = vehicle_by_id(c->vehicle_id);
             if (v && v->driver == c->id) vehicle_set_vw(v->id, vw);
@@ -510,6 +512,9 @@ static void do_join(Client *c) {
 
     /* stream objek yang sudah ada ke pemain baru */
     object_sync_join(c);
+
+    /* stream actor yang sudah ada ke pemain baru */
+    actor_sync_join(c);
 
     /* beritahu yang lain (hanya yang se-vw & se-interior) */
     size_t jn = build_join(b, c);

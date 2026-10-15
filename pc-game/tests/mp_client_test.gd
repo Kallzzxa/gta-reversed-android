@@ -52,6 +52,7 @@ func _run() -> void:
 	_net.chat_msg.connect(_on_chat)
 	_net.vehicle_spawn.connect(_on_vspawn)
 	_net.label_spawn.connect(_on_lspawn)
+	_net.actor_spawn.connect(_on_aspawn)
 	_net.teleport.connect(_on_teleport)
 	_net.ping_updated.connect(_on_ping)
 
@@ -70,6 +71,9 @@ func _run() -> void:
 
 	# --- 3b. 3D text label: peer kirim /lblgodot -> LABEL_SPAWN (0x28) ---
 	_check(await _wait("label", 10.0), "label_spawn_diterima")
+
+	# --- 3c. Actor statis: peer kirim /actorgodot -> ACTOR_SPAWN (0x32) ---
+	_check(await _wait("actor", 10.0), "actor_spawn_diterima")
 
 	# --- 4. Teleport 0x27 via /tpgodot ---
 	_net.send_chat("/tpgodot 500 600 70")
@@ -139,6 +143,14 @@ func _on_lspawn(_lid: int, atype: int, _aid: int, x: float, y: float,
 			and absf(y - 40.0) < 0.5 and absf(z - 5.0) < 0.5 \
 			and absf(dd - 100.0) < 0.5 and color == 0xFFFF00FF:
 		_ev["label"] = true
+
+
+func _on_aspawn(_aid: int, model: int, x: float, y: float,
+		z: float, angle: float, health: int, invuln: bool, vw: int) -> void:
+	if model == 7 and absf(x - 50.0) < 0.5 and absf(y - 60.0) < 0.5 \
+			and absf(z - 3.0) < 0.5 and absf(angle - 90.0) < 0.5 \
+			and health == 100 and not invuln and vw == 0:
+		_ev["actor"] = true
 
 
 func _on_teleport(x: float, y: float, z: float) -> void:

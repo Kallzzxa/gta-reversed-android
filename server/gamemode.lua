@@ -124,6 +124,7 @@ end
 local demoTds = {}  -- id textdraw global demo
 local demoLabel = {}  -- id pemain -> id 3D text label demo
 local demoObj = {}  -- id pemain -> id objek demo
+local demoActor = {}  -- id pemain -> id actor demo
 
 local function hapusDemoTd()
     for _, tdid in ipairs(demoTds) do romp.destroyTextDraw(tdid) end
@@ -181,6 +182,8 @@ function onPlayerLeave(id, name, reason)
     -- Label yang di-attach sudah dihapus otomatis oleh server,
     -- tapi referensi demo tetap dibersihkan.
     demoLabel[id] = nil
+    demoObj[id] = nil
+    demoActor[id] = nil
     return true
 end
 
@@ -386,6 +389,41 @@ function onPlayerCommand(id, name, cmd, args)
         else
             romp.sendChatToPlayer(id, romp.KIND_INFO,
                 "*** Kamu belum punya objek (/object dulu).")
+        end
+        return true
+    elseif cmd == "actor" then
+        -- Actor statis ala SA-MP (CreateActor): /actor [modelid]
+        -- Dibuat di depan pemain + animasi joget, /actordel = hapus.
+        local x, y, z = romp.getPlayerPos(id)
+        if not x then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Posisi kamu belum diketahui server.")
+            return true
+        end
+        local modelid = tonumber(args) or 7  -- 7 = skin bandit
+        if demoActor[id] then romp.destroyActor(demoActor[id]) end
+        local aid = romp.createActor(modelid, x + 3.0, y, z, 180.0)
+        if aid then
+            demoActor[id] = aid
+            romp.applyActorAnimation(aid, "DANCING:DNCE_M_a")
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Actor dibuat (id " .. aid .. ", model " .. modelid ..
+                "). /actordel = hapus.")
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal membuat actor (model 0-311).")
+        end
+        return true
+    elseif cmd == "actordel" then
+        -- Hapus actor demo milik pemain.
+        local aid = demoActor[id]
+        if aid and romp.destroyActor(aid) then
+            demoActor[id] = nil
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Actor dihapus.")
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Kamu belum punya actor (/actor dulu).")
         end
         return true
     elseif cmd == "gz" then

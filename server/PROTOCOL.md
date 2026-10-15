@@ -348,6 +348,73 @@ itu. Pemain yang join di tengah gerakan `MoveObject` menerima `0x2C`
 (posisi saat ini) diikuti `0x2E` (sisa gerakan).
 (`romp.setVehicleVirtualWorld`).
 
+### 0x32 ACTOR_SPAWN (Server -> Client)
+Actor statis ala SA-MP `CreateActor` muncul. `modelid` = skin SA-MP 0-311.
+`invuln` = 1 bila actor kebal (`romp.setActorInvulnerable`).
+
+```
+u16 actorid
+u16 modelid
+float x, y, z
+float angle  // facing angle
+u16 health   // 0-100
+u8  invuln   // 0/1
+u32 vw       // virtual world
+```
+
+### 0x33 ACTOR_DESPAWN (Server -> Client)
+Actor hilang (`romp.destroyActor`).
+
+```
+u16 actorid
+```
+
+### 0x34 ACTOR_POS (Server -> Client)
+Actor dipindahkan instan (`romp.setActorPos`/`romp.setActorFacingAngle`).
+Actor bersifat statis — tidak ada interpolasi periodik.
+
+```
+u16 actorid
+float x, y, z
+float angle
+```
+
+### 0x35 ACTOR_ANIM (Server -> Client)
+Animasi actor diterapkan (`romp.applyActorAnimation`). `animlen = 0`
+berarti animasi dibersihkan (`romp.clearActorAnimations`).
+
+```
+u16 actorid
+u8  animlen
+char anim[animlen]
+```
+
+### 0x36 ACTOR_HEALTH (Server -> Client)
+Health actor berubah (dari damage tembakan atau `romp.setActorHealth`).
+
+```
+u16 actorid
+u16 health  // 0-100; 0 = mati
+```
+
+Actor di-scope virtual world: `0x32`-`0x36` hanya dikirim ke pemain yang
+se-virtual-world dengan actor. Saat pemain pindah vw, actor vw lama
+di-despawn dan actor vw baru di-spawn ke pemain itu (mirip label).
+
+API Lua (lihat `server/README.md`):
+`romp.createActor(modelid, x, y, z, angle)`, `romp.destroyActor(id)`,
+`romp.isValidActor(id)`, `romp.setActorPos(id, x, y, z)`,
+`romp.getActorPos(id)`, `romp.setActorFacingAngle(id, angle)`,
+`romp.getActorFacingAngle(id)`, `romp.setActorHealth(id, health)`,
+`romp.getActorHealth(id)`, `romp.setActorInvulnerable(id, bool)`,
+`romp.isActorInvulnerable(id)`, `romp.applyActorAnimation(id, anim)`,
+`romp.clearActorAnimations(id)`, `romp.getActorVirtualWorld(id)`,
+`romp.setActorVirtualWorld(id, vw)`, `romp.getActors()`.
+Event: `onPlayerGiveDamageActor(pid, actorid, amount, weaponid, bodypart=0)`
+(damage dihitung server dari `weaponid`, tabel ala GTA:SA),
+`onActorDeath(actorid, killerid)` saat damage membuat health mencapai 0.
+Konstanta hittype baru: `romp.WPN_HIT_ACTOR = 4` untuk `0x17 WPN_SHOT`.
+
 API Lua (lihat `server/README.md`):
 `romp.create3DTextLabel(text, color, x, y, z, drawDist [, vw])`,
 `romp.delete3DTextLabel(id)`, `romp.update3DTextLabelText(id, color, text)`,
@@ -391,13 +458,16 @@ Tembakan yang lolos di-relay sebagai `0x18 WPN_SYNC`.
 
 ```
 u16 weaponid  // id senjata SA-MP 1..46
-u8  hittype   // 0 = tidak kena, 1 = pemain, 2 = kendaraan, 3 = objek/dunia
-u16 hitid     // playerid / vehicleid target, 0 bila hittype 0
+u8  hittype   // 0 = tidak kena, 1 = pemain, 2 = kendaraan, 3 = objek/dunia,
+              // 4 = actor (lihat 0x32-0x36 di atas)
+u16 hitid     // playerid / vehicleid / actorid target, 0 bila hittype 0
 float x, y, z // titik kena di dunia
 ```
 
 Validasi target: `hittype=1` butuh playerid valid & bukan diri sendiri,
-`hittype=2` butuh vehicleid valid.
+`hittype=2` butuh vehicleid valid, `hittype=4` butuh actorid valid
+(lihat `romp_actor.h`: damage dihitung server dari `weaponid` — tabel ala
+GTA:SA; actor yang invulnerable tidak berkurang health-nya).
 
 ### 0x18 WPN_SYNC (Server -> Client)
 Broadcast tembakan (tidak di-echo ke penembak).

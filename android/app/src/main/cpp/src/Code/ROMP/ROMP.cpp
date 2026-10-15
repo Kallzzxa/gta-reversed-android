@@ -323,6 +323,37 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
             platform_->OnObjectUpdate(ou);
             break;
         }
+        case PacketType::ACTOR_SPAWN: {
+            ActorSpawnInfo ai;
+            if (!parse_actor_spawn(payload, len, ai)) break;
+            platform_->OnActorSpawn(ai);
+            break;
+        }
+        case PacketType::ACTOR_DESPAWN: {
+            if (len < 2) break;
+            uint16_t actorid = static_cast<uint16_t>(payload[0] |
+                                                     (payload[1] << 8));
+            platform_->OnActorDespawn(actorid);
+            break;
+        }
+        case PacketType::ACTOR_POS: {
+            ActorPosInfo ap;
+            if (!parse_actor_pos(payload, len, ap)) break;
+            platform_->OnActorPos(ap);
+            break;
+        }
+        case PacketType::ACTOR_ANIM: {
+            ActorAnimInfo aa;
+            if (!parse_actor_anim(payload, len, aa)) break;
+            platform_->OnActorAnim(aa.actorid, aa.anim);
+            break;
+        }
+        case PacketType::ACTOR_HEALTH: {
+            ActorHealthInfo ah;
+            if (!parse_actor_health(payload, len, ah)) break;
+            platform_->OnActorHealth(ah.actorid, ah.health);
+            break;
+        }
         default:
             // Tipe tak dikenal: abaikan (forward-compat protokol).
             break;

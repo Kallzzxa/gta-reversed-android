@@ -56,6 +56,12 @@ enum class PacketType : uint8_t {
     OBJECT_DESPAWN = 0x2D,  // objek hilang
     OBJECT_MOVE    = 0x2E,  // objek bergerak (MoveObject)
     OBJECT_UPDATE  = 0x2F,  // set posisi/rotasi instan
+    // Actor statis ala SA-MP (CreateActor), server -> client.
+    ACTOR_SPAWN    = 0x32,  // actor muncul
+    ACTOR_DESPAWN  = 0x33,  // actor hilang
+    ACTOR_POS      = 0x34,  // pindah actor (set pos+angle)
+    ACTOR_ANIM     = 0x35,  // terapkan animasi actor
+    ACTOR_HEALTH   = 0x36,  // health actor berubah
 };
 
 // Alasan PLAYER_LEAVE (u8 reason).
@@ -420,6 +426,85 @@ inline bool parse_object_update(const uint8_t* data, size_t len,
     if (!r.get_float(out.rx)) return false;
     if (!r.get_float(out.ry)) return false;
     if (!r.get_float(out.rz)) return false;
+    return true;
+}
+
+// ---- Actor statis ala SA-MP (server -> client) ----
+
+struct ActorSpawnInfo {
+    uint16_t actorid = 0;
+    uint16_t modelid = 0;  // skin id SA-MP 0-311
+    float x = 0, y = 0, z = 0;
+    float angle = 0;
+    uint16_t health = 0;
+    bool invulnerable = false;
+    uint32_t vw = 0;
+};
+
+// 0x32 ACTOR_SPAWN: actorid(u16) + modelid(u16) + x,y,z(float) +
+//   angle(float) + health(u16) + invuln(u8) + vw(u32).
+inline bool parse_actor_spawn(const uint8_t* data, size_t len,
+                              ActorSpawnInfo& out) {
+    Reader r(data, len);
+    uint8_t inv = 0;
+    if (!r.get_u16(out.actorid)) return false;
+    if (!r.get_u16(out.modelid)) return false;
+    if (!r.get_float(out.x)) return false;
+    if (!r.get_float(out.y)) return false;
+    if (!r.get_float(out.z)) return false;
+    if (!r.get_float(out.angle)) return false;
+    if (!r.get_u16(out.health)) return false;
+    if (!r.get_u8(inv)) return false;
+    if (!r.get_u32(out.vw)) return false;
+    out.invulnerable = (inv != 0);
+    return true;
+}
+
+struct ActorPosInfo {
+    uint16_t actorid = 0;
+    float x = 0, y = 0, z = 0;
+    float angle = 0;
+};
+
+// 0x34 ACTOR_POS: actorid(u16) + x,y,z(float) + angle(float).
+inline bool parse_actor_pos(const uint8_t* data, size_t len,
+                            ActorPosInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u16(out.actorid)) return false;
+    if (!r.get_float(out.x)) return false;
+    if (!r.get_float(out.y)) return false;
+    if (!r.get_float(out.z)) return false;
+    if (!r.get_float(out.angle)) return false;
+    return true;
+}
+
+struct ActorAnimInfo {
+    uint16_t actorid = 0;
+    std::string anim;  // "" = animasi dibersihkan
+};
+
+// 0x35 ACTOR_ANIM: actorid(u16) + animlen(u8) + anim.
+inline bool parse_actor_anim(const uint8_t* data, size_t len,
+                             ActorAnimInfo& out) {
+    Reader r(data, len);
+    uint8_t alen = 0;
+    if (!r.get_u16(out.actorid)) return false;
+    if (!r.get_u8(alen)) return false;
+    if (!r.get_str(out.anim, alen)) return false;
+    return true;
+}
+
+struct ActorHealthInfo {
+    uint16_t actorid = 0;
+    uint16_t health = 0;
+};
+
+// 0x36 ACTOR_HEALTH: actorid(u16) + health(u16).
+inline bool parse_actor_health(const uint8_t* data, size_t len,
+                               ActorHealthInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u16(out.actorid)) return false;
+    if (!r.get_u16(out.health)) return false;
     return true;
 }
 

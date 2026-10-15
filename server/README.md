@@ -180,6 +180,57 @@ end
 romp.moveObject(gate, 100.0, 210.0, 10.0, 5.0)  -- geser 10 unit, 5 unit/detik
 ```
 
+**Actor statis ala SA-MP (`CreateActor`):**
+
+Actor = ped statis server-side, lebih ringan dari NPC (`ConnectNPC`):
+tidak menempati slot pemain, tidak punya koneksi, dan posisinya hanya
+berubah lewat Lua. Damage dihitung **server** dari `weaponid` (tabel ala
+GTA:SA) saat client melaporkan tembakan `0x17` dengan `hittype = 4`
+(`romp.WPN_HIT_ACTOR`).
+
+| Fungsi | Keterangan |
+|---|---|
+| `romp.createActor(modelid, x, y, z, angle)` | Buat actor → actorid / nil (`modelid` = skin 0-311) |
+| `romp.destroyActor(id)` | Hapus actor → `true`/`false` |
+| `romp.isValidActor(id)` | `true` bila actor ada |
+| `romp.setActorPos(id, x, y, z)` | Pindah posisi instan → `true`/`false` |
+| `romp.getActorPos(id)` | `x, y, z` / nil |
+| `romp.setActorFacingAngle(id, angle)` | Set facing angle → `true`/`false` |
+| `romp.getActorFacingAngle(id)` | angle / nil |
+| `romp.setActorHealth(id, health)` | Set health 0-100 (tidak memicu `onActorDeath`) → `true`/`false` |
+| `romp.getActorHealth(id)` | health / nil |
+| `romp.setActorInvulnerable(id, bool)` | Kebal damage → `true`/`false` |
+| `romp.isActorInvulnerable(id)` | `true`/`false` / nil |
+| `romp.applyActorAnimation(id, anim)` | Terapkan animasi (mis. `"DANCING:DNCE_M_a"`) → `true`/`false` |
+| `romp.clearActorAnimations(id)` | Bersihkan animasi → `true`/`false` |
+| `romp.getActorVirtualWorld(id)` | vw / nil |
+| `romp.setActorVirtualWorld(id, vw)` | Pindah vw → `true`/`false` |
+| `romp.getActors()` | Array `{ {id, modelid, x, y, z, angle, health, invulnerable, vw, anim}, ... }` |
+
+**Event:** `onPlayerGiveDamageActor(pid, actorid, amount, weaponid, bodypart)`
+(ala SA-MP `OnPlayerGiveDamageActor`; `bodypart` selalu 0 karena client
+tidak melaporkannya) dan `onActorDeath(actorid, killerid)`
+(ala SA-MP `OnActorDeath`) — menyala saat damage membuat health mencapai 0.
+
+Actor di-scope virtual world (hanya dikirim ke pemain yang se-vw).
+Paket: `0x32` ACTOR_SPAWN / `0x33` ACTOR_DESPAWN / `0x34` ACTOR_POS /
+`0x35` ACTOR_ANIM / `0x36` ACTOR_HEALTH (lihat `PROTOCOL.md`).
+
+```lua
+-- Contoh: penjaga toko yang kebal + joget.
+local guard = romp.createActor(7, 100.0, 200.0, 3.0, 180.0)
+romp.setActorInvulnerable(guard, true)
+romp.applyActorAnimation(guard, "DANCING:DNCE_M_a")
+function onPlayerGiveDamageActor(pid, aid, amount, wid, bodypart)
+    romp.log("pemain " .. pid .. " menembak actor " .. aid ..
+             " (" .. amount .. " dmg)")
+end
+function onActorDeath(aid, killerid)
+    romp.sendChatToAll(romp.KIND_INFO,
+        "*** Actor " .. aid .. " dibunuh " .. killerid .. ".")
+end
+```
+
 ### Database SQLite untuk gamemode (skor, akun)
 
 Tanpa server eksternal: cukup set `database <path>` di `server.cfg`

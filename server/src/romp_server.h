@@ -77,6 +77,13 @@ typedef int SOCKET;
 #define P_OBJECT_MOVE    0x2E  /* server -> client: objek bergerak (MoveObject) */
 #define P_OBJECT_UPDATE  0x2F  /* server -> client: set posisi/rotasi instan */
 
+/* ---- Actor statis ala SA-MP (lihat romp_actor.h & PROTOCOL.md) ---- */
+#define P_ACTOR_SPAWN   0x32  /* server -> client: actor muncul */
+#define P_ACTOR_DESPAWN 0x33  /* server -> client: actor hilang */
+#define P_ACTOR_POS     0x34  /* server -> client: pindah actor (set pos+angle) */
+#define P_ACTOR_ANIM    0x35  /* server -> client: terapkan animasi actor */
+#define P_ACTOR_HEALTH  0x36  /* server -> client: health actor berubah */
+
 /* ---- Protokol UDP query (server browser), port sama dengan TCP ---- */
 #define QUERY_MAGIC   "ROMP"
 #define QUERY_MAGIC_LEN 4

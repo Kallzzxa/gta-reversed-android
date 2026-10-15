@@ -13,6 +13,7 @@ const HudScript = preload("res://scripts/hud.gd")
 const RompNet = preload("res://scripts/romp_net.gd")
 const RemotePlayerScript = preload("res://scripts/remote_player.gd")
 const RemoteCarScript = preload("res://scripts/remote_car.gd")
+const RemoteActorScript = preload("res://scripts/remote_actor.gd")
 const MpMenuScript = preload("res://scripts/mp_menu.gd")
 const MpChatScript = preload("res://scripts/mp_chat.gd")
 const MpScoreboardScript = preload("res://scripts/mp_scoreboard.gd")
@@ -32,6 +33,7 @@ var _pos_timer := 0.0
 var _remotes: Dictionary = {}   # playerid -> RemotePlayer
 var _remote_cars: Dictionary = {}  # vid -> RemoteCar
 var _objects: Dictionary = {}   # objid -> MeshInstance3D (objek SA-MP)
+var _actors: Dictionary = {}    # actorid -> RemoteActor (actor SA-MP)
 var _mp_players: Array = []     # [{id, name}] untuk scoreboard
 var _hostname := ""
 var _ping_ms := -1
@@ -130,6 +132,11 @@ func _setup_multiplayer() -> void:
 	net.object_despawn.connect(_on_object_despawn)
 	net.object_move.connect(_on_object_move)
 	net.object_update.connect(_on_object_update)
+	net.actor_spawn.connect(_on_actor_spawn)
+	net.actor_despawn.connect(_on_actor_despawn)
+	net.actor_pos.connect(_on_actor_pos)
+	net.actor_anim.connect(_on_actor_anim)
+	net.actor_health.connect(_on_actor_health)
 
 	mp_chat = MpChatScript.new()
 	add_child(mp_chat)
@@ -391,6 +398,39 @@ func _on_object_update(oid: int, x: float, y: float, z: float,
 	mi.set_meta("moving", false)
 	mi.global_position = Vector3(x, y, z)
 	mi.rotation_degrees = Vector3(rx, ry, rz)
+
+
+## Actor statis ala SA-MP (CreateActor) — paket 0x32-0x36.
+func _on_actor_spawn(actorid: int, modelid: int, x: float, y: float, z: float,
+		angle: float, health: int, invulnerable: bool, _vw: int) -> void:
+	if _actors.has(actorid):
+		_actors[actorid].queue_free()
+	var ra = RemoteActorScript.new()
+	add_child(ra)
+	ra.setup(actorid, modelid, x, y, z, angle, health, invulnerable)
+	_actors[actorid] = ra
+
+
+func _on_actor_despawn(actorid: int) -> void:
+	if _actors.has(actorid):
+		_actors[actorid].queue_free()
+		_actors.erase(actorid)
+
+
+func _on_actor_pos(actorid: int, x: float, y: float, z: float,
+		angle: float) -> void:
+	if _actors.has(actorid):
+		_actors[actorid].set_pos(x, y, z, angle)
+
+
+func _on_actor_anim(actorid: int, anim: String) -> void:
+	if _actors.has(actorid):
+		_actors[actorid].set_anim(anim)
+
+
+func _on_actor_health(actorid: int, health: int) -> void:
+	if _actors.has(actorid):
+		_actors[actorid].set_health(health)
 
 
 func _process_objects(delta: float) -> void:

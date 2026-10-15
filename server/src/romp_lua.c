@@ -11,6 +11,7 @@
 #include "romp_sqlite.h"
 #include "romp_timer.h"
 #include "romp_object.h"
+#include "romp_actor.h"
 
 #include "../vendor/sqlite/sqlite3.h"
 
@@ -1031,6 +1032,169 @@ static int l_romp_get_objects(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- API actor statis ala SA-MP ----------------
+ * romp.createActor(modelid, x, y, z, angle) -> actorid | nil
+ *   (ala SA-MP CreateActor; modelid = skin id 0-311)
+ * romp.destroyActor(id) -> bool (ala SA-MP DestroyActor)
+ * romp.isValidActor(id) -> bool (ala SA-MP IsValidActor)
+ * romp.setActorPos(id, x, y, z) -> bool (ala SA-MP SetActorPos)
+ * romp.getActorPos(id) -> x, y, z | nil (ala SA-MP GetActorPos)
+ * romp.setActorFacingAngle(id, angle) -> bool (ala SA-MP SetActorFacingAngle)
+ * romp.getActorFacingAngle(id) -> angle | nil (ala SA-MP GetActorFacingAngle)
+ * romp.setActorHealth(id, health) -> bool (ala SA-MP SetActorHealth, 0-100)
+ * romp.getActorHealth(id) -> int | nil (ala SA-MP GetActorHealth)
+ * romp.setActorInvulnerable(id, bool) -> bool (ala SA-MP SetActorInvulnerable)
+ * romp.isActorInvulnerable(id) -> bool | nil (ala SA-MP GetActorInvulnerable)
+ * romp.applyActorAnimation(id, anim) -> bool (ala SA-MP ApplyActorAnimation)
+ * romp.clearActorAnimations(id) -> bool (ala SA-MP ClearActorAnimations)
+ * romp.getActorVirtualWorld(id) -> vw | nil
+ * romp.setActorVirtualWorld(id, vw) -> bool
+ * romp.getActors() -> tabel array
+ *   { {id,modelid,x,y,z,angle,health,invulnerable,vw,anim}, ... }
+ * Event: onPlayerGiveDamageActor(pid, actorid, amount, weaponid, bodypart=0)
+ *   ala SA-MP OnPlayerGiveDamageActor — damage dihitung server dari weaponid.
+ *   onActorDeath(actorid, killerid) ala SA-MP OnActorDeath — menyala saat
+ *   damage membuat health actor mencapai 0.
+ */
+
+static int l_romp_create_actor(lua_State *Ls) {
+    int modelid = (int)luaL_checkinteger(Ls, 1);
+    float x = (float)luaL_checknumber(Ls, 2);
+    float y = (float)luaL_checknumber(Ls, 3);
+    float z = (float)luaL_checknumber(Ls, 4);
+    float angle = (float)luaL_checknumber(Ls, 5);
+    int id = actor_create(modelid, x, y, z, angle);
+    if (id < 0) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, id);
+    return 1;
+}
+
+static int l_romp_destroy_actor(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    lua_pushboolean(Ls, actor_destroy(id));
+    return 1;
+}
+
+static int l_romp_is_valid_actor(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    lua_pushboolean(Ls, actor_is_valid(id));
+    return 1;
+}
+
+static int l_romp_set_actor_pos(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    float x = (float)luaL_checknumber(Ls, 2);
+    float y = (float)luaL_checknumber(Ls, 3);
+    float z = (float)luaL_checknumber(Ls, 4);
+    Actor *a = actor_by_id(id);
+    lua_pushboolean(Ls, a && actor_set_pos(id, x, y, z, a->angle));
+    return 1;
+}
+
+static int l_romp_get_actor_pos(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    Actor *a = actor_by_id(id);
+    if (!a) { lua_pushnil(Ls); return 1; }
+    lua_pushnumber(Ls, (lua_Number)a->x);
+    lua_pushnumber(Ls, (lua_Number)a->y);
+    lua_pushnumber(Ls, (lua_Number)a->z);
+    return 3;
+}
+
+static int l_romp_set_actor_angle(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    float angle = (float)luaL_checknumber(Ls, 2);
+    Actor *a = actor_by_id(id);
+    lua_pushboolean(Ls, a && actor_set_pos(id, a->x, a->y, a->z, angle));
+    return 1;
+}
+
+static int l_romp_get_actor_angle(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    Actor *a = actor_by_id(id);
+    if (!a) { lua_pushnil(Ls); return 1; }
+    lua_pushnumber(Ls, (lua_Number)a->angle);
+    return 1;
+}
+
+static int l_romp_set_actor_health(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    int health = (int)luaL_checkinteger(Ls, 2);
+    lua_pushboolean(Ls, actor_set_health(id, health));
+    return 1;
+}
+
+static int l_romp_get_actor_health(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    Actor *a = actor_by_id(id);
+    if (!a) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, a->health);
+    return 1;
+}
+
+static int l_romp_set_actor_invulnerable(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    int inv = lua_toboolean(Ls, 2);
+    lua_pushboolean(Ls, actor_set_invulnerable(id, inv));
+    return 1;
+}
+
+static int l_romp_is_actor_invulnerable(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    Actor *a = actor_by_id(id);
+    if (!a) { lua_pushnil(Ls); return 1; }
+    lua_pushboolean(Ls, a->invulnerable);
+    return 1;
+}
+
+static int l_romp_apply_actor_anim(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    const char *anim = luaL_checkstring(Ls, 2);
+    lua_pushboolean(Ls, actor_apply_anim(id, anim));
+    return 1;
+}
+
+static int l_romp_clear_actor_anim(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    lua_pushboolean(Ls, actor_clear_anim(id));
+    return 1;
+}
+
+static int l_romp_get_actor_vw(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    Actor *a = actor_by_id(id);
+    if (!a) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, (lua_Integer)a->vw);
+    return 1;
+}
+
+static int l_romp_set_actor_vw(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    int32_t vw = (int32_t)luaL_checkinteger(Ls, 2);
+    lua_pushboolean(Ls, vw >= 0 && actor_set_vw(id, (uint32_t)vw));
+    return 1;
+}
+
+static int l_romp_get_actors(lua_State *Ls) {
+    lua_newtable(Ls);
+    int i = 1;
+    for (Actor *a = actor_first(); a; a = a->next) {
+        lua_newtable(Ls);
+        lua_pushinteger(Ls, a->id);       lua_setfield(Ls, -2, "id");
+        lua_pushinteger(Ls, a->modelid);  lua_setfield(Ls, -2, "modelid");
+        lua_pushnumber(Ls, (lua_Number)a->x); lua_setfield(Ls, -2, "x");
+        lua_pushnumber(Ls, (lua_Number)a->y); lua_setfield(Ls, -2, "y");
+        lua_pushnumber(Ls, (lua_Number)a->z); lua_setfield(Ls, -2, "z");
+        lua_pushnumber(Ls, (lua_Number)a->angle); lua_setfield(Ls, -2, "angle");
+        lua_pushinteger(Ls, a->health);    lua_setfield(Ls, -2, "health");
+        lua_pushboolean(Ls, a->invulnerable); lua_setfield(Ls, -2, "invulnerable");
+        lua_pushinteger(Ls, (lua_Integer)a->vw); lua_setfield(Ls, -2, "vw");
+        lua_pushstring(Ls, a->anim);       lua_setfield(Ls, -2, "anim");
+        lua_rawseti(Ls, -2, i++);
+    }
+    return 1;
+}
+
 static int l_romp_give_weapon(lua_State *Ls) {
     int pid = (int)luaL_checkinteger(Ls, 1);
     int wid = (int)luaL_checkinteger(Ls, 2);
@@ -1328,6 +1492,23 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_get_object_vw);   lua_setfield(Ls, -2, "getObjectVirtualWorld");
     lua_pushcfunction(Ls, l_romp_set_object_vw);   lua_setfield(Ls, -2, "setObjectVirtualWorld");
     lua_pushcfunction(Ls, l_romp_get_objects);     lua_setfield(Ls, -2, "getObjects");
+    /* actor statis ala SA-MP (CreateActor/DestroyActor/ApplyActorAnimation) */
+    lua_pushcfunction(Ls, l_romp_create_actor);    lua_setfield(Ls, -2, "createActor");
+    lua_pushcfunction(Ls, l_romp_destroy_actor);   lua_setfield(Ls, -2, "destroyActor");
+    lua_pushcfunction(Ls, l_romp_is_valid_actor);  lua_setfield(Ls, -2, "isValidActor");
+    lua_pushcfunction(Ls, l_romp_set_actor_pos);   lua_setfield(Ls, -2, "setActorPos");
+    lua_pushcfunction(Ls, l_romp_get_actor_pos);   lua_setfield(Ls, -2, "getActorPos");
+    lua_pushcfunction(Ls, l_romp_set_actor_angle); lua_setfield(Ls, -2, "setActorFacingAngle");
+    lua_pushcfunction(Ls, l_romp_get_actor_angle); lua_setfield(Ls, -2, "getActorFacingAngle");
+    lua_pushcfunction(Ls, l_romp_set_actor_health); lua_setfield(Ls, -2, "setActorHealth");
+    lua_pushcfunction(Ls, l_romp_get_actor_health); lua_setfield(Ls, -2, "getActorHealth");
+    lua_pushcfunction(Ls, l_romp_set_actor_invulnerable); lua_setfield(Ls, -2, "setActorInvulnerable");
+    lua_pushcfunction(Ls, l_romp_is_actor_invulnerable); lua_setfield(Ls, -2, "isActorInvulnerable");
+    lua_pushcfunction(Ls, l_romp_apply_actor_anim); lua_setfield(Ls, -2, "applyActorAnimation");
+    lua_pushcfunction(Ls, l_romp_clear_actor_anim); lua_setfield(Ls, -2, "clearActorAnimations");
+    lua_pushcfunction(Ls, l_romp_get_actor_vw);    lua_setfield(Ls, -2, "getActorVirtualWorld");
+    lua_pushcfunction(Ls, l_romp_set_actor_vw);    lua_setfield(Ls, -2, "setActorVirtualWorld");
+    lua_pushcfunction(Ls, l_romp_get_actors);      lua_setfield(Ls, -2, "getActors");
     /* sentinel rotasi MoveObject "tak berubah" ala SA-MP (-1000.0) */
     lua_pushnumber(Ls, (lua_Number)OBJECT_NO_ROT); lua_setfield(Ls, -2, "OBJECT_NO_ROT");
     /* konstanta attach label: 0=statis, 1=pemain, 2=kendaraan */
@@ -1384,6 +1565,7 @@ static void script_register_api(lua_State *Ls) {
     lua_pushinteger(Ls, 1); lua_setfield(Ls, -2, "WPN_HIT_PLAYER");
     lua_pushinteger(Ls, 2); lua_setfield(Ls, -2, "WPN_HIT_VEHICLE");
     lua_pushinteger(Ls, 3); lua_setfield(Ls, -2, "WPN_HIT_OBJECT");
+    lua_pushinteger(Ls, 4); lua_setfield(Ls, -2, "WPN_HIT_ACTOR");
     /* konstanta kind chat */
     lua_pushinteger(Ls, KIND_CHAT); lua_setfield(Ls, -2, "KIND_CHAT");
     lua_pushinteger(Ls, KIND_INFO); lua_setfield(Ls, -2, "KIND_INFO");
@@ -1821,6 +2003,40 @@ void lua_on_vehicle_spawn(int vid) {
 void lua_on_object_moved(int objid) {
     fs_event("onObjectMoved", push_veh_vid, &objid);
     call_event("onObjectMoved", push_veh_vid, &objid);
+}
+
+/* ---------------- Event actor statis ala SA-MP ---------------- */
+
+typedef struct { int pid, aid; float amount; int wid; } EvActorDmg;
+static int push_actor_dmg(lua_State *Ls, void *ud) {
+    EvActorDmg *e = (EvActorDmg *)ud;
+    lua_pushinteger(Ls, e->pid);
+    lua_pushinteger(Ls, e->aid);
+    lua_pushnumber(Ls, (lua_Number)e->amount);
+    lua_pushinteger(Ls, e->wid);
+    lua_pushinteger(Ls, 0); /* bodypart: tak dilaporkan client */
+    return 5;
+}
+
+void lua_on_player_give_damage_actor(int pid, int actorid, float amount,
+                                     int weaponid) {
+    EvActorDmg e = { pid, actorid, amount, weaponid };
+    fs_event("onPlayerGiveDamageActor", push_actor_dmg, &e);
+    call_event("onPlayerGiveDamageActor", push_actor_dmg, &e);
+}
+
+typedef struct { int aid, killer; } EvActorDeath;
+static int push_actor_death(lua_State *Ls, void *ud) {
+    EvActorDeath *e = (EvActorDeath *)ud;
+    lua_pushinteger(Ls, e->aid);
+    lua_pushinteger(Ls, e->killer);
+    return 2;
+}
+
+void lua_on_actor_death(int actorid, int killerid) {
+    EvActorDeath e = { actorid, killerid };
+    fs_event("onActorDeath", push_actor_death, &e);
+    call_event("onActorDeath", push_actor_death, &e);
 }
 
 /* ---------------- Event senjata ala SA-MP ---------------- */

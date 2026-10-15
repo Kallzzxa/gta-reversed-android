@@ -11,8 +11,8 @@
  *   0: 0,1   1: 2-9   2: 22-24   3: 25-27   4: 28,29,32   5: 30,31
  *   6: 33,34  7: 35-38  8: 16-18,39  9: 14  10: 42-44  11: 45  12: 40
  *
- * hittype: 0 = tidak kena, 1 = pemain, 2 = kendaraan, 3 = objek/dunia.
- */
+ * hittype: 0 = tidak kena, 1 = pemain, 2 = kendaraan, 3 = objek/dunia,
+ *           4 = actor (damage dihitung server, lihat romp_actor.h). */
 #pragma once
 
 #include "romp_server.h"

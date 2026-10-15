@@ -4,6 +4,7 @@
  */
 #include "romp_weapon.h"
 #include "romp_vehicle.h"
+#include "romp_actor.h"
 #include "romp_lua.h"
 #include <string.h>
 #include <math.h>
@@ -107,7 +108,7 @@ void weapon_on_packet(Client *c, const uint8_t *p, size_t n) {
     int slot = weapon_slot(weaponid);
     if (slot < 0) return;                        /* senjata tidak dikenal */
     if (c->wpn[slot] != (uint16_t)weaponid) return; /* tidak dimiliki -> tolak */
-    if (hittype > 3) return;
+    if (hittype > 4) return;
     if (!shot_in_range(c, x, y, z)) return;       /* di luar jangkauan */
 
     /* Validasi target bila kena sesuatu. */
@@ -116,6 +117,8 @@ void weapon_on_packet(Client *c, const uint8_t *p, size_t n) {
         if (!t || t == c) return;
     } else if (hittype == 2) { /* kendaraan */
         if (!vehicle_by_id(hitid)) return;
+    } else if (hittype == 4) { /* actor */
+        if (!actor_is_valid(hitid)) return;
     }
     c->wpn_slot = slot; /* senjata terakhir dipakai */
 
@@ -134,4 +137,7 @@ void weapon_on_packet(Client *c, const uint8_t *p, size_t n) {
     broadcast_frame_ref(b, sizeof(b), c, c);
 
     lua_on_player_weapon_shot(c->id, weaponid, hittype, hitid, x, y, z);
+
+    /* Damage actor dihitung server (otoritatif) bila kena actor. */
+    if (hittype == 4) actor_damage(c->id, hitid, weaponid);
 }

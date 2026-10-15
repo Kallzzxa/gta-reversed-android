@@ -59,6 +59,13 @@ void lua_on_vehicle_spawn(int vid);
 /* Event objek ala SA-MP (tidak ada default C; gamemode opsional):
  * onObjectMoved(objid) — menyala saat MoveObject tiba di target. */
 void lua_on_object_moved(int objid);
+/* Event actor ala SA-MP (tidak ada default C; gamemode opsional):
+ * onPlayerGiveDamageActor(pid, actorid, amount, weaponid, bodypart) — bodypart
+ * selalu 0 (client tak melaporkannya); onActorDeath(actorid, killerid) —
+ * menyala saat damage membuat health actor mencapai 0. */
+void lua_on_player_give_damage_actor(int pid, int actorid, float amount,
+                                     int weaponid);
+void lua_on_actor_death(int actorid, int killerid);
 /* Event senjata ala SA-MP (tidak ada default C; gamemode opsional).
  * Mirip OnPlayerWeaponShot: onPlayerWeaponShot(pid, weaponid, hittype,
  * hitid, x, y, z). */

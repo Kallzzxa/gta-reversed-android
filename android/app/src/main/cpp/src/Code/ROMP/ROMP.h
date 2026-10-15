@@ -74,6 +74,16 @@ public:
     virtual void OnObjectMove(const ObjectMoveInfo& /*info*/) {}
     virtual void OnObjectUpdate(const ObjectUpdateInfo& /*info*/) {}
 
+    // Actor statis ala SA-MP (paket 0x32-0x36, dari romp.createActor).
+    // Default no-op; platform game menimpa untuk spawn/render ped di dunia.
+    // TODO(GAME): spawn CPed via CWorld/CStreaming pool game dari modelid.
+    virtual void OnActorSpawn(const ActorSpawnInfo& /*info*/) {}
+    virtual void OnActorDespawn(uint16_t /*actorid*/) {}
+    virtual void OnActorPos(const ActorPosInfo& /*info*/) {}
+    virtual void OnActorAnim(uint16_t /*actorid*/,
+                             const std::string& /*anim*/) {}
+    virtual void OnActorHealth(uint16_t /*actorid*/, uint16_t /*health*/) {}
+
     // Log ke konsol game / logcat.
     virtual void Log(const std::string& msg) = 0;
 

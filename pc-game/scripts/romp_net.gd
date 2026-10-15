@@ -35,6 +35,11 @@ const T_OBJECT_MOVE := 0x2E
 const T_OBJECT_UPDATE := 0x2F
 const T_PING := 0x30
 const T_PONG := 0x31
+const T_ACTOR_SPAWN := 0x32
+const T_ACTOR_DESPAWN := 0x33
+const T_ACTOR_POS := 0x34
+const T_ACTOR_ANIM := 0x35
+const T_ACTOR_HEALTH := 0x36
 const T_NUI := 0x40
 
 const VER := 1
@@ -75,6 +80,11 @@ signal object_spawn(objid: int, modelid: int, x: float, y: float, z: float, rx: 
 signal object_despawn(objid: int)
 signal object_move(objid: int, tx: float, ty: float, tz: float, speed: float, trx: float, try_: float, trz: float)
 signal object_update(objid: int, x: float, y: float, z: float, rx: float, ry: float, rz: float)
+signal actor_spawn(actorid: int, modelid: int, x: float, y: float, z: float, angle: float, health: int, invulnerable: bool, vw: int)
+signal actor_despawn(actorid: int)
+signal actor_pos(actorid: int, x: float, y: float, z: float, angle: float)
+signal actor_anim(actorid: int, anim: String)
+signal actor_health(actorid: int, health: int)
 signal nui_message(json_text: String)
 signal ping_updated(ms: int)
 
@@ -399,6 +409,25 @@ func _dispatch(ftype: int, payload: PackedByteArray) -> void:
 		T_OBJECT_UPDATE:
 			object_update.emit(r.u16(), r.f32(), r.f32(), r.f32(),
 				r.f32(), r.f32(), r.f32())
+		T_ACTOR_SPAWN:
+			var aid := r.u16()
+			var amodel := r.u16()
+			var ax := r.f32()
+			var ay := r.f32()
+			var az := r.f32()
+			var aangle := r.f32()
+			var ahealth := r.u16()
+			var ainv := r.u8() != 0
+			var avw := r.u32()
+			actor_spawn.emit(aid, amodel, ax, ay, az, aangle, ahealth, ainv, avw)
+		T_ACTOR_DESPAWN:
+			actor_despawn.emit(r.u16())
+		T_ACTOR_POS:
+			actor_pos.emit(r.u16(), r.f32(), r.f32(), r.f32(), r.f32())
+		T_ACTOR_ANIM:
+			actor_anim.emit(r.u16(), r.str8())
+		T_ACTOR_HEALTH:
+			actor_health.emit(r.u16(), r.u16())
 		T_PING:
 			_reply_pong(r.u32())
 		T_PONG:
