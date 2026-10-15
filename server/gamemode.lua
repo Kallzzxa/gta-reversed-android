@@ -460,6 +460,39 @@ function onPlayerCommand(id, name, cmd, args)
                 "*** Kamu belum punya actor (/actor dulu).")
         end
         return true
+    elseif cmd == "attach" then
+        -- Attached object ala SA-MP (SetPlayerAttachedObject):
+        -- /attach <index 0-9> <modelid> [bone 1-18] = tempelkan objek
+        -- di bone tangan kanan (6) dengan offset kecil. /detach = lepas.
+        local idx, model, bone = args:match("(%d+) (%d+)%s*(%d*)")
+        idx, model = tonumber(idx), tonumber(model)
+        bone = tonumber(bone) or 6
+        if not idx or not model then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Pakai: /attach <index 0-9> <modelid> [bone 1-18].")
+            return true
+        end
+        if romp.setPlayerAttachedObject(id, idx, model, bone,
+                0.1, 0.2, 0.3, 0, 0, 90, 1, 1, 1) then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Objek " .. model .. " ditempel di slot " .. idx ..
+                " (bone " .. bone .. "). /detach " .. idx .. " = lepas.")
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal: index 0-9, modelid != 0, bone 1-18.")
+        end
+        return true
+    elseif cmd == "detach" then
+        -- Lepaskan attached object (RemovePlayerAttachedObject).
+        local idx = tonumber(args)
+        if idx and romp.removePlayerAttachedObject(id, idx) then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Objek di slot " .. idx .. " dilepas.")
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Slot kosong / index 0-9. (/attach dulu).")
+        end
+        return true
     elseif cmd == "modif" then
         -- Komponen kendaraan ala SA-MP (AddVehicleComponent/paintjob):
         -- /modif -> buat Infernus (411) di depan pemain + pasang spoiler

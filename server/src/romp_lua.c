@@ -14,6 +14,7 @@
 #include "romp_actor.h"
 #include "romp_audio.h"
 #include "romp_world.h"
+#include "romp_attach.h"
 
 #include "../vendor/sqlite/sqlite3.h"
 
@@ -1402,6 +1403,101 @@ static int l_romp_get_player_audio_stream(lua_State *Ls) {
     return 1;
 }
 
+/*
+ * romp.setPlayerAttachedObject(pid, index, modelid, bone,
+ *     offx, offy, offz, rotx, roty, rotz, scalex, scaley, scalez) -> bool
+ *   Mirip SA-MP SetPlayerAttachedObject: tempelkan objek di bone pemain
+ *   (topi, kacamata, senjata di punggung, dsb).
+ *   index 0..romp.ATTACH_MAX_SLOTS-1 (10 slot ala SA-MP), modelid != 0,
+ *   bone 1..18 (1=spine, 2=head, ..., 18=jaw), tiap sumbu scale > 0.
+ *   Slot yang sama di-set ulang = ditimpa (ala SA-MP). Broadcast 0x3F
+ *   (set) vw-scoped ke semua pemain di vw pemilik, termasuk pemiliknya
+ *   sendiri. false bila argumen tidak valid.
+ * romp.removePlayerAttachedObject(pid, index) -> bool
+ *   (ala SA-MP RemovePlayerAttachedObject; broadcast 0x3F remove
+ *   vw-scoped; false bila slot kosong / index tak valid)
+ * romp.isPlayerAttachedObjectSlotUsed(pid, index) -> bool
+ *   (ala SA-MP IsPlayerAttachedObjectSlotUsed)
+ * romp.getPlayerAttachedObjects(pid)
+ *   -> array { {index, modelid, bone, off={x,y,z}, rot={x,y,z},
+ *               scale={x,y,z}}, ... } | nil (pemain tak valid)
+ */
+static int l_romp_set_player_attached_object(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int index = (int)luaL_checkinteger(Ls, 2);
+    uint32_t modelid = (uint32_t)luaL_checkinteger(Ls, 3);
+    int bone = (int)luaL_checkinteger(Ls, 4);
+    float off[3] = {
+        (float)luaL_checknumber(Ls, 5),
+        (float)luaL_checknumber(Ls, 6),
+        (float)luaL_checknumber(Ls, 7)
+    };
+    float rot[3] = {
+        (float)luaL_checknumber(Ls, 8),
+        (float)luaL_checknumber(Ls, 9),
+        (float)luaL_checknumber(Ls, 10)
+    };
+    float scale[3] = {
+        (float)luaL_checknumber(Ls, 11),
+        (float)luaL_checknumber(Ls, 12),
+        (float)luaL_checknumber(Ls, 13)
+    };
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && attach_set(c, index, modelid, (uint8_t)bone,
+                                        off, rot, scale));
+    return 1;
+}
+
+static int l_romp_remove_player_attached_object(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int index = (int)luaL_checkinteger(Ls, 2);
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && attach_remove(c, index));
+    return 1;
+}
+
+static int l_romp_is_player_attached_object_slot_used(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int index = (int)luaL_checkinteger(Ls, 2);
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && attach_slot_used(c, index));
+    return 1;
+}
+
+static int l_romp_get_player_attached_objects(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(pid);
+    if (!c) { lua_pushnil(Ls); return 1; }
+    lua_newtable(Ls);
+    int i = 1;
+    for (int s = 0; s < ATTACH_MAX_SLOTS; s++) {
+        const AttachSlot *a = &c->attach[s];
+        if (!a->used) continue;
+        lua_newtable(Ls);
+        lua_pushinteger(Ls, s); lua_setfield(Ls, -2, "index");
+        lua_pushinteger(Ls, (lua_Integer)a->modelid);
+        lua_setfield(Ls, -2, "modelid");
+        lua_pushinteger(Ls, a->bone); lua_setfield(Ls, -2, "bone");
+        lua_newtable(Ls);
+        lua_pushnumber(Ls, (lua_Number)a->off[0]); lua_setfield(Ls, -2, "x");
+        lua_pushnumber(Ls, (lua_Number)a->off[1]); lua_setfield(Ls, -2, "y");
+        lua_pushnumber(Ls, (lua_Number)a->off[2]); lua_setfield(Ls, -2, "z");
+        lua_setfield(Ls, -2, "off");
+        lua_newtable(Ls);
+        lua_pushnumber(Ls, (lua_Number)a->rot[0]); lua_setfield(Ls, -2, "x");
+        lua_pushnumber(Ls, (lua_Number)a->rot[1]); lua_setfield(Ls, -2, "y");
+        lua_pushnumber(Ls, (lua_Number)a->rot[2]); lua_setfield(Ls, -2, "z");
+        lua_setfield(Ls, -2, "rot");
+        lua_newtable(Ls);
+        lua_pushnumber(Ls, (lua_Number)a->scale[0]); lua_setfield(Ls, -2, "x");
+        lua_pushnumber(Ls, (lua_Number)a->scale[1]); lua_setfield(Ls, -2, "y");
+        lua_pushnumber(Ls, (lua_Number)a->scale[2]); lua_setfield(Ls, -2, "z");
+        lua_setfield(Ls, -2, "scale");
+        lua_rawseti(Ls, -2, i++);
+    }
+    return 1;
+}
+
 /* ---------------- API world settings ala SA-MP ----------------
  * romp.setGravity(gravity) -> bool
  *   ala SA-MP SetGravity; default GTA:SA 0.008. Valid 0.001..0.5,
@@ -1784,6 +1880,13 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_play_audio_stream); lua_setfield(Ls, -2, "playAudioStreamForPlayer");
     lua_pushcfunction(Ls, l_romp_stop_audio_stream); lua_setfield(Ls, -2, "stopAudioStreamForPlayer");
     lua_pushcfunction(Ls, l_romp_get_player_audio_stream); lua_setfield(Ls, -2, "getPlayerAudioStream");
+    /* attached object ala SA-MP (SetPlayerAttachedObject/RemovePlayerAttachedObject) */
+    lua_pushcfunction(Ls, l_romp_set_player_attached_object); lua_setfield(Ls, -2, "setPlayerAttachedObject");
+    lua_pushcfunction(Ls, l_romp_remove_player_attached_object); lua_setfield(Ls, -2, "removePlayerAttachedObject");
+    lua_pushcfunction(Ls, l_romp_is_player_attached_object_slot_used); lua_setfield(Ls, -2, "isPlayerAttachedObjectSlotUsed");
+    lua_pushcfunction(Ls, l_romp_get_player_attached_objects); lua_setfield(Ls, -2, "getPlayerAttachedObjects");
+    /* maks slot attached object per pemain ala SA-MP */
+    lua_pushinteger(Ls, ATTACH_MAX_SLOTS); lua_setfield(Ls, -2, "ATTACH_MAX_SLOTS");
     /* world settings ala SA-MP (SetGravity/SetWeather/SetWorldTime) */
     lua_pushcfunction(Ls, l_romp_set_gravity); lua_setfield(Ls, -2, "setGravity");
     lua_pushcfunction(Ls, l_romp_get_gravity); lua_setfield(Ls, -2, "getGravity");

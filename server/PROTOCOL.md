@@ -269,6 +269,57 @@ API Lua (lihat `server/README.md`):
 (tanpa entri = `-1`/`-1`).
 Tak ada event Lua (params bersifat pasif, seperti di SA-MP).
 
+### 0x3F ATTACH_OBJ (Server -> Client)
+Attached object ala SA-MP (`SetPlayerAttachedObject` /
+`RemovePlayerAttachedObject`): objek menempel di bone pemain (topi,
+kacamata, senjata di punggung, dsb). Maks 10 slot per pemain, index
+0..9 (`romp.ATTACH_MAX_SLOTS`). Bone 1..18 ala SA-MP: 1=spine, 2=head,
+3=l upper arm, 4=r upper arm, 5=l hand, 6=r hand, 7=l thigh, 8=r thigh,
+9=l foot, 10=r foot, 11=r calf, 12=l calf, 13=l forearm, 14=r forearm,
+15=l clavicle, 16=r clavicle, 17=neck, 18=jaw.
+
+Set (frame 44 byte):
+
+```
+u8  pid
+u8  index      // slot 0-9
+u32 modelid    // model objek SA-MP, != 0
+u8  bone       // 1-18
+f32 offx, offy, offz    // offset posisi dari bone
+f32 rotx, roty, rotz    // rotasi euler (derajat)
+f32 scalex, scaley, scalez  // skala per sumbu (> 0)
+```
+
+Remove (frame 7 byte):
+
+```
+u8  pid
+u8  index      // slot 0-9
+u32 modelid    // = 0 (penanda remove)
+```
+
+Client membedakan set vs remove dari panjang payload (43 vs 6 byte,
+tanpa byte type) atau dari `modelid` (0 = remove).
+
+Attach di-broadcast scope virtual world: `0x3F` dikirim ke semua pemain
+yang se-virtual-world dengan pemiliknya (objek ikut pemain), termasuk
+pemiliknya sendiri (dia juga harus me-render attach-nya). Set ulang
+slot yang sama menimpa (ala SA-MP); remove slot kosong gagal tanpa
+paket. Server menyimpan state per pemain — di-resync ke pemain yang
+baru join / pindah virtual world (frame set untuk attach vw baru,
+frame remove untuk attach vw lama). State dibersihkan saat pemain
+keluar (tanpa paket — client lain tahu dari `0x23` PLAYER_LEAVE);
+attach milik NPC ikut di-broadcast ke pemain lain.
+
+API Lua (lihat `server/README.md`):
+`romp.setPlayerAttachedObject(pid, index, modelid, bone, offx, offy, offz, rotx, roty, rotz, scalex, scaley, scalez)` -> bool,
+`romp.removePlayerAttachedObject(pid, index)` -> bool,
+`romp.isPlayerAttachedObjectSlotUsed(pid, index)` -> bool,
+`romp.getPlayerAttachedObjects(pid)` -> array
+`{ {index, modelid, bone, off={x,y,z}, rot={x,y,z}, scale={x,y,z}}, ... }` | nil.
+Konstanta: `romp.ATTACH_MAX_SLOTS` (= 10).
+Tak ada event Lua (attach bersifat pasif, seperti di SA-MP).
+
 Test: `~/workspace/romp/tests/test_vehicleparams.py`
 (+ `test_vehicleparams_gamemode.lua`) — cek set/get/validasi/broadcast/resync/vw/per-player.
 

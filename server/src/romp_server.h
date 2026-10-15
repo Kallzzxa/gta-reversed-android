@@ -66,6 +66,9 @@ typedef int SOCKET;
 #define P_VEH_PARAMS_P 0x3E /* server -> client: params per-pemain
                                (SetVehicleParamsForPlayer), hanya ke 1 pemain */
 
+/* ---- Attached object ala SA-MP (lihat romp_attach.h & PROTOCOL.md) ---- */
+#define P_ATTACH_OBJ  0x3F  /* server -> client: set/remove attached object */
+
 /* ---- Sinkronisasi senjata & tembakan ala SA-MP (lihat PROTOCOL.md) ---- */
 #define P_WPN         0x17  /* client -> server: event tembakan */
 #define P_WPN_SYNC    0x18  /* server -> client: broadcast tembakan */
@@ -164,6 +167,24 @@ typedef struct {
 
 extern Config g_cfg;
 
+/* ---------------- Attached object ala SA-MP ----------------
+ * Satu slot = satu objek yang menempel di bone pemain
+ * (lihat romp_attach.h). Maks 10 slot per pemain, index 0..9
+ * (ala SA-MP MAX_PLAYER_ATTACHED_OBJECTS). Bone 1..18 ala SA-MP:
+ * 1=spine, 2=head, 3=l upper arm, 4=r upper arm, 5=l hand, 6=r hand,
+ * 7=l thigh, 8=r thigh, 9=l foot, 10=r foot, 11=r calf, 12=l calf,
+ * 13=l forearm, 14=r forearm, 15=l clavicle, 16=r clavicle, 17=neck,
+ * 18=jaw. */
+#define ATTACH_MAX_SLOTS 10
+typedef struct {
+    int      used;      /* 1 = slot terisi */
+    uint32_t modelid;   /* model objek SA-MP, != 0 */
+    uint8_t  bone;      /* 1..18 */
+    float    off[3];    /* offset posisi dari bone (x,y,z) */
+    float    rot[3];    /* rotasi euler derajat (x,y,z) */
+    float    scale[3];  /* skala per sumbu, > 0 */
+} AttachSlot;
+
 /* ---------------- Client ---------------- */
 #define RECV_BUF 8192
 
@@ -224,6 +245,10 @@ typedef struct Client {
     float    audio_x, audio_y, audio_z; /* posisi sumber bila posisional */
     float    audio_dist;     /* jarak dengar maksimal bila posisional */
     int      audio_loop;     /* 1 = putar ulang terus */
+    /* Attached object ala SA-MP (lihat romp_attach.h): 10 slot per pemain,
+     * otoritatif server. Di-broadcast vw-scoped (0x3F) ke semua pemain di
+     * vw pemilik, termasuk pemiliknya sendiri. */
+    AttachSlot attach[ATTACH_MAX_SLOTS];
     struct Client *next;
 } Client;
 

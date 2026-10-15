@@ -413,6 +413,19 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
                                                 vp.doorslocked);
             break;
         }
+        case PacketType::ATTACH_OBJ: {
+            // Attached object (romp.setPlayerAttachedObject /
+            // removePlayerAttachedObject): set vs remove dibedakan dari
+            // panjang payload / modelid.
+            AttachObjInfo ai;
+            if (!parse_attach_obj(payload, len, ai)) break;
+            if (ai.modelid == 0) {
+                platform_->OnDetachObject(ai.pid, ai.index);
+            } else {
+                platform_->OnAttachObject(ai);
+            }
+            break;
+        }
         default:
             // Tipe tak dikenal: abaikan (forward-compat protokol).
             break;

@@ -21,6 +21,7 @@
 #include "romp_actor.h"
 #include "romp_audio.h"
 #include "romp_world.h"
+#include "romp_attach.h"
 
 #include <time.h>
 #include <pthread.h>
@@ -412,6 +413,7 @@ void player_set_world(Client *c, int interior, uint32_t vw) {
         label_sync_world(c, old_vw);
         object_sync_world(c, old_vw);
         actor_sync_world(c, old_vw);
+        attach_sync_world(c, old_vw);
         if (c->vehicle_id >= 0) {
             Vehicle *v = vehicle_by_id(c->vehicle_id);
             if (v && v->driver == c->id) vehicle_set_vw(v->id, vw);
@@ -532,6 +534,9 @@ static void do_join(Client *c) {
     /* stream actor yang sudah ada ke pemain baru */
     actor_sync_join(c);
 
+    /* stream attached object yang sudah ada ke pemain baru */
+    attach_sync_join(c);
+
     /* resync world settings (gravity/weather/time) ke pemain baru */
     world_send_to(c);
 
@@ -554,6 +559,8 @@ static void do_leave(Client *c, int reason) {
     label_on_player_leave(c->id);
     /* bersihkan state audio stream pemain ini (ala SA-MP) */
     audio_on_player_leave(c);
+    /* bersihkan state attached object pemain ini (ala SA-MP) */
+    attach_on_player_leave(c);
     /* bersihkan params kendaraan per-pemain miliknya (ala SA-MP) */
     vehicle_params_player_cleanup(c->id);
     uint8_t b[4];
@@ -643,6 +650,8 @@ void npc_disconnect(int id, int reason) {
     label_on_player_leave(id);
     /* bersihkan params kendaraan per-pemain milik NPC ini */
     vehicle_params_player_cleanup(id);
+    /* bersihkan state attached object milik NPC ini */
+    attach_on_player_leave(c);
     /* salin field yang dipakai setelah free */
     int nid = c->id;
     uint8_t interior = c->interior;

@@ -48,6 +48,7 @@ const T_VEH_COMP_REMOVE := 0x3B
 const T_VEH_PAINTJOB := 0x3C
 const T_VEH_PARAMS := 0x3D
 const T_VEH_PARAMS_P := 0x3E
+const T_ATTACH_OBJ := 0x3F
 const T_NUI := 0x40
 
 const VER := 1
@@ -101,6 +102,8 @@ signal vehicle_component_remove(vid: int, compid: int)
 signal vehicle_paintjob(vid: int, paintjob: int)
 signal vehicle_params(vid: int, engine: int, lights: int, alarm: int, doors: int, bonnet: int, boot: int, objective: int)
 signal vehicle_params_p(vid: int, pid: int, objective: int, doorslocked: int)
+signal attach_obj_set(pid: int, index: int, modelid: int, bone: int, off: Vector3, rot: Vector3, scale: Vector3)
+signal attach_obj_remove(pid: int, index: int)
 signal nui_message(json_text: String)
 signal ping_updated(ms: int)
 
@@ -375,6 +378,19 @@ func _dispatch(ftype: int, payload: PackedByteArray) -> void:
 				r.i8(), r.i8(), r.i8())
 		T_VEH_PARAMS_P:
 			vehicle_params_p.emit(r.u16(), r.u16(), r.i8(), r.i8())
+		T_ATTACH_OBJ:
+			var atpid := r.u8()
+			var atindex := r.u8()
+			var atmodel := r.u32()
+			if atmodel == 0:
+				attach_obj_remove.emit(atpid, atindex)
+			else:
+				var atbone := r.u8()
+				var atoff := Vector3(r.f32(), r.f32(), r.f32())
+				var atrot := Vector3(r.f32(), r.f32(), r.f32())
+				var atscl := Vector3(r.f32(), r.f32(), r.f32())
+				attach_obj_set.emit(atpid, atindex, atmodel, atbone,
+					atoff, atrot, atscl)
 		T_WPN_SYNC:
 			var shooter := r.u16()
 			var weapon := r.u16()

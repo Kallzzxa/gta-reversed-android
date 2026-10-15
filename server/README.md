@@ -263,6 +263,38 @@ romp.playAudioStreamForPlayer(id, "https://contoh.test/bel.mp3",
                               x, y, z, 30.0, 1, 0)
 ```
 
+**Attached object ala SA-MP (`SetPlayerAttachedObject` /
+`RemovePlayerAttachedObject`):**
+
+Tempelkan objek di bone pemain (topi, kacamata, senjata di punggung,
+dsb). Maks 10 slot per pemain (`romp.ATTACH_MAX_SLOTS`), index 0..9 —
+set ulang slot yang sama menimpa (ala SA-MP). Bone 1..18 ala SA-MP
+(1=spine, 2=head, 5/6=tangan, 17=neck, 18=jaw). Di-broadcast scope
+virtual world ke semua pemain di vw pemilik, termasuk pemiliknya
+sendiri. State di-resync saat pemain join / pindah vw, dibersihkan
+saat pemain keluar.
+
+| API | Keterangan |
+|-----|------------|
+| `romp.setPlayerAttachedObject(pid, index, modelid, bone, offx, offy, offz, rotx, roty, rotz, scalex, scaley, scalez)` | Tempelkan objek → `true`/`false`. `index` 0-9, `modelid` != 0, `bone` 1-18, tiap sumbu `scale` > 0. |
+| `romp.removePlayerAttachedObject(pid, index)` | Lepaskan objek → `true` bila slot terisi, `false` bila slot kosong/invalid. |
+| `romp.isPlayerAttachedObjectSlotUsed(pid, index)` | `true` bila slot terpakai. |
+| `romp.getPlayerAttachedObjects(pid)` | Array `{ {index, modelid, bone, off={x,y,z}, rot={x,y,z}, scale={x,y,z}}, ... }` / nil. |
+| `romp.ATTACH_MAX_SLOTS` | Konstanta = 10. |
+
+Paket: `0x3F` ATTACH_OBJ (set 44 byte / remove 7 byte, lihat `PROTOCOL.md`).
+Tak ada event (attach bersifat pasif, seperti di SA-MP).
+
+```lua
+-- /attach: tempelkan objek model 18632 di tangan kanan (bone 6).
+romp.setPlayerAttachedObject(id, 0, 18632, 6,
+    0.1, 0.2, 0.3,   -- offset dari bone
+    0, 0, 90,        -- rotasi (derajat)
+    1, 1, 1)         -- skala
+-- /detach: lepaskan lagi.
+romp.removePlayerAttachedObject(id, 0)
+```
+
 ### World settings ala SA-MP (gravity, weather, world time)
 
 State dunia bersifat global (sama untuk semua pemain) dan otoritatif di

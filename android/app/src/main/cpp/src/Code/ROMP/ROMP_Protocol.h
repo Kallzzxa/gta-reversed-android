@@ -74,6 +74,10 @@ enum class PacketType : uint8_t {
     // Params kendaraan ala SA-MP (SetVehicleParamsEx/ForPlayer).
     VEH_PARAMS   = 0x3D,  // params global berubah: vid + 7x int8
     VEH_PARAMS_P = 0x3E,  // params per-pemain: vid + pid + 2x int8
+    // Attached object ala SA-MP (SetPlayerAttachedObject /
+    // RemovePlayerAttachedObject), server -> client.
+    ATTACH_OBJ   = 0x3F,  // set: pid+index+modelid+bone+9xf32 (43B payload);
+                          // remove: pid+index+modelid=0 (6B payload)
 };
 
 // Alasan PLAYER_LEAVE (u8 reason).
@@ -655,6 +659,43 @@ inline bool parse_vehicle_params_p(const uint8_t* data, size_t len,
     out.objective = static_cast<int8_t>(v);
     if (!r.get_u8(v)) return false;
     out.doorslocked = static_cast<int8_t>(v);
+    return true;
+}
+
+// ---- Attached object ala SA-MP (server -> client) ----
+
+struct AttachObjInfo {
+    uint8_t pid = 0;       // pemilik (u8, cocok dengan id pemain server)
+    uint8_t index = 0;     // slot 0-9
+    uint32_t modelid = 0;  // model objek SA-MP; 0 = remove
+    uint8_t bone = 0;      // 1-18 ala SA-MP (1=spine, 2=head, ..., 18=jaw)
+    float off[3] = {0, 0, 0};    // offset posisi dari bone
+    float rot[3] = {0, 0, 0};    // rotasi euler (derajat)
+    float scale[3] = {1, 1, 1};  // skala per sumbu
+};
+
+// 0x3F ATTACH_OBJ: u8 pid | u8 index | u32 modelid | u8 bone |
+//   f32 offx,offy,offz | f32 rotx,roty,rotz | f32 scalex,scaley,scalez
+//   (43 byte payload) -> set; atau u8 pid | u8 index | u32 modelid=0
+//   (6 byte payload) -> remove. Set vs remove dibedakan dari panjang
+//   payload / modelid.
+inline bool parse_attach_obj(const uint8_t* data, size_t len,
+                             AttachObjInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u8(out.pid)) return false;
+    if (!r.get_u8(out.index)) return false;
+    if (!r.get_u32(out.modelid)) return false;
+    if (len == 6) return out.modelid == 0;  // remove: modelid harus 0
+    if (!r.get_u8(out.bone)) return false;
+    for (int i = 0; i < 3; i++) {
+        if (!r.get_float(out.off[i])) return false;
+    }
+    for (int i = 0; i < 3; i++) {
+        if (!r.get_float(out.rot[i])) return false;
+    }
+    for (int i = 0; i < 3; i++) {
+        if (!r.get_float(out.scale[i])) return false;
+    }
     return true;
 }
 

@@ -134,6 +134,8 @@ func _setup_multiplayer() -> void:
 	net.vehicle_paintjob.connect(_on_vehicle_paintjob)
 	net.vehicle_params.connect(_on_vehicle_params)
 	net.vehicle_params_p.connect(_on_vehicle_params_p)
+	net.attach_obj_set.connect(_on_attach_obj_set)
+	net.attach_obj_remove.connect(_on_attach_obj_remove)
 	net.teleport.connect(_on_teleport)
 	net.ping_updated.connect(_on_ping_updated)
 	net.label_spawn.connect(_on_label_spawn)
@@ -301,6 +303,19 @@ func _on_vehicle_params_p(vid: int, pid: int, objective: int,
 	# 0x3E VEH_PARAMS_P ala SA-MP SetVehicleParamsForPlayer.
 	if _remote_cars.has(vid):
 		_remote_cars[vid].set_params_for_player(pid, objective, doorslocked)
+
+
+## Attached object ala SA-MP (0x3F set/remove) — placeholder kubus di
+## remote player (lihat remote_player.gd).
+func _on_attach_obj_set(pid: int, index: int, modelid: int, bone: int,
+		off: Vector3, rot: Vector3, scale: Vector3) -> void:
+	if _remotes.has(pid):
+		_remotes[pid].set_attach(index, modelid, bone, off, rot, scale)
+
+
+func _on_attach_obj_remove(pid: int, index: int) -> void:
+	if _remotes.has(pid):
+		_remotes[pid].remove_attach(index)
 
 
 func _on_teleport(x: float, y: float, z: float) -> void:

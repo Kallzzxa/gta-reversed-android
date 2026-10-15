@@ -119,6 +119,15 @@ public:
                                           int8_t /*objective*/,
                                           int8_t /*doorslocked*/) {}
 
+    // Attached object ala SA-MP (paket 0x3F,
+    // dari romp.setPlayerAttachedObject/removePlayerAttachedObject).
+    // Default no-op; platform game menimpa untuk tempelkan objek ke bone ped.
+    // TODO(GAME): buat objek game dari modelid, attach ke bone ped pemilik
+    //   (CEntity::AttachToRwObject / frame bone GTA:SA), terapkan
+    //   offset/rotasi/skala; OnDetachObject melepas & menghapusnya.
+    virtual void OnAttachObject(const AttachObjInfo& /*info*/) {}
+    virtual void OnDetachObject(uint8_t /*pid*/, uint8_t /*index*/) {}
+
     // Log ke konsol game / logcat.
     virtual void Log(const std::string& msg) = 0;
 

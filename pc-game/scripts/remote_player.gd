@@ -11,6 +11,10 @@ var has_target := false
 var _target_pos := Vector3.ZERO
 var _target_heading := 0.0
 var _nametag: Label3D
+# Attached object ala SA-MP (paket 0x3F): index -> MeshInstance3D.
+# PLACEHOLDER verifikasi visual: kubus kecil emissive sebagai objek
+# ter-attach di posisi offset dari badan pemain (lihat PROTOCOL.md).
+var _attaches: Dictionary = {}
 
 
 func _ready() -> void:
@@ -80,3 +84,35 @@ func _process(delta: float) -> void:
 	var t := minf(1.0, delta * LERP_RATE)
 	global_position = global_position.lerp(_target_pos, t)
 	rotation.y = lerp_angle(rotation.y, _target_heading, t)
+
+
+## Attached object ala SA-MP (0x3F set): tampilkan kubus kecil sebagai
+## placeholder objek ter-attach. `bone` disimpan untuk rujukan visual
+## (belum dipetakan ke rangka, offset relatif badan pemain).
+func set_attach(index: int, modelid: int, bone: int, off: Vector3,
+		rot: Vector3, scale: Vector3) -> void:
+	remove_attach(index)
+	var box := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.3, 0.3, 0.3)
+	box.mesh = bm
+	box.position = off + Vector3(0, 1.0, 0)
+	box.rotation = Vector3(deg_to_rad(rot.x), deg_to_rad(rot.y),
+		deg_to_rad(rot.z))
+	box.scale = scale
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.3, 0.7, 1.0)
+	mat.emission_enabled = true
+	mat.emission = Color(0.3, 0.7, 1.0)
+	box.material_override = mat
+	box.set_meta("attach_model", modelid)
+	box.set_meta("attach_bone", bone)
+	add_child(box)
+	_attaches[index] = box
+
+
+## Attached object ala SA-MP (0x3F remove): hapus placeholder slot.
+func remove_attach(index: int) -> void:
+	if _attaches.has(index):
+		_attaches[index].queue_free()
+		_attaches.erase(index)
