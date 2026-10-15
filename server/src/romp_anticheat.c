@@ -43,7 +43,13 @@ int ac_check_movement(struct Client *c, float nx, float ny, float nz,
     if (dt == 0) return 0;
     float dx = nx - c->pos_x, dy = ny - c->pos_y, dz = nz - c->pos_z;
     float dist = sqrtf(dx * dx + dy * dy + dz * dz);
+    /* Grace setelah server mem-teleport pemain (player_set_pos): paket 0x10
+     * yang masih dalam perjalanan dari posisi lama BUKAN teleport curang —
+     * buang diam-diam tanpa peringatan (dan tanpa disimpan, supaya posisi
+     * server tidak regresi ke lokasi lama). */
+    int in_grace = c->pos_grace_ms && now - c->pos_grace_ms < AC_POS_GRACE_MS;
     if (dist >= AC_TELEPORT_DIST) {
+        if (in_grace) return 1; /* buang paket basi, tanpa lapor */
         ac_report(c, "teleport", (double)dist);
         return 1; /* buang paket: posisi curang tidak disimpan */
     }

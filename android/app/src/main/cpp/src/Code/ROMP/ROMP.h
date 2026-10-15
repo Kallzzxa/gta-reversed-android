@@ -51,6 +51,11 @@ public:
     virtual void MoveRemotePlayer(uint16_t id, float x, float y, float z,
                                   float heading) = 0;
 
+    // Teleport pemain lokal (server -> client via paket 0x27 POS_SET,
+    // mis. dari romp.setPlayerPos). Default no-op; platform game
+    // menimpa untuk memindahkan CPed lokal.
+    virtual void TeleportLocalPlayer(float x, float y, float z) {}
+
     // Log ke konsol game / logcat.
     virtual void Log(const std::string& msg) = 0;
 

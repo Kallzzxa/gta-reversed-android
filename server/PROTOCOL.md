@@ -232,6 +232,22 @@ u8  interior
 u32 virtual_world  // little-endian
 ```
 
+### 0x27 POS_SET
+Teleport pemain lokal — dikirim server ke SATU client target saat
+`romp.setPlayerPos(playerid, x, y, z)` dipanggil (ala SA-MP `SetPlayerPos`).
+Client memindahkan pemainnya ke koordinat itu; pemain lain yang melihatnya
+menerima posisi baru via `0x11 PLAYER_POS` biasa.
+
+```
+float x, y, z
+```
+
+Posisi otoritatif server ikut diperbarui, jadi `romp.getPlayerPos`
+langsung mengembalikan lokasi baru. Paket `0x10 POS` yang masih dalam
+perjalanan dari posisi lama diabaikan anti-cheat (grace 2 detik) supaya
+tidak memicu deteksi teleport palsu. Untuk NPC, `setPlayerPos` di-routing
+ke `npc_set_pos` (tak ada paket `0x27` — NPC tak punya socket).
+
 ## Interior & Virtual World (ala SA-MP)
 
 Setiap pemain punya `interior` (0-255) dan `virtual world` (0-2^31-1),

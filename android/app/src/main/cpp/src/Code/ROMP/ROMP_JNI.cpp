@@ -159,6 +159,15 @@ void AndroidPlatform::SetLocalPos(float x, float y, float z, float heading) {
     lheading_.store(heading);
 }
 
+// Teleport pemain lokal (paket 0x27 POS_SET dari romp.setPlayerPos).
+// Perbarui cache posisi supaya POS berikutnya langsung kirim lokasi baru;
+// TODO(GAME): pindahkan juga CPed lokal (CPlaceable::SetPosition).
+void AndroidPlatform::TeleportLocalPlayer(float x, float y, float z) {
+    lx_.store(x);
+    ly_.store(y);
+    lz_.store(z);
+}
+
 void AndroidPlatform::GetLocalPlayerPos(float& x, float& y, float& z,
                                         float& heading, PlayerState& state,
                                         uint16_t& vehicle_model) {

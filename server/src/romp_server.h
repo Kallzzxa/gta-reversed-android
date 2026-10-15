@@ -44,7 +44,9 @@ typedef int SOCKET;
 #define P_LIST        0x24
 #define P_INT_VW      0x25  /* server -> client: interior(u8) + vw(u32 LE) pemain */
 #define P_STAT        0x26  /* client -> server: laporan health/armour client
-                             * (u16 health, u16 armour) untuk anti-cheat */
+                           * (u16 health, u16 armour) untuk anti-cheat */
+#define P_POS_SET     0x27  /* server -> client: teleport pemain lokal ke
+                           * float x,y,z (lihat player_set_pos) */
 #define P_PING        0x30
 #define P_PONG        0x31
 #define P_NUI_MSG     0x40
@@ -142,6 +144,10 @@ typedef struct Client {
     /* Posisi dunia terakhir dari paket 0x10 (dipakai checkpoint, dsb). */
     int    pos_known;          /* 1 = pernah terima paket POS */
     float  pos_x, pos_y, pos_z;
+    /* Grace anti-cheat setelah server memindahkan pemain (setPlayerPos):
+     * paket 0x10 yang masih dalam perjalanan dari posisi lama tidak boleh
+     * memicu deteksi teleport. 0 = tak ada grace aktif. */
+    uint64_t pos_grace_ms;
     uint64_t chat_times[3];    /* anti-spam: 3 pesan / 2 detik */
     int    chat_idx;
     int    dead;               /* ditandai untuk disconnect */
@@ -219,6 +225,12 @@ void npc_disconnect(int id, int reason);
 int  npc_set_pos(int id, float x, float y, float z); /* broadcast 0x11 */
 int  npc_send_chat(int id, const char *text);
 int  npc_count(void);
+/* Teleport pemain ala SA-MP SetPlayerPos. Update posisi otoritatif server,
+ * kirim 0x27 P_POS_SET ke client target (NPC di-routing ke npc_set_pos),
+ * dan broadcast 0x11 P_PPOS ke pemain yang melihatnya. Paket 0x10 yang
+ * masih dalam perjalanan dari posisi lama diabaikan anti-cheat selama
+ * AC_POS_GRACE_MS. 1 = sukses, 0 = id tidak valid. */
+int  player_set_pos(int id, float x, float y, float z);
 /* Daftar IP yang di-ban (in-memory). Dipakai Lua (banIP/unbanIP/isIPBanned). */
 void ban_add(const char *ip);
 void ban_remove(const char *ip);

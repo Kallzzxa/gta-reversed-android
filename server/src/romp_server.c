@@ -651,6 +651,39 @@ int npc_set_pos(int id, float x, float y, float z) {
     return 1;
 }
 
+/* Teleport pemain ala SA-MP SetPlayerPos (dipakai romp.setPlayerPos).
+ * Posisi otoritatif server diperbarui, client target disuruh pindah via
+ * paket 0x27 P_POS_SET, dan posisi baru di-relay (0x11) ke pemain yang
+ * melihatnya. NPC di-routing ke npc_set_pos. 1 = sukses, 0 = id invalid. */
+int player_set_pos(int id, float x, float y, float z) {
+    Client *c = client_by_id(id);
+    if (!c || !c->handshaked || c->dead) return 0;
+    if (c->is_npc) return npc_set_pos(id, x, y, z);
+    uint64_t t = now_ms();
+    c->pos_x = x; c->pos_y = y; c->pos_z = z;
+    c->pos_known = 1;
+    c->last_pos_ms = t;
+    c->pos_grace_ms = t; /* anti-cheat: abaikan lompatan paket 0x10 lama */
+    uint8_t tp[13];
+    tp[0] = P_POS_SET;
+    memcpy(tp + 1, &x, 4);
+    memcpy(tp + 5, &y, 4);
+    memcpy(tp + 9, &z, 4);
+    if (client_send_frame(c, tp, 13) < 0) c->dead = 1;
+    uint8_t b[22];
+    b[0] = P_PPOS;
+    put_u16(b + 1, (uint16_t)id);
+    memcpy(b + 3, &x, 4);
+    memcpy(b + 7, &y, 4);
+    memcpy(b + 11, &z, 4);
+    float heading = 0.0f;
+    memcpy(b + 15, &heading, 4);
+    b[19] = 0;          /* state: jalan kaki */
+    b[20] = 0; b[21] = 0; /* vehicle_model = 0 */
+    broadcast_scoped(b, 22, c, c);
+    return 1;
+}
+
 /* NPC kirim chat. Lewat event onPlayerChat Lua dulu (ala SA-MP: NPC chat
  * memicu OnPlayerText); kalau tak di-handle, broadcast seperti chat biasa.
  * 1 = sukses, 0 = id bukan NPC. */

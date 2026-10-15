@@ -273,6 +273,23 @@ function onPlayerCommand(id, name, cmd, args)
                 tostring(romp.getPlayerPing(id)) .. " ms.")
         end
         return true
+    elseif cmd == "tp" then
+        -- Teleport ala SA-MP SetPlayerPos: /tp <x> <y> <z>
+        local x, y, z = args:match("^([%-%d%.]+)%s+([%-%d%.]+)%s+([%-%d%.]+)%s*$")
+        x, y, z = tonumber(x), tonumber(y), tonumber(z)
+        if x and y and z then
+            if romp.setPlayerPos(id, x, y, z) then
+                romp.sendChatToPlayer(id, romp.KIND_INFO,
+                    string.format("*** Teleport ke (%.1f, %.1f, %.1f).", x, y, z))
+            else
+                romp.sendChatToPlayer(id, romp.KIND_INFO,
+                    "*** Gagal teleport (id pemain tidak valid).")
+            end
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Pakai: /tp <x> <y> <z>")
+        end
+        return true
     end
     return false
 end

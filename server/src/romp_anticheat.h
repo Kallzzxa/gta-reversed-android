@@ -31,12 +31,17 @@
 #define AC_SPEED_VEH      250.0f  /* unit/detik, di kendaraan (pesawat SA ~75) */
 #define AC_STAT_TOL       5.0f    /* toleransi laporan health/armour client */
 #define AC_STAT_GRACE_MS  1500    /* abaikan laporan 1.5 dtk setelah server set */
+#define AC_POS_GRACE_MS   2000    /* abaikan cek teleport 2 dtk setelah
+                                   * server memindahkan pemain
+                                   * (romp.setPlayerPos) */
 
 struct Client;
 
 /* Cek paket 0x10 POS sebelum posisi disimpan. Dipanggil setelah rate-limit
  * 33 Hz, memakai c->last_pos_ms & c->pos_x/y/z yang lama.
- * Return 1 = paket dibuang (teleport), 0 = lanjutkan normal. */
+ * Return 1 = paket dibuang (teleport, atau paket basi dalam grace
+ * setPlayerPos — yang terakhir dibuang diam-diam tanpa peringatan),
+ * 0 = lanjutkan normal. */
 int ac_check_movement(struct Client *c, float nx, float ny, float nz,
                       uint64_t now);
 

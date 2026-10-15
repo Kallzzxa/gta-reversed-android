@@ -34,6 +34,8 @@ enum class PacketType : uint8_t {
     REJECT      = 0x03,
     POS         = 0x10,
     PLAYER_POS  = 0x11,
+    POS_SET     = 0x27,  // Server -> Client: teleport pemain lokal
+                         // (payload: float x,y,z).
     CHAT        = 0x20,
     CHAT_MSG    = 0x21,
     PLAYER_JOIN = 0x22,
@@ -252,6 +254,19 @@ inline bool parse_player_pos(const uint8_t* data, size_t len, PlayerPosInfo& out
     if (!r.get_u8(st)) return false;
     if (!r.get_u16(out.vehicle_model)) return false;
     out.state = static_cast<PlayerState>(st);
+    return true;
+}
+
+struct PosSetInfo {
+    float x = 0, y = 0, z = 0;
+};
+
+// 0x27 POS_SET: teleport pemain lokal. x,y,z(float).
+inline bool parse_pos_set(const uint8_t* data, size_t len, PosSetInfo& out) {
+    Reader r(data, len);
+    if (!r.get_float(out.x)) return false;
+    if (!r.get_float(out.y)) return false;
+    if (!r.get_float(out.z)) return false;
     return true;
 }
 

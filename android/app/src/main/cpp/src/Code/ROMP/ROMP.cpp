@@ -237,6 +237,13 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
                                   pp.heading, pp.state, pp.vehicle_model);
             break;
         }
+        case PacketType::POS_SET: {
+            // Server mem-teleport pemain lokal (romp.setPlayerPos).
+            PosSetInfo ps;
+            if (!parse_pos_set(payload, len, ps)) break;
+            platform_->TeleportLocalPlayer(ps.x, ps.y, ps.z);
+            break;
+        }
         case PacketType::PONG: {
             // Server meng-echo client_tick yang kita kirim di PING (0x30).
             uint32_t tick = 0;

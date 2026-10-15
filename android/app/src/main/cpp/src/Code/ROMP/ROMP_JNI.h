@@ -63,6 +63,7 @@ public:
     // ---- IROMPPlatform ----
     void GetLocalPlayerPos(float& x, float& y, float& z, float& heading,
                            PlayerState& state, uint16_t& vehicle_model) override;
+    void TeleportLocalPlayer(float x, float y, float z) override;
     void SpawnRemotePlayer(uint16_t id, const std::string& name) override;
     void RemoveRemotePlayer(uint16_t id) override;
     void MoveRemotePlayer(uint16_t id, float x, float y, float z,

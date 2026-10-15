@@ -447,6 +447,17 @@ static int l_romp_get_player_pos(lua_State *Ls) {
     return 3;
 }
 
+/* romp.setPlayerPos(id, x, y, z) -> true/false (ala SA-MP SetPlayerPos:
+ * teleport pemain; posisi otoritatif server + paket 0x27 ke client). */
+static int l_romp_set_player_pos(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    float x = (float)luaL_checknumber(Ls, 2);
+    float y = (float)luaL_checknumber(Ls, 3);
+    float z = (float)luaL_checknumber(Ls, 4);
+    lua_pushboolean(Ls, player_set_pos(id, x, y, z));
+    return 1;
+}
+
 /* ---------------- API NUI (ala FiveM) ---------------- */
 
 /* romp.sendNUIMessage(id, jsonString) -> true/false */
@@ -992,6 +1003,7 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_get_players);      lua_setfield(Ls, -2, "getPlayers");
     lua_pushcfunction(Ls, l_romp_get_player_ping); lua_setfield(Ls, -2, "getPlayerPing");
     lua_pushcfunction(Ls, l_romp_get_player_pos);  lua_setfield(Ls, -2, "getPlayerPos");
+    lua_pushcfunction(Ls, l_romp_set_player_pos);  lua_setfield(Ls, -2, "setPlayerPos");
     lua_pushcfunction(Ls, l_romp_send_chat_to_all); lua_setfield(Ls, -2, "sendChatToAll");
     lua_pushcfunction(Ls, l_romp_send_chat_to_player); lua_setfield(Ls, -2, "sendChatToPlayer");
     lua_pushcfunction(Ls, l_romp_kick_player);      lua_setfield(Ls, -2, "kickPlayer");
