@@ -84,6 +84,12 @@ enum class PacketType : uint8_t {
     // GetPlayerColor), server -> client.
     MARKER_SET   = 0x44,  // warna marker: u8 pid + u32 color LE (5B payload)
     MARKER_MODE  = 0x45,  // mode marker global: u8 mode (1B payload)
+    // Kill feed ala SA-MP (SendDeathMessage / OnPlayerDeath).
+    DEATH_REPORT = 0x46,  // client -> server: lapor kematian,
+                          // u8 killerid + u8 reason (2B payload);
+                          // victim = pengirim; killerid 255 = tak ada pembunuh
+    DEATH_MSG    = 0x47,  // server -> semua client: kill feed,
+                          // u8 killerid + u8 victimid + u8 reason (3B payload)
 };
 
 // Alasan PLAYER_LEAVE (u8 reason).
@@ -745,6 +751,23 @@ inline bool parse_marker_mode(const uint8_t* data, size_t len,
     if (len != 1) return false;
     out_mode = data[0];
     return out_mode <= 2;
+}
+
+// Info kill feed ala SA-MP (0x47 DEATH_MSG).
+struct DeathMsgInfo {
+    uint8_t killerid = 255;  // 255 = tak ada pembunuh (DEATH_KILLER_NONE)
+    uint8_t victimid = 0;    // pemain yang mati
+    uint8_t reason = 0;      // id senjata ala SA-MP / kode khusus 49..54
+};
+
+// 0x47 DEATH_MSG: u8 killerid | u8 victimid | u8 reason (3 byte payload).
+inline bool parse_death_msg(const uint8_t* data, size_t len,
+                            DeathMsgInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u8(out.killerid)) return false;
+    if (!r.get_u8(out.victimid)) return false;
+    if (!r.get_u8(out.reason)) return false;
+    return len == 3;  // tolak payload kepanjangan/kependekan
 }
 
 struct ChatMsgInfo {

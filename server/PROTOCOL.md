@@ -77,6 +77,28 @@ Dua arah:
   Echo yang tak cocok dengan probe terakhir diabaikan; client yang tak
   menjawab tetap `-1` (belum terukur).
 
+### 0x46 DEATH_REPORT (Client -> Server)
+
+Laporan kematian pemain ala SA-MP (`OnPlayerDeath`): dikirim client saat
+ped pemain lokalnya mati di game. Server tidak menghitung damage sendiri
+(damage diputuskan gamemode/client, seperti di SA-MP).
+
+```
+u8  killerid   // id pembunuh, atau 255 = tak ada pembunuh (ala SA-MP INVALID_PLAYER_ID)
+u8  reason     // id senjata ala SA-MP (1..46) atau kode khusus 49..54
+               // (49=crash tabrakan, 50=heliblades, 51=explosion,
+               //  53=drown, 54=splat)
+```
+
+Validasi server: payload harus pas 2 byte; `killerid` harus 255 atau
+pemain yang sedang connect (selain itu laporan dibuang diam-diam);
+`reason` harus 0..60. Bila lolos, server broadcast `0x47 DEATH_MSG` ke
+semua pemain + menyalakan event Lua
+`onPlayerDeath(victimid, killerid, reason)` (`victimid` = pelapor).
+
+NPC tidak punya client untuk melapor — kematian NPC hanya bisa
+dimunculkan gamemode via `romp.sendDeathMessage` (manual, tanpa event).
+
 ## Server -> Client
 
 ### 0x02 WELCOME
@@ -415,7 +437,47 @@ sinyal `marker_set`/`marker_mode` -> warna nametag 3D).
 Test: `~/workspace/romp/tests/test_marker.py`
 (+ `test_marker_gamemode.lua`) — cek mode/default/broadcast/vw-scope/
 override/resync/NPC/mode-off; parse unit C++ di
-`tests/client/test_marker_parse.cpp`; cek sinyal Godot di
+`tests/client/test_main.cpp`; cek sinyal Godot di
+`pc-game/tests/mp_client_test.gd` (via `test_godot_mp.py`).
+
+### 0x47 DEATH_MSG (Server -> Client)
+
+Kill feed ala SA-MP (`SendDeathMessage`): dikirim server ke SEMUA pemain
+setiap ada kematian yang valid — baik dari laporan client (`0x46`,
+menyala event `onPlayerDeath`) maupun dari gamemode via
+`romp.sendDeathMessage(killerid, victimid, weaponid)` (manual, TIDAK
+menyalakan event — sama seperti SA-MP). Kill feed bersifat global:
+tidak di-scope virtual world/interior, dan pemain yang join belakangan
+tidak menerima riwayat kill feed lama.
+
+Frame `0x47` DEATH_MSG (4 byte):
+
+```
+u8  killerid   // id pembunuh, atau 255 = tak ada pembunuh
+u8  victimid   // pemain yang mati
+u8  reason     // id senjata ala SA-MP (1..46) / kode khusus 49..54
+```
+
+Validasi `romp.sendDeathMessage`: `victimid` harus pemain yang sedang
+connect; `killerid` 255 atau pemain yang connect; `reason` 0..60.
+Kembalikan `false` bila argumen tak valid (tanpa broadcast).
+
+API Lua (lihat `server/README.md`):
+`romp.sendDeathMessage(killerid, victimid, weaponid)` -> bool.
+Konstanta: `romp.DEATH_KILLER_NONE` (= 255).
+Event: `onPlayerDeath(victimid, killerid, reason)` — hanya untuk laporan
+client `0x46`, bukan untuk `sendDeathMessage` manual.
+
+Client game merender kill feed dari `0x47` langsung
+(C++: `IROMPPlatform::OnDeathMessage` + `Client::SendDeathReport` untuk
+melapor; Godot: sinyal `death_msg` -> baris kill feed di chat).
+Demo: `/deathmsg <killer> <victim> <weapon>` di `server/gamemode.lua`
++ event `onPlayerDeath` yang mengumumkan ke chat.
+
+Test: `~/workspace/romp/tests/test_death.py`
+(+ `test_death_gamemode.lua`) — cek laporan valid/global broadcast/event/
+killer 255/validasi killer+reason/payload/manual-tanpa-event/NPC/joiner;
+parse unit C++ di `tests/client/test_main.cpp`; cek sinyal Godot di
 `pc-game/tests/mp_client_test.gd` (via `test_godot_mp.py`).
 
 ### 0x21 CHAT_MSG

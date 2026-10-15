@@ -76,6 +76,10 @@ typedef int SOCKET;
 #define P_MARKER_SET  0x44  /* server -> client: warna marker pemain (pid+u32) */
 #define P_MARKER_MODE 0x45  /* server -> client: mode marker global (u8) */
 
+/* ---- Kill feed ala SA-MP (lihat romp_death.h & PROTOCOL.md) ---- */
+#define P_DEATH_REPORT 0x46 /* client -> server: laporan kematian (killerid+reason) */
+#define P_DEATH_MSG    0x47 /* server -> semua client: kill feed (killer+victim+reason) */
+
 /* ---- Sinkronisasi senjata & tembakan ala SA-MP (lihat PROTOCOL.md) ---- */
 #define P_WPN         0x17  /* client -> server: event tembakan */
 #define P_WPN_SYNC    0x18  /* server -> client: broadcast tembakan */

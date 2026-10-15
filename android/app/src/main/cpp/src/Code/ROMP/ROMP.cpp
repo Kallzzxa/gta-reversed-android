@@ -114,6 +114,15 @@ bool Client::SendNuiCallback(const std::string& name, const std::string& dataJso
     return net_.SendFrame(build_nui_callback(name, dataJson));
 }
 
+bool Client::SendDeathReport(uint8_t killerid, uint8_t reason) {
+    if (state_ != ConnState::Connected) return false;
+    std::vector<uint8_t> p;
+    p.reserve(2);
+    p.push_back(killerid);
+    p.push_back(reason);
+    return net_.SendFrame(make_frame(PacketType::DEATH_REPORT, p));
+}
+
 void Client::Update() {
     if (state_ != ConnState::Connected) return;
 
@@ -445,6 +454,14 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
             uint8_t mode = 0;
             if (!parse_marker_mode(payload, len, mode)) break;
             platform_->OnPlayerMarkerMode(mode);
+            break;
+        }
+        case PacketType::DEATH_MSG: {
+            // Kill feed ala SA-MP (laporan client 0x46 atau
+            // romp.sendDeathMessage): killerid 255 = tak ada pembunuh.
+            DeathMsgInfo di;
+            if (!parse_death_msg(payload, len, di)) break;
+            platform_->OnDeathMessage(di.killerid, di.victimid, di.reason);
             break;
         }
         default:

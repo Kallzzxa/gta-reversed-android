@@ -364,6 +364,56 @@ romp.setPlayerColor(id, 0xFF0000FF)
 romp.setPlayerMarkerForPlayer(id, 3, 0x00FF00FF)
 ```
 
+### Kill feed ala SA-MP (`SendDeathMessage` / `OnPlayerDeath`)
+
+Client melaporkan kematian pemain lokalnya via paket `0x46 DEATH_REPORT`
+(u8 `killerid`, u8 `reason`); server memvalidasi lalu broadcast
+`0x47 DEATH_MSG` (u8 `killerid` + u8 `victimid` + u8 `reason`) ke SEMUA
+pemain (kill feed global ala SA-MP, tanpa scope vw/interior) + menyalakan
+event Lua `onPlayerDeath(victimid, killerid, reason)`.
+
+`killerid` = 255 (`romp.DEATH_KILLER_NONE`) berarti tak ada pembunuh
+(jatuh/ledakan/tenggelam sendiri — ala SA-MP `INVALID_PLAYER_ID`).
+`reason` = id senjata ala SA-MP (1..46) atau kode khusus (49=crash,
+50=heliblades, 51=explosion, 53=drown, 54=splat).
+
+Gamemode juga bisa broadcast kill feed manual via
+`romp.sendDeathMessage(killerid, victimid, weaponid)` — ala SA-MP fungsi
+ini TIDAK menyalakan event `onPlayerDeath`. Kematian NPC (tak punya
+client untuk melapor) hanya bisa dimunculkan lewat cara manual ini.
+
+| API | Keterangan |
+|-----|------------|
+| `romp.sendDeathMessage(killerid, victimid, weaponid)` | Broadcast kill feed manual → `true`/`false`. `0x47` global; tanpa event. |
+| `romp.DEATH_KILLER_NONE` | Konstanta killerid tak ada pembunuh (= 255). |
+
+Event: `onPlayerDeath(victimid, killerid, reason)` — hanya untuk laporan
+client `0x46` (bukan untuk `sendDeathMessage` manual).
+
+```lua
+-- /deathmsg: kirim kill feed manual (killer 255 = tak ada pembunuh).
+romp.sendDeathMessage(255, id, 51)
+
+-- Event: umumkan kematian ke semua pemain.
+function onPlayerDeath(victimid, killerid, reason)
+    local v = romp.getPlayerName(victimid) or ("id " .. victimid)
+    if killerid == 255 then
+        romp.sendChatToAll(romp.KIND_SYS, "*** " .. v .. " mati.")
+    else
+        local k = romp.getPlayerName(killerid) or ("id " .. killerid)
+        romp.sendChatToAll(romp.KIND_SYS,
+            "*** " .. k .. " membunuh " .. v .. ".")
+    end
+end
+```
+
+Paket: `0x46` DEATH_REPORT (frame 3 byte, client → server, validasi
+killerid connect/`reason` 0..60/payload pas 2 byte — tak valid dibuang
+diam-diam) & `0x47` DEATH_MSG (frame 4 byte, server → semua client) —
+lihat `PROTOCOL.md`. Pemain yang join belakangan tidak menerima riwayat
+kill feed. Client C++: `IROMPPlatform::OnDeathMessage` +
+`Client::SendDeathReport`; Godot: sinyal `death_msg`.
+
 ### World settings ala SA-MP (gravity, weather, world time)
 
 State dunia bersifat global (sama untuk semua pemain) dan otoritatif di

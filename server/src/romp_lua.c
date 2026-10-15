@@ -17,6 +17,7 @@
 #include "romp_attach.h"
 #include "romp_skill.h"
 #include "romp_marker.h"
+#include "romp_death.h"
 
 #include "../vendor/sqlite/sqlite3.h"
 
@@ -1632,6 +1633,26 @@ static int l_romp_get_player_marker_for_player(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- API kill feed ala SA-MP ----------------
+ * romp.sendDeathMessage(killerid, victimid, weaponid) -> bool
+ *   Mirip SA-MP SendDeathMessage: broadcast kill feed manual (0x47
+ *   DEATH_MSG) ke semua pemain. TIDAK menyalakan event onPlayerDeath
+ *   (sama seperti SA-MP). killerid 255 = tak ada pembunuh
+ *   (romp.DEATH_KILLER_NONE); victimid harus pemain yang connect;
+ *   weaponid/reason 0..60 (1..46 senjata, 49..54 kode khusus ala SA-MP).
+ *   false bila argumen tak valid.
+ * Event: onPlayerDeath(victimid, killerid, reason) — ala SA-MP
+ *   OnPlayerDeath; menyala HANYA untuk laporan kematian dari client
+ *   (paket 0x46), bukan untuk sendDeathMessage manual.
+ */
+static int l_romp_send_death_message(lua_State *Ls) {
+    int killerid = (int)luaL_checkinteger(Ls, 1);
+    int victimid = (int)luaL_checkinteger(Ls, 2);
+    int weaponid = (int)luaL_checkinteger(Ls, 3);
+    lua_pushboolean(Ls, death_send(killerid, victimid, weaponid));
+    return 1;
+}
+
 /* ---------------- API world settings ala SA-MP ----------------
  * romp.setGravity(gravity) -> bool
  *   ala SA-MP SetGravity; default GTA:SA 0.008. Valid 0.001..0.5,
@@ -2047,6 +2068,9 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_set_player_marker_for_player); lua_setfield(Ls, -2, "setPlayerMarkerForPlayer");
     lua_pushcfunction(Ls, l_romp_clear_player_marker_for_player); lua_setfield(Ls, -2, "clearPlayerMarkerForPlayer");
     lua_pushcfunction(Ls, l_romp_get_player_marker_for_player); lua_setfield(Ls, -2, "getPlayerMarkerForPlayer");
+    /* kill feed ala SA-MP (SendDeathMessage / OnPlayerDeath) */
+    lua_pushcfunction(Ls, l_romp_send_death_message); lua_setfield(Ls, -2, "sendDeathMessage");
+    lua_pushinteger(Ls, DEATH_KILLER_NONE); lua_setfield(Ls, -2, "DEATH_KILLER_NONE");
     /* konstanta mode marker ala SA-MP (PLAYER_MARKERS_MODE_* di a_samp.inc) */
     lua_pushinteger(Ls, MARKER_MODE_OFF);      lua_setfield(Ls, -2, "MARKER_MODE_OFF");
     lua_pushinteger(Ls, MARKER_MODE_GLOBAL);  lua_setfield(Ls, -2, "MARKER_MODE_GLOBAL");
@@ -2609,6 +2633,21 @@ void lua_on_player_weapon_shot(int pid, int weaponid, int hittype, int hitid,
     EvShot e = { pid, weaponid, hittype, hitid, x, y, z };
     fs_event("onPlayerWeaponShot", push_shot, &e);
     call_event("onPlayerWeaponShot", push_shot, &e);
+}
+
+typedef struct { int victim; int killer; int reason; } EvDeath;
+static int push_death(lua_State *Ls, void *ud) {
+    EvDeath *e = (EvDeath *)ud;
+    lua_pushinteger(Ls, e->victim);
+    lua_pushinteger(Ls, e->killer);
+    lua_pushinteger(Ls, e->reason);
+    return 3;
+}
+
+void lua_on_player_death(int victimid, int killerid, int reason) {
+    EvDeath e = { victimid, killerid, reason };
+    fs_event("onPlayerDeath", push_death, &e);
+    call_event("onPlayerDeath", push_death, &e);
 }
 
 typedef struct { int pid; int oldi; int newi; } EvInt;

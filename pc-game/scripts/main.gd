@@ -35,6 +35,7 @@ var _remote_cars: Dictionary = {}  # vid -> RemoteCar
 var _objects: Dictionary = {}   # objid -> MeshInstance3D (objek SA-MP)
 var _actors: Dictionary = {}    # actorid -> RemoteActor (actor SA-MP)
 var _mp_players: Array = []     # [{id, name}] untuk scoreboard
+var _my_nick: String = ""      # nickname pemain lokal (untuk kill feed)
 var _hostname := ""
 var _ping_ms := -1
 var _connecting := false
@@ -139,6 +140,7 @@ func _setup_multiplayer() -> void:
 	net.skill_set.connect(_on_skill_set)
 	net.marker_set.connect(_on_marker_set)
 	net.marker_mode.connect(_on_marker_mode)
+	net.death_msg.connect(_on_death_msg)
 	net.teleport.connect(_on_teleport)
 	net.ping_updated.connect(_on_ping_updated)
 	net.label_spawn.connect(_on_label_spawn)
@@ -174,6 +176,7 @@ func _setup_multiplayer() -> void:
 
 func _on_menu_connect(nickname: String, host: String, port: int, password: String) -> void:
 	_connecting = true
+	_my_nick = nickname
 	_update_mp_status("… menghubungkan")
 	net.connect_to(host, port, nickname, password)
 
@@ -351,6 +354,41 @@ func _on_marker_mode(mode: int) -> void:
 	# Mode 0 (off) cukup disimpan: nametag tetap dipakai fitur nametag,
 	# warna marker di radar Android ditangani mapicon.html.
 	marker_mode = mode
+
+
+## Kill feed ala SA-MP (SendDeathMessage / OnPlayerDeath) — paket 0x47.
+const DEATH_REASON_NAMES := {
+	49: "Tabrakan", 50: "Baling-baling", 51: "Ledakan",
+	53: "Tenggelam", 54: "Jatuh",
+}
+
+func _mp_name_of(pid: int) -> String:
+	if pid == net.player_id:
+		return _my_nick if _my_nick != "" else "Saya"
+	for p: Dictionary in _mp_players:
+		if int(p["id"]) == pid:
+			return String(p["name"])
+	return "Pemain#%d" % pid
+
+func _death_reason_name(weaponid: int) -> String:
+	if DEATH_REASON_NAMES.has(weaponid):
+		return String(DEATH_REASON_NAMES[weaponid])
+	if weaponid >= 1 and weaponid <= 46:
+		return "Senjata#%d" % weaponid
+	return "???"
+
+
+func _on_death_msg(killerid: int, victimid: int, weaponid: int) -> void:
+	# Baris kill feed ala SA-MP: "pembunuh [senjata] korban"
+	# (killerid 255 = tak ada pembunuh, mis. jatuh/ledakan sendiri).
+	var victim_name := _mp_name_of(victimid)
+	var line: String
+	if killerid == 255:
+		line = "%s ☠ [%s]" % [victim_name, _death_reason_name(weaponid)]
+	else:
+		line = "%s ☠ [%s] %s" % [_mp_name_of(killerid),
+				_death_reason_name(weaponid), victim_name]
+	mp_chat.add_message(RompNet.CHAT_INFO, line)
 
 
 func _on_teleport(x: float, y: float, z: float) -> void:

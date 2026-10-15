@@ -24,6 +24,7 @@
 #include "romp_attach.h"
 #include "romp_skill.h"
 #include "romp_marker.h"
+#include "romp_death.h"
 
 #include <time.h>
 #include <pthread.h>
@@ -1035,6 +1036,7 @@ static void dispatch(Client *c, uint8_t type, const uint8_t *p, size_t n) {
         case P_NUI_CB: handle_nui_callback(c, p, n); break;
         case P_VEH:   vehicle_on_packet(c, p, n); break;
         case P_WPN:   weapon_on_packet(c, p, n); break;
+        case P_DEATH_REPORT: death_on_report(c, p, n); break;
         default: break;
     }
 }

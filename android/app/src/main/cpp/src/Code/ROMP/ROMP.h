@@ -146,6 +146,15 @@ public:
     virtual void OnPlayerMarker(uint8_t /*pid*/, uint32_t /*color*/) {}
     virtual void OnPlayerMarkerMode(uint8_t /*mode*/) {}
 
+    // Kill feed ala SA-MP (paket 0x47 DEATH_MSG, dari laporan client 0x46
+    // atau romp.sendDeathMessage). killerid 255 = tak ada pembunuh,
+    // reason = id senjata ala SA-MP (1..46) / kode khusus (49..54).
+    // Default no-op.
+    // TODO(GAME): tampilkan baris kill feed ala SA-MP di pojok kanan atas
+    //   ("pembunuh [senjata] korban") saat pemain lokal/mana pun mati.
+    virtual void OnDeathMessage(uint8_t /*killerid*/, uint8_t /*victimid*/,
+                                uint8_t /*weaponid*/) {}
+
     // Log ke konsol game / logcat.
     virtual void Log(const std::string& msg) = 0;
 
@@ -231,6 +240,13 @@ public:
     // Kirim callback NUI (JS -> Lua) ke server. Dipanggil platform saat
     // JavaScript memanggil window.romp.postMessage(name, dataJson).
     bool SendNuiCallback(const std::string& name, const std::string& dataJson);
+
+    // Lapor kematian pemain lokal ke server (paket 0x46 DEATH_REPORT).
+    // killerid 255 = tak ada pembunuh; reason = id senjata / kode khusus.
+    // Server memvalidasi lalu broadcast kill feed 0x47.
+    // Dipanggil platform saat ped pemain lokal mati di game.
+    // TODO(GAME): hubungkan ke hook kematian ped GTA:SA.
+    bool SendDeathReport(uint8_t killerid, uint8_t reason);
 
     // Dipanggil TIAP FRAME game. Menangani: Pump net, kirim POS tiap
     // 100 ms, interpolasi + MoveRemotePlayer, PING tiap 15 detik.

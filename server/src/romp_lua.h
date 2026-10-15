@@ -71,6 +71,12 @@ void lua_on_actor_death(int actorid, int killerid);
  * hitid, x, y, z). */
 void lua_on_player_weapon_shot(int pid, int weaponid, int hittype, int hitid,
                                float x, float y, float z);
+/* Event kill feed ala SA-MP (tidak ada default C; gamemode opsional).
+ * Mirip OnPlayerDeath: onPlayerDeath(victimid, killerid, reason) — menyala
+ * hanya untuk laporan kematian dari client (0x46), TIDAK untuk
+ * romp.sendDeathMessage manual (ala SA-MP SendDeathMessage tak menyalakan
+ * OnPlayerDeath). killerid 255 = tak ada pembunuh. */
+void lua_on_player_death(int victimid, int killerid, int reason);
 /* Event interior & virtual world ala SA-MP (tidak ada default C):
  * onPlayerInteriorChange(pid, old, new),
  * onPlayerVirtualWorldChange(pid, old, new). */

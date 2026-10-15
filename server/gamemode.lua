@@ -174,6 +174,22 @@ function onPlayerJoin(id, name)
     return true
 end
 
+-- Kill feed ala SA-MP: menyala hanya untuk laporan kematian dari client
+-- (paket 0x46), TIDAK untuk /deathmsg (romp.sendDeathMessage manual).
+function onPlayerDeath(victimid, killerid, reason)
+    local vname = romp.getPlayerName(victimid) or ("id " .. victimid)
+    local line
+    if killerid == 255 then
+        line = "*** " .. vname .. " mati (" .. reason .. ")."
+    else
+        local kname = romp.getPlayerName(killerid) or ("id " .. killerid)
+        line = "*** " .. kname .. " membunuh " .. vname
+            .. " (senjata " .. reason .. ")."
+    end
+    romp.sendChatToAll(romp.KIND_SYS, line)
+    return true
+end
+
 -- Pemain leave. reason: 0=quit, 1=kick, 2=timeout.
 -- Default C: "*** <nama> (id) keluar/di-kick/timeout."
 function onPlayerLeave(id, name, reason)
@@ -606,6 +622,26 @@ function onPlayerCommand(id, name, cmd, args)
         else
             romp.sendChatToPlayer(id, romp.KIND_INFO,
                 "*** Gagal: pid tak valid.")
+        end
+        return true
+    elseif cmd == "deathmsg" then
+        -- Demo kill feed ala SA-MP (SendDeathMessage manual):
+        -- /deathmsg <killer> <victim> <weapon>.
+        -- killer 255 = tak ada pembunuh. Broadcast 0x47 ke semua pemain
+        -- TANPA menyalakan event onPlayerDeath (ala SA-MP).
+        local k, v, w = args:match("(%d+)%s+(%d+)%s+(%d+)")
+        k, v, w = tonumber(k), tonumber(v), tonumber(w)
+        if not k or not v or not w then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Pakai: /deathmsg <killer 0-255> <victim> <weapon>.")
+            return true
+        end
+        if romp.sendDeathMessage(k, v, w) then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                string.format("*** Kill feed terkirim: %d [%d] %d.", k, w, v))
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal: id pemain/senjata tak valid.")
         end
         return true
     elseif cmd == "modif" then

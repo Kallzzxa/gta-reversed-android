@@ -52,6 +52,8 @@ const T_ATTACH_OBJ := 0x3F
 const T_SKILL_SET := 0x43
 const T_MARKER_SET := 0x44
 const T_MARKER_MODE := 0x45
+const T_DEATH_REPORT := 0x46
+const T_DEATH_MSG := 0x47
 const T_NUI := 0x40
 
 const VER := 1
@@ -110,6 +112,7 @@ signal attach_obj_remove(pid: int, index: int)
 signal skill_set(pid: int, skill: int, level: int)
 signal marker_set(pid: int, color: int)
 signal marker_mode(mode: int)
+signal death_msg(killerid: int, victimid: int, weaponid: int)
 signal nui_message(json_text: String)
 signal ping_updated(ms: int)
 
@@ -407,6 +410,10 @@ func _dispatch(ftype: int, payload: PackedByteArray) -> void:
 		T_MARKER_MODE:
 			# Mode marker ala SA-MP (0x45): 0=off, 1=global, 2=streamed.
 			marker_mode.emit(r.u8())
+		T_DEATH_MSG:
+			# Kill feed ala SA-MP (0x47): killerid 255 = tak ada pembunuh,
+			# reason = id senjata ala SA-MP / kode khusus (49..54).
+			death_msg.emit(r.u8(), r.u8(), r.u8())
 		T_WPN_SYNC:
 			var shooter := r.u16()
 			var weapon := r.u16()
