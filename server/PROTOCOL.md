@@ -351,8 +351,72 @@ Konstanta: `romp.SKILL_PISTOL` .. `romp.SKILL_SNIPERRIFLE` (0..10),
 `romp.SKILL_COUNT` (= 11), `romp.SKILL_DEFAULT_LEVEL` (= 1).
 Tak ada event Lua (skill bersifat pasif, seperti di SA-MP).
 
-Test: `~/workspace/romp/tests/test_vehicleparams.py`
-(+ `test_vehicleparams_gamemode.lua`) — cek set/get/validasi/broadcast/resync/vw/per-player.
+Test: `~/workspace/romp/tests/test_skill.py`
+(+ `test_skill_gamemode.lua`) — cek set/get/validasi/default/timpa/
+per-pemain/NPC/cleanup.
+
+### 0x44 MARKER_SET & 0x45 MARKER_MODE (Server -> Client)
+Player marker ala SA-MP (`ShowPlayerMarkers` / `SetPlayerMarkerForPlayer` /
+`GetPlayerColor`): warna marker radar per pemain (0xRRGGBBAA), otomatis
+dari palet 16 warna berdasar id saat connect (termasuk NPC) — bisa dibaca
+gamemode via `romp.getPlayerColor(pid)` dan diganti via
+`romp.setPlayerColor(pid, color)`. Override per-viewer ala
+`SetPlayerMarkerForPlayer`: viewer melihat pemain tertentu dengan warna
+berbeda (disimpan per-viewer di server, bukan global).
+
+Frame `0x44` MARKER_SET (6 byte):
+
+```
+u8  pid        // pemain yang warna markernya berubah
+u32 color      // warna marker EFEKTIF 0xRRGGBBAA (LE)
+```
+
+Frame `0x45` MARKER_MODE (2 byte):
+
+```
+u8  mode       // 0=off, 1=global, 2=streamed (default 2, ala SA-MP)
+```
+
+`0x44` membawa warna *efektif* menurut pandangan client penerima
+(override per-viewer sudah diterapkan server) dan dikirim **vw-scoped**:
+hanya ke client yang se-vw & se-interior dengan target (termasuk target
+itu sendiri). `0x45` di-broadcast global ke semua client. Bila mode = 0
+(off), `0x44` tidak dikirim sama sekali (client menyembunyikan marker);
+saat mode dinyalakan kembali, semua warna efektif dikirim ulang.
+Resync: pemain baru menerima `0x45` + `0x44` semua pemain yang terlihat
+(`marker_sync_join`); pemain lama diberitahu warna pemain yang baru join
+(`marker_broadcast_color` di `do_join` / `npc_connect`); pindah
+interior/vw me-resync dua arah (`marker_sync_world`, idempoten).
+Keluar/disconnect membersihkan override yang menarget id tersebut agar
+id yang dipakai ulang tak mewarisi override basi. NPC: state warna +
+override jalan normal; paket ke NPC no-op via `client_send_frame`.
+
+API Lua (lihat `server/README.md`):
+`romp.showPlayerMarkers(mode)` -> bool,
+`romp.getPlayerMarkersMode()` -> int,
+`romp.setPlayerColor(pid, color)` -> bool,
+`romp.getPlayerColor(pid)` -> color | nil,
+`romp.setPlayerMarkerForPlayer(viewer, showpid, color)` -> bool,
+`romp.clearPlayerMarkerForPlayer(viewer, showpid)` -> bool,
+`romp.getPlayerMarkerForPlayer(viewer, showpid)` -> color | nil.
+Konstanta: `romp.MARKER_MODE_OFF` (= 0), `romp.MARKER_MODE_GLOBAL` (= 1),
+`romp.MARKER_MODE_STREAMED` (= 2).
+Tak ada event Lua (marker bersifat pasif, seperti di SA-MP).
+
+Jembatan NUI (radar WebView Android): helper auto-load
+`server/marker.lua` mengirim tiap detik via `0x40` ke `mapicon.html`:
+`{"action":"playerMarkerMode","mode":N}`,
+`{"action":"playerMarker","pid":N,"x":..,"y":..,"z":..,"color":N}`,
+`{"action":"removePlayerMarker","pid":N}`.
+Client game sesungguhnya merender dari `0x44`/`0x45` langsung
+(C++: `IROMPPlatform::OnPlayerMarker`/`OnPlayerMarkerMode`; Godot:
+sinyal `marker_set`/`marker_mode` -> warna nametag 3D).
+
+Test: `~/workspace/romp/tests/test_marker.py`
+(+ `test_marker_gamemode.lua`) — cek mode/default/broadcast/vw-scope/
+override/resync/NPC/mode-off; parse unit C++ di
+`tests/client/test_marker_parse.cpp`; cek sinyal Godot di
+`pc-game/tests/mp_client_test.gd` (via `test_godot_mp.py`).
 
 ### 0x21 CHAT_MSG
 

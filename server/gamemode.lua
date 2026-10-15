@@ -542,6 +542,72 @@ function onPlayerCommand(id, name, cmd, args)
         romp.sendChatToPlayer(id, romp.KIND_INFO,
             "*** Skill: " .. table.concat(parts, " "))
         return true
+    elseif cmd == "markers" then
+        -- Mode marker radar ala SA-MP (ShowPlayerMarkers):
+        -- /markers <0=off|1=global|2=streamed>.
+        local m = tonumber(args)
+        if romp.showPlayerMarkers(m) then
+            local mn = ({"off", "global", "streamed"})[m + 1] or m
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Mode marker: " .. mn .. ".")
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Pakai: /markers <0|1|2>.")
+        end
+        return true
+    elseif cmd == "pcolor" then
+        -- Warna marker pemain ala SA-MP (GetPlayerColor/SetPlayerColor):
+        -- /pcolor <pid> <hex RRGGBB|RRGGBBAA>. Tanpa argumen = lihat warna.
+        local tp, hx = args:match("(%d+)%s+(%x+)")
+        tp = tonumber(tp)
+        if not tp then
+            local c = romp.getPlayerColor(id)
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                string.format("*** Warna markermu: 0x%08X.", c or 0))
+            return true
+        end
+        local col = tonumber(hx, 16)
+        -- hex 6 digit -> tambah alpha FF
+        if col and #hx <= 6 then col = col * 256 + 0xFF end
+        if col and romp.setPlayerColor(tp, col) then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                string.format("*** Warna marker id %d = 0x%08X.", tp, col))
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Pakai: /pcolor <pid> <hex>, mis. /pcolor 0 FF0000.")
+        end
+        return true
+    elseif cmd == "pmark" then
+        -- Override warna marker per-viewer ala SA-MP
+        -- (SetPlayerMarkerForPlayer): /pmark <pid> <hex> | /pmark <pid> off.
+        local tp, hx = args:match("(%d+)%s+(%S+)")
+        tp = tonumber(tp)
+        if not tp or not hx then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Pakai: /pmark <pid> <hex|off>.")
+            return true
+        end
+        if hx:lower() == "off" then
+            if romp.clearPlayerMarkerForPlayer(id, tp) then
+                romp.sendChatToPlayer(id, romp.KIND_INFO,
+                    "*** Override marker id " .. tp .. " dihapus.")
+            else
+                romp.sendChatToPlayer(id, romp.KIND_INFO,
+                    "*** Tak ada override untuk id " .. tp .. ".")
+            end
+            return true
+        end
+        local col = tonumber(hx, 16)
+        if col and #hx <= 6 then col = col * 256 + 0xFF end
+        if col and romp.setPlayerMarkerForPlayer(id, tp, col) then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                string.format("*** Menurutmu, marker id %d = 0x%08X.",
+                    tp, col))
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal: pid tak valid.")
+        end
+        return true
     elseif cmd == "modif" then
         -- Komponen kendaraan ala SA-MP (AddVehicleComponent/paintjob):
         -- /modif -> buat Infernus (411) di depan pemain + pasang spoiler

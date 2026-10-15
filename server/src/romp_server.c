@@ -23,6 +23,7 @@
 #include "romp_world.h"
 #include "romp_attach.h"
 #include "romp_skill.h"
+#include "romp_marker.h"
 
 #include <time.h>
 #include <pthread.h>
@@ -420,6 +421,10 @@ void player_set_world(Client *c, int interior, uint32_t vw) {
             if (v && v->driver == c->id) vehicle_set_vw(v->id, vw);
         }
     }
+    /* Resync player marker dua arah (idempoten): interior/vw yang berubah
+     * mengubah siapa yang saling terlihat. */
+    if (old_vw != vw || old_int != c->interior)
+        marker_sync_world(c);
     log_msg("[vw] %s (id %d): interior %d->%d, vw %u->%u",
             c->name, c->id, old_int, c->interior, old_vw, vw);
 }
@@ -538,12 +543,19 @@ static void do_join(Client *c) {
     /* stream attached object yang sudah ada ke pemain baru */
     attach_sync_join(c);
 
+    /* resync player marker: mode + warna semua yang terlihat */
+    marker_sync_join(c);
+
     /* resync world settings (gravity/weather/time) ke pemain baru */
     world_send_to(c);
 
     /* beritahu yang lain (hanya yang se-vw & se-interior) */
     size_t jn = build_join(b, c);
     broadcast_scoped(b, jn, c, c);
+
+    /* beritahu viewer lama warna marker pemain yang baru join
+     * (joiner sendiri sudah dapat via marker_sync_join) */
+    marker_broadcast_color(c, c);
 
     char msg[128];
     snprintf(msg, sizeof(msg), "*** %s (id %d) bergabung.", c->name, c->id);
@@ -564,6 +576,8 @@ static void do_leave(Client *c, int reason) {
     attach_on_player_leave(c);
     /* reset weapon skill ke default (per-pemain, tanpa paket) */
     skill_on_player_leave(c);
+    /* bersihkan state player marker (override & array miliknya) */
+    marker_on_player_leave(c);
     /* bersihkan params kendaraan per-pemain miliknya (ala SA-MP) */
     vehicle_params_player_cleanup(c->id);
     uint8_t b[4];
@@ -626,6 +640,8 @@ int npc_connect(const char *name) {
     c->ping_ms = -1; /* belum terukur sampai probe pertama dijawab */
     /* Weapon skill: semua mulai dari level default ala SA-MP. */
     skill_init(c);
+    /* Player marker: warna otomatis dari palet ala SA-MP. */
+    marker_init(c);
     c->last_activity = now_ms();
     strncpy(c->ip, "npc", sizeof(c->ip) - 1);
     c->next = g_clients;
@@ -635,6 +651,9 @@ int npc_connect(const char *name) {
     uint8_t b[64];
     size_t jn = build_join(b, c);
     broadcast_scoped(b, jn, c, NULL);
+
+    /* beritahu viewer warna marker NPC yang baru connect */
+    marker_broadcast_color(c, NULL);
 
     char msg[128];
     snprintf(msg, sizeof(msg), "*** %s (id %d) bergabung.", c->name, c->id);
@@ -659,6 +678,8 @@ void npc_disconnect(int id, int reason) {
     attach_on_player_leave(c);
     /* reset weapon skill milik NPC ini ke default */
     skill_on_player_leave(c);
+    /* bersihkan state player marker milik NPC ini */
+    marker_on_player_leave(c);
     /* salin field yang dipakai setelah free */
     int nid = c->id;
     uint8_t interior = c->interior;
@@ -831,6 +852,8 @@ static void handle_hello(Client *c, const uint8_t *p, size_t n) {
     c->ac_stat_known = 0;
     /* Weapon skill: semua mulai dari level default ala SA-MP. */
     skill_init(c);
+    /* Player marker: warna otomatis dari palet ala SA-MP. */
+    marker_init(c);
     c->last_activity = now_ms();
     do_join(c);
 }

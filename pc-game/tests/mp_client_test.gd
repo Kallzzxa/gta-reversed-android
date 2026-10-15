@@ -62,6 +62,8 @@ func _run() -> void:
 	_net.world_settings.connect(_on_world)
 	_net.teleport.connect(_on_teleport)
 	_net.ping_updated.connect(_on_ping)
+	_net.marker_set.connect(_on_mset)
+	_net.marker_mode.connect(_on_mmode)
 
 	# --- 1. Handshake + WELCOME ---
 	_net.connect_to("127.0.0.1", _port, "GodotTes", "rahasia")
@@ -104,6 +106,23 @@ func _run() -> void:
 
 	# --- 5. Ping client->server->client ---
 	_check(await _wait("pong", 8.0), "ping_pong_terukur")
+
+	# --- 5a. Player marker ala SA-MP (0x44/0x45): frame sintetik langsung
+	# ke parser, verifikasi sinyal marker_set & marker_mode emit tepat ---
+	_ev.erase("marker_set_ok")
+	_ev.erase("marker_mode_ok")
+	var mpay := StreamPeerBuffer.new()
+	mpay.big_endian = false
+	mpay.put_u8(5)          # pid
+	mpay.put_u32(0xFF0000FF)  # warna merah opaque (LE)
+	var mmode := StreamPeerBuffer.new()
+	mmode.big_endian = false
+	mmode.put_u8(2)         # mode streamed
+	_net._inbuf.append_array(_mk_frame(RompNet.T_MARKER_SET, mpay.data_array))
+	_net._inbuf.append_array(_mk_frame(RompNet.T_MARKER_MODE, mmode.data_array))
+	_net._parse()
+	_check(_ev.get("marker_set_ok", false), "marker_set_diterima")
+	_check(_ev.get("marker_mode_ok", false), "marker_mode_diterima")
 
 	# --- 6. Password salah -> REJECT -> connect_failed ---
 	_ev.erase("failed")
@@ -221,3 +240,24 @@ func _on_teleport(x: float, y: float, z: float) -> void:
 func _on_ping(ms: int) -> void:
 	if ms >= 0 and ms < 5000:
 		_ev["pong"] = true
+
+
+## Frame sintetik ala protokol (u16 len LE + u8 tipe + payload) untuk
+## menyuntik paket ke parser tanpa perlu server.
+func _mk_frame(ftype: int, payload: PackedByteArray) -> PackedByteArray:
+	var spb := StreamPeerBuffer.new()
+	spb.big_endian = false
+	spb.put_u16(payload.size() + 1)
+	spb.put_u8(ftype)
+	spb.put_data(payload)
+	return spb.data_array
+
+
+func _on_mset(pid: int, color: int) -> void:
+	if pid == 5 and color == 0xFF0000FF:
+		_ev["marker_set_ok"] = true
+
+
+func _on_mmode(mode: int) -> void:
+	if mode == 2:
+		_ev["marker_mode_ok"] = true

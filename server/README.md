@@ -325,6 +325,45 @@ romp.setPlayerSkillLevel(id, romp.SKILL_M4, 800)
 local t = romp.getPlayerSkillLevels(id)
 ```
 
+### Player marker ala SA-MP (`ShowPlayerMarkers` / `SetPlayerMarkerForPlayer` / `GetPlayerColor`)
+
+Warna marker radar per pemain (0xRRGGBBAA), otomatis dari palet 16 warna
+berdasar id saat connect (termasuk NPC) — seperti SA-MP yang memberi
+warna otomatis. Gamemode bisa mengganti warna sendiri
+(`romp.setPlayerColor`) atau menimpa warna pemain lain menurut pandangan
+satu viewer saja (`romp.setPlayerMarkerForPlayer` — override disimpan
+per-viewer di server, bukan global).
+
+Mode marker global ala `ShowPlayerMarkers`: 0=off (tak ada marker yang
+dikirim), 1=global, 2=streamed (default; sama dengan global di RO-MP
+karena belum ada streaming berbasis jarak).
+
+| API | Keterangan |
+|-----|------------|
+| `romp.showPlayerMarkers(mode)` | Set mode marker global → `true`/`false`. Broadcast `0x45`; bila dinyalakan kembali, warna dikirim ulang. |
+| `romp.getPlayerMarkersMode()` | Mode saat ini (0/1/2). |
+| `romp.setPlayerColor(pid, color)` | Ganti warna marker milik pemain (0xRRGGBBAA) → `true`/`false`. Broadcast `0x44` vw-scoped. |
+| `romp.getPlayerColor(pid)` | Warna marker milik pemain (int) / nil bila pid tak valid. Ala SA-MP `GetPlayerColor`. |
+| `romp.setPlayerMarkerForPlayer(viewer, showpid, color)` | Override: `viewer` melihat `showpid` dengan `color` → `true`/`false`. `0x44` hanya ke viewer. |
+| `romp.clearPlayerMarkerForPlayer(viewer, showpid)` | Hapus override → `true` bila ada yang dihapus. |
+| `romp.getPlayerMarkerForPlayer(viewer, showpid)` | Warna marker *efektif* (override / warna target) / nil. |
+| `romp.MARKER_MODE_OFF` / `GLOBAL` / `STREAMED` | Konstanta mode = 0 / 1 / 2. |
+
+Paket: `0x44` MARKER_SET (frame 6 byte: pid + u32 color LE — warna
+efektif per-viewer, vw-scoped) & `0x45` MARKER_MODE (frame 2 byte: mode,
+broadcast global) — lihat `PROTOCOL.md`. Resync otomatis saat join,
+pindah interior/vw, dan saat mode dinyalakan. Tak ada event (marker
+bersifat pasif, seperti di SA-MP).
+
+```lua
+-- /markers: ganti mode marker.
+romp.showPlayerMarkers(romp.MARKER_MODE_GLOBAL)
+-- /pcolor: warnai marker sendiri merah.
+romp.setPlayerColor(id, 0xFF0000FF)
+-- /pmark: menurut id, marker pemain 3 berwarna hijau.
+romp.setPlayerMarkerForPlayer(id, 3, 0x00FF00FF)
+```
+
 ### World settings ala SA-MP (gravity, weather, world time)
 
 State dunia bersifat global (sama untuk semua pemain) dan otoritatif di

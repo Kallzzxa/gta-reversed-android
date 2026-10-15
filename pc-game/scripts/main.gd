@@ -137,6 +137,8 @@ func _setup_multiplayer() -> void:
 	net.attach_obj_set.connect(_on_attach_obj_set)
 	net.attach_obj_remove.connect(_on_attach_obj_remove)
 	net.skill_set.connect(_on_skill_set)
+	net.marker_set.connect(_on_marker_set)
+	net.marker_mode.connect(_on_marker_mode)
 	net.teleport.connect(_on_teleport)
 	net.ping_updated.connect(_on_ping_updated)
 	net.label_spawn.connect(_on_label_spawn)
@@ -329,6 +331,26 @@ func _on_skill_set(pid: int, skill: int, level: int) -> void:
 		_player_skills[pid] = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 	if skill >= 0 and skill < 11:
 		_player_skills[pid][skill] = level
+
+
+## Player marker ala SA-MP (paket 0x44/0x45): warna marker efektif
+## per-pemain (0xRRGGBBAA) dan mode tampilan (0=off, 1=global,
+## 2=streamed). Marker divisualkan lewat warna nametag 3D pemain
+## remote (lihat remote_player.gd).
+var marker_colors: Dictionary = {}  # pid -> warna 0xRRGGBBAA
+var marker_mode: int = 2
+
+
+func _on_marker_set(pid: int, color: int) -> void:
+	marker_colors[pid] = color
+	if _remotes.has(pid):
+		_remotes[pid].set_marker_color(color)
+
+
+func _on_marker_mode(mode: int) -> void:
+	# Mode 0 (off) cukup disimpan: nametag tetap dipakai fitur nametag,
+	# warna marker di radar Android ditangani mapicon.html.
+	marker_mode = mode
 
 
 func _on_teleport(x: float, y: float, z: float) -> void:

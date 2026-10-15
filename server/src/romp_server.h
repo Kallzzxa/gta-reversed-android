@@ -72,6 +72,10 @@ typedef int SOCKET;
 /* ---- Weapon skill ala SA-MP (lihat romp_skill.h & PROTOCOL.md) ---- */
 #define P_SKILL_SET   0x43  /* server -> client: level skill pemain berubah */
 
+/* ---- Player marker ala SA-MP (lihat romp_marker.h & PROTOCOL.md) ---- */
+#define P_MARKER_SET  0x44  /* server -> client: warna marker pemain (pid+u32) */
+#define P_MARKER_MODE 0x45  /* server -> client: mode marker global (u8) */
+
 /* ---- Sinkronisasi senjata & tembakan ala SA-MP (lihat PROTOCOL.md) ---- */
 #define P_WPN         0x17  /* client -> server: event tembakan */
 #define P_WPN_SYNC    0x18  /* server -> client: broadcast tembakan */
@@ -182,6 +186,14 @@ extern Config g_cfg;
 
 /* Jumlah skill senjata ala SA-MP (lihat romp_skill.h): id 0..10. */
 #define SKILL_COUNT 11
+
+/* Override warna marker per-viewer ala SA-MP SetPlayerMarkerForPlayer
+ * (lihat romp_marker.h): viewer melihat pemain `pid` dengan `color`
+ * (0xRRGGBBAA), menimpa warna milik target. */
+typedef struct {
+    int      pid;
+    uint32_t color;
+} MarkerOverride;
 typedef struct {
     int      used;      /* 1 = slot terisi */
     uint32_t modelid;   /* model objek SA-MP, != 0 */
@@ -259,6 +271,14 @@ typedef struct Client {
      * skill, otoritatif server, default SKILL_DEFAULT_LEVEL. Per-pemain:
      * 0x43 SKILL_SET hanya dikirim ke pemiliknya sendiri. */
     int      skill[SKILL_COUNT];
+    /* Player marker ala SA-MP (lihat romp_marker.h): warna marker radar
+     * milik pemain ini (0xRRGGBBAA, default dari palet otomatis) +
+     * override warna per-viewer ala SetPlayerMarkerForPlayer
+     * (array dinamis kecil — override jarang dipakai). */
+    uint32_t marker_color;
+    MarkerOverride *marker_ovs;
+    int      marker_novs;
+    int      marker_capovs;
     struct Client *next;
 } Client;
 

@@ -32,6 +32,7 @@
       box-shadow: 0 0 6px rgba(255, 255, 255, .35); }
   .blip.cp { border-radius: 2px; transform: rotate(45deg); }
   .blip.flash { animation: blink 1s steps(2, start) infinite; }
+  .blip.mk { width: 10px; height: 10px; margin: -5px 0 0 -5px; }
   @keyframes blink { 50% { opacity: .15; } }
   .gzone {
       position: absolute; border: 1px solid rgba(255, 255, 255, .25);
@@ -59,6 +60,9 @@ window.onRomMessage = function (json) {
   else if (msg.action === "playerPos") { setPos(msg); }
   else if (msg.action === "setGangZone") renderZone(msg);
   else if (msg.action === "removeGangZone") removeZone(msg.id);
+  else if (msg.action === "playerMarkerMode") setMarkerMode(msg);
+  else if (msg.action === "playerMarker") renderMarker(msg);
+  else if (msg.action === "removePlayerMarker") removeMarker(msg.pid);
 };
 
 var radar = document.getElementById("mi-radar");
@@ -128,6 +132,74 @@ function setPos(m) {
     if (d) place(d, blips[id].m);
   }
   for (var zid in zones) placeZone(zones[zid].d, zones[zid].m);
+  for (var mpid in markers) placeMarker(markers[mpid].d, markers[mpid].m);
+}
+
+// ---------- Player marker ala SA-MP (marker.lua via 0x40) ----------
+// {"action":"playerMarker","pid":n,"x":f,"y":f,"z":f,"color":0xRRGGBBAA}
+// {"action":"removePlayerMarker","pid":n}
+// {"action":"playerMarkerMode","mode":0|1|2}
+// Lingkaran kecil berwarna per pemain, proyeksi/skala sama seperti
+// map icon di atas (relatif posisi sendiri, tempel di tepi radar).
+var markerMode = 2; // 0=off, 1=global, 2=streamed
+var markers = {};   // pid -> {m: pesan terakhir, d: elemen}
+
+function setMarkerMode(m) {
+  markerMode = Number(m.mode) || 0;
+  if (markerMode === 0) {
+    // mode off: sembunyikan semua marker pemain
+    for (var pid in markers) {
+      var mk = markers[pid];
+      if (mk.d && mk.d.parentNode) mk.d.parentNode.removeChild(mk.d);
+      delete markers[pid];
+    }
+  } else {
+    for (var pid2 in markers) placeMarker(markers[pid2].d, markers[pid2].m);
+  }
+}
+
+function renderMarker(m) {
+  if (markerMode === 0) return;
+  var mk = markers[m.pid];
+  if (!mk) {
+    var d = document.createElement("div");
+    d.id = "mk-" + m.pid;
+    d.className = "blip mk";
+    radar.appendChild(d);
+    mk = markers[m.pid] = { m: m, d: d };
+  } else {
+    mk.m = m;
+  }
+  mk.d.style.background = cssColor(m.color);
+  mk.d.title = "Pemain " + m.pid;
+  placeMarker(mk.d, mk.m);
+}
+
+function placeMarker(d, m) {
+  if (!havePos) { d.style.display = "none"; return; }
+  if (markerMode === 0) { d.style.display = "none"; return; }
+  if (markerMode === 2) {
+    var dx = m.x - px, dy = m.y - py;
+    if ((dx * dx + dy * dy) > LOCAL_RANGE * LOCAL_RANGE) {
+      d.style.display = "none"; return;
+    }
+  }
+  d.style.display = "";
+  var dxp = (m.x - px) * SCALE, dyp = (m.y - py) * SCALE;
+  var dist = Math.sqrt(dxp * dxp + dyp * dyp);
+  if (dist > R) { // tempel di tepi radar ala panah offscreen SA-MP
+    dxp = dxp / dist * R; dyp = dyp / dist * R;
+  }
+  d.style.left = (75 + dxp) + "px";
+  d.style.top = (75 - dyp) + "px"; // +y dunia = utara = atas
+}
+
+function removeMarker(pid) {
+  var mk = markers[pid];
+  if (mk) {
+    if (mk.d && mk.d.parentNode) mk.d.parentNode.removeChild(mk.d);
+    delete markers[pid];
+  }
 }
 
 // ---------- GangZone ala SA-MP: kotak warna di radar ----------

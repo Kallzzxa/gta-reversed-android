@@ -116,3 +116,15 @@ func remove_attach(index: int) -> void:
 	if _attaches.has(index):
 		_attaches[index].queue_free()
 		_attaches.erase(index)
+
+
+## Player marker ala SA-MP (paket 0x44): warnai nametag 3D pemain dengan
+## warna marker efektif dari server (0xRRGGBBAA ala SA-MP).
+func set_marker_color(color_u32: int) -> void:
+	if _nametag == null:
+		return
+	_nametag.modulate = Color(
+		((color_u32 >> 24) & 0xFF) / 255.0,
+		((color_u32 >> 16) & 0xFF) / 255.0,
+		((color_u32 >> 8) & 0xFF) / 255.0,
+		(color_u32 & 0xFF) / 255.0)

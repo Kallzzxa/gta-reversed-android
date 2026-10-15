@@ -433,6 +433,20 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
             platform_->OnPlayerSkill(si.pid, si.skill, si.level);
             break;
         }
+        case PacketType::MARKER_SET: {
+            // Player marker (romp.setPlayerColor/setPlayerMarkerForPlayer).
+            MarkerSetInfo mi;
+            if (!parse_marker_set(payload, len, mi)) break;
+            platform_->OnPlayerMarker(mi.pid, mi.color);
+            break;
+        }
+        case PacketType::MARKER_MODE: {
+            // Mode marker global (romp.showPlayerMarkers).
+            uint8_t mode = 0;
+            if (!parse_marker_mode(payload, len, mode)) break;
+            platform_->OnPlayerMarkerMode(mode);
+            break;
+        }
         default:
             // Tipe tak dikenal: abaikan (forward-compat protokol).
             break;

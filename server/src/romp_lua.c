@@ -16,6 +16,7 @@
 #include "romp_world.h"
 #include "romp_attach.h"
 #include "romp_skill.h"
+#include "romp_marker.h"
 
 #include "../vendor/sqlite/sqlite3.h"
 
@@ -1544,6 +1545,93 @@ static int l_romp_get_player_skill_levels(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- API player marker ala SA-MP ----------------
+ * romp.showPlayerMarkers(mode) -> bool
+ *   Mirip SA-MP ShowPlayerMarkers: 0=off, 1=global, 2=streamed
+ *   (romp.MARKER_MODE_OFF/GLOBAL/STREAMED; default 2). Broadcast 0x45
+ *   ke semua client; bila dinyalakan kembali, warna dikirim ulang.
+ *   false bila mode tak valid.
+ * romp.getPlayerMarkersMode() -> int (0/1/2)
+ * romp.setPlayerColor(pid, color) -> bool
+ *   Ganti warna marker milik pemain (0xRRGGBBAA). Broadcast 0x44
+ *   vw-scoped (warna efektif per-viewer). false bila pid tak valid.
+ * romp.getPlayerColor(pid) -> color | nil
+ *   (ala SA-MP GetPlayerColor; warna otomatis dari palet saat connect)
+ * romp.setPlayerMarkerForPlayer(viewer, showpid, color) -> bool
+ *   ala SA-MP SetPlayerMarkerForPlayer: viewer melihat showpid dengan
+ *   warna `color` (override per-viewer). 0x44 hanya ke viewer.
+ * romp.clearPlayerMarkerForPlayer(viewer, showpid) -> bool
+ *   Hapus override (kembalikan ke warna milik target). true bila ada
+ *   override yang dihapus.
+ * romp.getPlayerMarkerForPlayer(viewer, showpid) -> color | nil
+ *   Warna marker EFEKTIF showpid menurut pandangan viewer.
+ */
+static int l_romp_show_player_markers(lua_State *Ls) {
+    int mode = (int)luaL_checkinteger(Ls, 1);
+    lua_pushboolean(Ls, marker_set_mode(mode));
+    return 1;
+}
+
+static int l_romp_get_player_markers_mode(lua_State *Ls) {
+    lua_pushinteger(Ls, (lua_Integer)marker_get_mode());
+    return 1;
+}
+
+static int l_romp_set_player_color(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    lua_Integer col = luaL_checkinteger(Ls, 2);
+    if (col < 0 || col > 0xFFFFFFFF) {
+        lua_pushboolean(Ls, 0);
+        return 1;
+    }
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && marker_set_color(c, (uint32_t)col));
+    return 1;
+}
+
+static int l_romp_get_player_color(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(pid);
+    if (!c || !c->handshaked || c->dead) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, (lua_Integer)marker_get_color(c));
+    return 1;
+}
+
+static int l_romp_set_player_marker_for_player(lua_State *Ls) {
+    int viewer = (int)luaL_checkinteger(Ls, 1);
+    int showpid = (int)luaL_checkinteger(Ls, 2);
+    lua_Integer col = luaL_checkinteger(Ls, 3);
+    if (col < 0 || col > 0xFFFFFFFF) {
+        lua_pushboolean(Ls, 0);
+        return 1;
+    }
+    Client *v = client_by_id(viewer);
+    lua_pushboolean(Ls, v && marker_set_for(v, showpid, (uint32_t)col));
+    return 1;
+}
+
+static int l_romp_clear_player_marker_for_player(lua_State *Ls) {
+    int viewer = (int)luaL_checkinteger(Ls, 1);
+    int showpid = (int)luaL_checkinteger(Ls, 2);
+    Client *v = client_by_id(viewer);
+    lua_pushboolean(Ls, v && marker_clear_for(v, showpid));
+    return 1;
+}
+
+static int l_romp_get_player_marker_for_player(lua_State *Ls) {
+    int viewer = (int)luaL_checkinteger(Ls, 1);
+    int showpid = (int)luaL_checkinteger(Ls, 2);
+    Client *v = client_by_id(viewer);
+    Client *t = client_by_id(showpid);
+    if (!v || !v->handshaked || v->dead ||
+        !t || !t->handshaked || t->dead) {
+        lua_pushnil(Ls);
+        return 1;
+    }
+    lua_pushinteger(Ls, (lua_Integer)marker_effective(v, t));
+    return 1;
+}
+
 /* ---------------- API world settings ala SA-MP ----------------
  * romp.setGravity(gravity) -> bool
  *   ala SA-MP SetGravity; default GTA:SA 0.008. Valid 0.001..0.5,
@@ -1951,6 +2039,18 @@ static void script_register_api(lua_State *Ls) {
     lua_pushinteger(Ls, SKILL_SNIPERRIFLE);   lua_setfield(Ls, -2, "SKILL_SNIPERRIFLE");
     lua_pushinteger(Ls, SKILL_COUNT);          lua_setfield(Ls, -2, "SKILL_COUNT");
     lua_pushinteger(Ls, SKILL_DEFAULT_LEVEL); lua_setfield(Ls, -2, "SKILL_DEFAULT_LEVEL");
+    /* player marker ala SA-MP (ShowPlayerMarkers/SetPlayerMarkerForPlayer/GetPlayerColor) */
+    lua_pushcfunction(Ls, l_romp_show_player_markers); lua_setfield(Ls, -2, "showPlayerMarkers");
+    lua_pushcfunction(Ls, l_romp_get_player_markers_mode); lua_setfield(Ls, -2, "getPlayerMarkersMode");
+    lua_pushcfunction(Ls, l_romp_set_player_color); lua_setfield(Ls, -2, "setPlayerColor");
+    lua_pushcfunction(Ls, l_romp_get_player_color); lua_setfield(Ls, -2, "getPlayerColor");
+    lua_pushcfunction(Ls, l_romp_set_player_marker_for_player); lua_setfield(Ls, -2, "setPlayerMarkerForPlayer");
+    lua_pushcfunction(Ls, l_romp_clear_player_marker_for_player); lua_setfield(Ls, -2, "clearPlayerMarkerForPlayer");
+    lua_pushcfunction(Ls, l_romp_get_player_marker_for_player); lua_setfield(Ls, -2, "getPlayerMarkerForPlayer");
+    /* konstanta mode marker ala SA-MP (PLAYER_MARKERS_MODE_* di a_samp.inc) */
+    lua_pushinteger(Ls, MARKER_MODE_OFF);      lua_setfield(Ls, -2, "MARKER_MODE_OFF");
+    lua_pushinteger(Ls, MARKER_MODE_GLOBAL);  lua_setfield(Ls, -2, "MARKER_MODE_GLOBAL");
+    lua_pushinteger(Ls, MARKER_MODE_STREAMED); lua_setfield(Ls, -2, "MARKER_MODE_STREAMED");
     /* world settings ala SA-MP (SetGravity/SetWeather/SetWorldTime) */
     lua_pushcfunction(Ls, l_romp_set_gravity); lua_setfield(Ls, -2, "setGravity");
     lua_pushcfunction(Ls, l_romp_get_gravity); lua_setfield(Ls, -2, "getGravity");
@@ -2072,6 +2172,7 @@ static const struct { const char *file; const char *desc; } g_helpers[] = {
     { "scoreboard.lua", "API scoreboard aktif" },
     { "nametag.lua",    "API nametag & chat bubble aktif" },
     { "gangzone.lua",   "API gang zone aktif" },
+    { "marker.lua",     "API player marker (radar) aktif" },
 };
 
 /* Siapkan satu modul script: state baru + API + file + helper.

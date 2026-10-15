@@ -136,6 +136,16 @@ public:
     virtual void OnPlayerSkill(uint8_t /*pid*/, uint8_t /*skill*/,
                                uint16_t /*level*/) {}
 
+    // Player marker ala SA-MP (paket 0x44/0x45, dari
+    // romp.setPlayerColor/setPlayerMarkerForPlayer/showPlayerMarkers).
+    // OnPlayerMarker: warna marker efektif pemain pid menurut pandangan
+    // client ini (0xRRGGBBAA). OnPlayerMarkerMode: mode global
+    // (0=off, 1=global, 2=streamed). Default no-op.
+    // TODO(GAME): gambar blip berwarna di radar/minimap GTA:SA untuk
+    //   tiap pemain remote; mode 0 = sembunyikan semua blip pemain.
+    virtual void OnPlayerMarker(uint8_t /*pid*/, uint32_t /*color*/) {}
+    virtual void OnPlayerMarkerMode(uint8_t /*mode*/) {}
+
     // Log ke konsol game / logcat.
     virtual void Log(const std::string& msg) = 0;
 

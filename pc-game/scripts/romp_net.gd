@@ -50,6 +50,8 @@ const T_VEH_PARAMS := 0x3D
 const T_VEH_PARAMS_P := 0x3E
 const T_ATTACH_OBJ := 0x3F
 const T_SKILL_SET := 0x43
+const T_MARKER_SET := 0x44
+const T_MARKER_MODE := 0x45
 const T_NUI := 0x40
 
 const VER := 1
@@ -106,6 +108,8 @@ signal vehicle_params_p(vid: int, pid: int, objective: int, doorslocked: int)
 signal attach_obj_set(pid: int, index: int, modelid: int, bone: int, off: Vector3, rot: Vector3, scale: Vector3)
 signal attach_obj_remove(pid: int, index: int)
 signal skill_set(pid: int, skill: int, level: int)
+signal marker_set(pid: int, color: int)
+signal marker_mode(mode: int)
 signal nui_message(json_text: String)
 signal ping_updated(ms: int)
 
@@ -396,6 +400,13 @@ func _dispatch(ftype: int, payload: PackedByteArray) -> void:
 		T_SKILL_SET:
 			# Weapon skill ala SA-MP (0x43): per-pemain.
 			skill_set.emit(r.u8(), r.u8(), r.u16())
+		T_MARKER_SET:
+			# Player marker ala SA-MP (0x44): warna marker efektif per-pemain
+			# (override per-viewer sudah diterapkan server), 0xRRGGBBAA.
+			marker_set.emit(r.u8(), r.u32())
+		T_MARKER_MODE:
+			# Mode marker ala SA-MP (0x45): 0=off, 1=global, 2=streamed.
+			marker_mode.emit(r.u8())
 		T_WPN_SYNC:
 			var shooter := r.u16()
 			var weapon := r.u16()

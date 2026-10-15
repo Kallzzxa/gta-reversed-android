@@ -80,6 +80,10 @@ enum class PacketType : uint8_t {
                           // remove: pid+index+modelid=0 (6B payload)
     // Weapon skill ala SA-MP (SetPlayerSkillLevel), server -> client.
     SKILL_SET    = 0x43,  // level berubah: pid+skill+u16 level (4B payload)
+    // Player marker ala SA-MP (ShowPlayerMarkers/SetPlayerMarkerForPlayer/
+    // GetPlayerColor), server -> client.
+    MARKER_SET   = 0x44,  // warna marker: u8 pid + u32 color LE (5B payload)
+    MARKER_MODE  = 0x45,  // mode marker global: u8 mode (1B payload)
 };
 
 // Alasan PLAYER_LEAVE (u8 reason).
@@ -717,6 +721,30 @@ inline bool parse_skill_set(const uint8_t* data, size_t len,
     if (!r.get_u8(out.skill)) return false;
     if (!r.get_u16(out.level)) return false;
     return len == 4;  // tolak payload kepanjangan/kependekan
+}
+
+// ---- Player marker ala SA-MP (server -> client) ----
+
+struct MarkerSetInfo {
+    uint8_t pid = 0;       // pemain yang warna markernya berubah (u8)
+    uint32_t color = 0;    // warna marker efektif 0xRRGGBBAA (u32 LE)
+};
+
+// 0x44 MARKER_SET: u8 pid | u32 color (LE) (5 byte payload).
+inline bool parse_marker_set(const uint8_t* data, size_t len,
+                             MarkerSetInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u8(out.pid)) return false;
+    if (!r.get_u32(out.color)) return false;
+    return len == 5;  // tolak payload kepanjangan/kependekan
+}
+
+// 0x45 MARKER_MODE: u8 mode (1 byte payload: 0=off, 1=global, 2=streamed).
+inline bool parse_marker_mode(const uint8_t* data, size_t len,
+                              uint8_t& out_mode) {
+    if (len != 1) return false;
+    out_mode = data[0];
+    return out_mode <= 2;
 }
 
 struct ChatMsgInfo {
