@@ -557,6 +557,35 @@ icon agar radar UI bisa menggambar blip relatif terhadap pemain; state
 dibersihkan saat pemain leave.
 Halaman UI referensi: `android/app/src/main/assets/romp/nui/mapicon.html`.
 
+### GangZone ala SA-MP (NUI_MESSAGE `0x40`)
+
+```json
+{"action":"setGangZone","id":"gz3","zoneid":3,
+ "minx":100.0,"miny":200.0,"maxx":300.0,"maxy":400.0,
+ "color":4278190335,"flash":0}
+{"action":"removeGangZone","id":"gz3"}
+```
+
+API Lua di `server/gangzone.lua` (dimuat otomatis seperti `mapicon.lua`),
+mirip SA-MP `GangZoneCreate`/`GangZoneShowForPlayer`/dst:
+`romp.createGangZone(minx, miny, maxx, maxy)` (maks 1024 zona, min>max
+otomatis ditukar) / `romp.destroyGangZone(zid)` /
+`romp.showGangZoneForPlayer(pid, zid, color)` /
+`romp.showGangZoneForAll(zid, color)` / `romp.hideGangZoneForPlayer(pid, zid)`
+/ `romp.hideGangZoneForAll(zid)` / `romp.flashGangZoneForPlayer(pid, zid,
+flashcolor)` / `romp.flashGangZoneForAll(zid, flashcolor)` /
+`romp.stopGangZoneFlashForPlayer(pid, zid)` /
+`romp.stopGangZoneFlashForAll(zid)` / `romp.getGangZone(zid)` /
+`romp.getVisibleGangZones(pid)`.
+
+`color`/`flash`: 0xRRGGBBAA. `flash`: 0 = tidak berkedip, selain itu UI
+bergantian warna dasar & warna flash tiap 0.5 detik. Zona adalah entitas
+global tapi visibilitasnya per-pemain (seperti SA-MP); zona yang terlihat
+dikirim ulang saat pemain join, state dibersihkan saat pemain leave.
+Dirender sebagai kotak semi-transparan di radar `mapicon.html`.
+Command demo di gamemode: `/gz create|show|showall|flash|stopflash|hide|
+hideall|destroy|list`.
+
 ### Kendaraan ala SA-MP (NUI_MESSAGE `0x40`)
 
 ```json

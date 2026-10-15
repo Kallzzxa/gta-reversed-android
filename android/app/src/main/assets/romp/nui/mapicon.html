@@ -33,6 +33,9 @@
   .blip.cp { border-radius: 2px; transform: rotate(45deg); }
   .blip.flash { animation: blink 1s steps(2, start) infinite; }
   @keyframes blink { 50% { opacity: .15; } }
+  .gzone {
+      position: absolute; border: 1px solid rgba(255, 255, 255, .25);
+      pointer-events: none; }
   .me {
       position: absolute; left: 50%; top: 50%;
       width: 0; height: 0; margin: -7px 0 0 -6px;
@@ -54,6 +57,8 @@ window.onRomMessage = function (json) {
   if (msg.action === "setMapIcon") render(msg);
   else if (msg.action === "removeMapIcon") remove(msg.id);
   else if (msg.action === "playerPos") { setPos(msg); }
+  else if (msg.action === "setGangZone") renderZone(msg);
+  else if (msg.action === "removeGangZone") removeZone(msg.id);
 };
 
 var radar = document.getElementById("mi-radar");
@@ -122,6 +127,59 @@ function setPos(m) {
     var d = el(id);
     if (d) place(d, blips[id].m);
   }
+  for (var zid in zones) placeZone(zones[zid].d, zones[zid].m);
+}
+
+// ---------- GangZone ala SA-MP: kotak warna di radar ----------
+var zones = {}; // id -> {m: pesan terakhir, d: elemen, timer: interval flash}
+
+function removeZone(id) {
+  var z = zones[id];
+  if (z) {
+    if (z.timer) clearInterval(z.timer);
+    if (z.d && z.d.parentNode) z.d.parentNode.removeChild(z.d);
+  }
+  delete zones[id];
+}
+
+function zoneBg(m, alt) {
+  // flash != 0 -> bergantian warna dasar & warna flash tiap 0.5 dtk
+  var c = (alt && m.flash) ? m.flash : m.color;
+  var rgba = cssColor(c);
+  // jadikan semi-transparan ala zona SA-MP (maks alpha 0.45)
+  return rgba.replace(/[\d.]+\)$/, "0.35)");
+}
+
+function renderZone(m) {
+  removeZone(m.id);
+  var d = document.createElement("div");
+  d.id = "gz-" + m.id;
+  d.className = "gzone";
+  radar.insertBefore(d, radar.firstChild); // di bawah blip
+  var z = { m: m, d: d, timer: null };
+  zones[m.id] = z;
+  if (m.flash) {
+    var alt = false;
+    z.timer = setInterval(function () {
+      alt = !alt;
+      d.style.background = zoneBg(m, alt);
+    }, 500);
+  }
+  d.style.background = zoneBg(m, false);
+  placeZone(d, m);
+}
+
+function placeZone(d, m) {
+  if (!havePos) { d.style.display = "none"; return; }
+  d.style.display = "";
+  var x1 = 75 + (m.minx - px) * SCALE;
+  var y1 = 75 - (m.maxy - py) * SCALE; // +y dunia = utara = atas
+  var x2 = 75 + (m.maxx - px) * SCALE;
+  var y2 = 75 - (m.miny - py) * SCALE;
+  d.style.left = x1 + "px";
+  d.style.top = y1 + "px";
+  d.style.width = Math.max(0, x2 - x1) + "px";
+  d.style.height = Math.max(0, y2 - y1) + "px";
 }
 </script>
 </body>

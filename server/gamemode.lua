@@ -340,6 +340,72 @@ function onPlayerCommand(id, name, cmd, args)
                 "*** Kamu belum punya label (/label dulu).")
         end
         return true
+    elseif cmd == "gz" then
+        -- GangZone ala SA-MP (kotak warna di radar):
+        -- /gz create <minx> <miny> <maxx> <maxy>
+        -- /gz show <id> [rrggbbaa-hex] | /gz showall <id> [hex]
+        -- /gz flash <id> <hex> | /gz stopflash <id>
+        -- /gz hide <id> | /gz hideall <id> | /gz destroy <id> | /gz list
+        local sub, rest = args:match("^(%S+)%s*(.*)$")
+        sub = sub or ""
+        if sub == "create" then
+            local a, b, c, d = rest:match(
+                "^([%d%.%-]+)%s+([%d%.%-]+)%s+([%d%.%-]+)%s+([%d%.%-]+)")
+            a, b, c, d = tonumber(a), tonumber(b), tonumber(c), tonumber(d)
+            if not a then
+                romp.sendChatToPlayer(id, romp.KIND_INFO,
+                    "*** Pakai: /gz create <minx> <miny> <maxx> <maxy>")
+                return true
+            end
+            local zid = romp.createGangZone(a, b, c, d)
+            romp.sendChatToPlayer(id, romp.KIND_INFO, zid and
+                ("*** GangZone dibuat (id " .. zid .. "). /gz show " ..
+                 zid .. " untuk menampilkannya.") or
+                "*** Gagal membuat GangZone (penuh?).")
+        elseif sub == "show" or sub == "showall" or sub == "flash"
+            or sub == "hide" or sub == "hideall" or sub == "destroy"
+            or sub == "stopflash" then
+            local zid = tonumber((rest:match("^(%d+)")))
+            if not zid then
+                romp.sendChatToPlayer(id, romp.KIND_INFO,
+                    "*** Pakai: /gz " .. sub .. " <id> [warna-hex]")
+                return true
+            end
+            local hex = rest:match("%s+([0-9A-Fa-f]+)%s*$")
+            local color = hex and tonumber(hex, 16)
+            local ok
+            if sub == "show" then
+                ok = romp.showGangZoneForPlayer(id, zid, color or 0xFF0000FF)
+            elseif sub == "showall" then
+                ok = romp.showGangZoneForAll(zid, color or 0xFF0000FF)
+            elseif sub == "flash" then
+                ok = romp.flashGangZoneForPlayer(id, zid,
+                    color or 0xFFFFFFFF)
+            elseif sub == "stopflash" then
+                ok = romp.stopGangZoneFlashForPlayer(id, zid)
+            elseif sub == "hide" then
+                ok = romp.hideGangZoneForPlayer(id, zid)
+            elseif sub == "hideall" then
+                ok = romp.hideGangZoneForAll(zid)
+            else
+                ok = romp.destroyGangZone(zid)
+            end
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** /gz " .. sub .. " " .. zid .. ": " .. tostring(ok))
+        elseif sub == "list" then
+            local parts = {}
+            for zid, v in pairs(romp.getVisibleGangZones(id)) do
+                parts[#parts + 1] = zid .. (v.flash ~= 0 and "*" or "")
+            end
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** GangZone terlihat: " ..
+                (#parts > 0 and table.concat(parts, ", ") or "-"))
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Pakai: /gz create|show|showall|flash|stopflash|" ..
+                "hide|hideall|destroy|list")
+        end
+        return true
     end
     return false
 end
