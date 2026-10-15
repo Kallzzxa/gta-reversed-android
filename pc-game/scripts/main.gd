@@ -121,6 +121,10 @@ func _setup_multiplayer() -> void:
 	net.vehicle_seat.connect(_on_vehicle_seat)
 	net.teleport.connect(_on_teleport)
 	net.ping_updated.connect(_on_ping_updated)
+	net.label_spawn.connect(_on_label_spawn)
+	net.label_despawn.connect(_on_label_despawn)
+	net.label_text.connect(_on_label_text)
+	net.label_pos.connect(_on_label_pos)
 
 	mp_chat = MpChatScript.new()
 	add_child(mp_chat)
@@ -243,6 +247,69 @@ func _on_teleport(x: float, y: float, z: float) -> void:
 	# 0x27 POS_SET ala SA-MP SetPlayerPos.
 	player.global_position = Vector3(x, y, z)
 	player.velocity = Vector3.ZERO
+
+
+## 3D text label ala SA-MP (Create3DTextLabel) — paket 0x28-0x2B.
+var _labels: Dictionary = {}  # labelid -> Label3D
+
+
+func _label_color(color: int) -> Color:
+	# 0xRRGGBBAA ala SA-MP -> Godot Color.
+	return Color(((color >> 24) & 0xFF) / 255.0,
+			((color >> 16) & 0xFF) / 255.0,
+			((color >> 8) & 0xFF) / 255.0,
+			(color & 0xFF) / 255.0)
+
+
+func _on_label_spawn(lid: int, atype: int, aid: int, x: float, y: float,
+		z: float, drawdist: float, color: int, text: String) -> void:
+	if _labels.has(lid):
+		_labels[lid].queue_free()
+	var lb := Label3D.new()
+	lb.text = text
+	lb.font_size = 64
+	lb.pixel_size = 0.006
+	lb.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lb.no_depth_test = true
+	lb.modulate = _label_color(color)
+	lb.outline_size = 8
+	lb.outline_modulate = Color(0, 0, 0, 1)
+	if drawdist > 0:
+		lb.visibility_range_end = drawdist
+	if atype == 1 and _remotes.has(aid):
+		# Attach ke pemain: ikut node remote (posisi di-sync client).
+		_remotes[aid].add_child(lb)
+		lb.position = Vector3(x, y, z)
+	elif atype == 2 and _remote_cars.has(aid):
+		# Attach ke kendaraan: ikut node mobil remote.
+		_remote_cars[aid].add_child(lb)
+		lb.position = Vector3(x, y, z)
+	else:
+		# Statis: posisi dunia.
+		add_child(lb)
+		lb.global_position = Vector3(x, y, z)
+	_labels[lid] = lb
+
+
+func _on_label_despawn(lid: int) -> void:
+	if _labels.has(lid):
+		_labels[lid].queue_free()
+		_labels.erase(lid)
+
+
+func _on_label_text(lid: int, color: int, text: String) -> void:
+	if _labels.has(lid):
+		_labels[lid].text = text
+		_labels[lid].modulate = _label_color(color)
+
+
+func _on_label_pos(lid: int, x: float, y: float, z: float) -> void:
+	if _labels.has(lid):
+		# Hanya label statis (tanpa parent entity) yang dipindah;
+		# label attached mengikuti entity-nya.
+		var lb: Label3D = _labels[lid]
+		if lb.get_parent() == self:
+			lb.global_position = Vector3(x, y, z)
 	mp_chat.add_message(RompNet.CHAT_INFO, "Di-teleport admin.")
 
 
@@ -276,6 +343,10 @@ func _clear_remotes() -> void:
 	for vid in _remote_cars:
 		_remote_cars[vid].queue_free()
 	_remote_cars.clear()
+	for lid in _labels:
+		if is_instance_valid(_labels[lid]):
+			_labels[lid].queue_free()
+	_labels.clear()
 
 
 func _refresh_scoreboard() -> void:

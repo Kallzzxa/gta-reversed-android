@@ -46,6 +46,11 @@ enum class PacketType : uint8_t {
     NUI_MESSAGE = 0x40,  // Server -> Client: pesan JSON untuk UI (WebView)
     NUI_CALLBACK= 0x41,  // Client -> Server: callback JS -> Lua
     NUI_FOCUS   = 0x42,  // Server -> Client: UI ambil/lepas fokus sentuhan
+    // 3D text label ala SA-MP (Create3DTextLabel), server -> client.
+    LABEL_SPAWN   = 0x28,  // label muncul
+    LABEL_DESPAWN = 0x29,  // label hilang
+    LABEL_TEXT    = 0x2A,  // ubah teks & warna label
+    LABEL_POS     = 0x2B,  // pindahkan label statis
 };
 
 // Alasan PLAYER_LEAVE (u8 reason).
@@ -264,6 +269,77 @@ struct PosSetInfo {
 // 0x27 POS_SET: teleport pemain lokal. x,y,z(float).
 inline bool parse_pos_set(const uint8_t* data, size_t len, PosSetInfo& out) {
     Reader r(data, len);
+    if (!r.get_float(out.x)) return false;
+    if (!r.get_float(out.y)) return false;
+    if (!r.get_float(out.z)) return false;
+    return true;
+}
+
+// Tipe attach label 3D (mirror LABEL_ATTACH_* di server).
+enum class LabelAttach : uint8_t {
+    None    = 0,  // statis: x,y,z = posisi dunia
+    Player  = 1,  // attach ke pemain: x,y,z = offset
+    Vehicle = 2,  // attach ke kendaraan: x,y,z = offset
+};
+
+struct LabelSpawnInfo {
+    uint16_t labelid = 0;
+    LabelAttach attach_type = LabelAttach::None;
+    uint16_t attach_id = 0xFFFF;  // pid/vid; 0xFFFF bila statis
+    float x = 0, y = 0, z = 0;    // statis: posisi; attached: offset
+    float drawdist = 0;
+    uint32_t color = 0;           // 0xRRGGBBAA ala SA-MP
+    std::string text;             // UTF-8
+};
+
+// 0x28 LABEL_SPAWN: labelid(u16) + attach_type(u8) + attach_id(u16) +
+//   x,y,z(float) + drawdist(float) + color(u32) + textlen(u8) + text.
+inline bool parse_label_spawn(const uint8_t* data, size_t len,
+                              LabelSpawnInfo& out) {
+    Reader r(data, len);
+    uint8_t atype = 0, tlen = 0;
+    if (!r.get_u16(out.labelid)) return false;
+    if (!r.get_u8(atype)) return false;
+    if (!r.get_u16(out.attach_id)) return false;
+    if (!r.get_float(out.x)) return false;
+    if (!r.get_float(out.y)) return false;
+    if (!r.get_float(out.z)) return false;
+    if (!r.get_float(out.drawdist)) return false;
+    if (!r.get_u32(out.color)) return false;
+    if (!r.get_u8(tlen)) return false;
+    if (!r.get_str(out.text, tlen)) return false;
+    out.attach_type = static_cast<LabelAttach>(atype);
+    return true;
+}
+
+struct LabelTextInfo {
+    uint16_t labelid = 0;
+    uint32_t color = 0;  // 0xRRGGBBAA
+    std::string text;
+};
+
+// 0x2A LABEL_TEXT: labelid(u16) + color(u32) + textlen(u8) + text.
+inline bool parse_label_text(const uint8_t* data, size_t len,
+                             LabelTextInfo& out) {
+    Reader r(data, len);
+    uint8_t tlen = 0;
+    if (!r.get_u16(out.labelid)) return false;
+    if (!r.get_u32(out.color)) return false;
+    if (!r.get_u8(tlen)) return false;
+    if (!r.get_str(out.text, tlen)) return false;
+    return true;
+}
+
+struct LabelPosInfo {
+    uint16_t labelid = 0;
+    float x = 0, y = 0, z = 0;
+};
+
+// 0x2B LABEL_POS: labelid(u16) + x,y,z(float). Hanya label statis.
+inline bool parse_label_pos(const uint8_t* data, size_t len,
+                            LabelPosInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u16(out.labelid)) return false;
     if (!r.get_float(out.x)) return false;
     if (!r.get_float(out.y)) return false;
     if (!r.get_float(out.z)) return false;

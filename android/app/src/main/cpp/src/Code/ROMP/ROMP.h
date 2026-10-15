@@ -56,6 +56,16 @@ public:
     // menimpa untuk memindahkan CPed lokal.
     virtual void TeleportLocalPlayer(float x, float y, float z) {}
 
+    // 3D text label ala SA-MP (paket 0x28-0x2B, dari romp.create3DTextLabel).
+    // Default no-op; platform game menimpa untuk render label di dunia.
+    // TODO(GAME): render teks 3D (billboard) di posisi / mengikuti entity.
+    virtual void OnLabelSpawn(const LabelSpawnInfo& /*info*/) {}
+    virtual void OnLabelDespawn(uint16_t /*labelid*/) {}
+    virtual void OnLabelText(uint16_t /*labelid*/, uint32_t /*color*/,
+                             const std::string& /*text*/) {}
+    virtual void OnLabelPos(uint16_t /*labelid*/, float /*x*/, float /*y*/,
+                            float /*z*/) {}
+
     // Log ke konsol game / logcat.
     virtual void Log(const std::string& msg) = 0;
 

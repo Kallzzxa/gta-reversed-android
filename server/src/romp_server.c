@@ -12,6 +12,7 @@
 #include "romp_server.h"
 #include "romp_lua.h"
 #include "romp_vehicle.h"
+#include "romp_label.h"
 #include "romp_weapon.h"
 #include "romp_anticheat.h"
 #include "romp_sqlite.h"
@@ -390,6 +391,7 @@ void player_set_world(Client *c, int interior, uint32_t vw) {
      * lalu bila pemain menyopir, kendaraan ikut pindah vw bersamanya. */
     if (old_vw != vw) {
         vehicle_sync_world(c, old_vw);
+        label_sync_world(c, old_vw);
         if (c->vehicle_id >= 0) {
             Vehicle *v = vehicle_by_id(c->vehicle_id);
             if (v && v->driver == c->id) vehicle_set_vw(v->id, vw);
@@ -501,6 +503,9 @@ static void do_join(Client *c) {
     /* stream kendaraan yang sudah ada ke pemain baru */
     vehicle_sync_join(c);
 
+    /* stream 3D text label yang sudah ada ke pemain baru */
+    label_sync_join(c);
+
     /* beritahu yang lain (hanya yang se-vw & se-interior) */
     size_t jn = build_join(b, c);
     broadcast_scoped(b, jn, c, c);
@@ -516,6 +521,8 @@ static void do_join(Client *c) {
 static void do_leave(Client *c, int reason) {
     if (!c->handshaked) return;
     c->handshaked = 0;
+    /* hapus 3D text label yang di-attach ke pemain ini (ala SA-MP) */
+    label_on_player_leave(c->id);
     uint8_t b[4];
     b[0] = P_LEAVE;
     put_u16(b + 1, (uint16_t)c->id);
@@ -599,6 +606,8 @@ void npc_disconnect(int id, int reason) {
     Client *c = client_by_id(id);
     if (!c || !c->is_npc || !c->handshaked) return;
     vehicle_remove_player_silent(id);
+    /* hapus 3D text label yang di-attach ke NPC ini (ala SA-MP) */
+    label_on_player_leave(id);
     /* salin field yang dipakai setelah free */
     int nid = c->id;
     uint8_t interior = c->interior;

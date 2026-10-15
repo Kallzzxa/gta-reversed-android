@@ -65,6 +65,12 @@ typedef int SOCKET;
 #define P_WPN_SYNC    0x18  /* server -> client: broadcast tembakan */
 #define P_WPN_SET     0x19  /* server -> client: set slot senjata pemain */
 
+/* ---- 3D text label ala SA-MP (lihat romp_label.h & PROTOCOL.md) ---- */
+#define P_LABEL_SPAWN   0x28  /* server -> client: label muncul */
+#define P_LABEL_DESPAWN 0x29  /* server -> client: label hilang */
+#define P_LABEL_TEXT    0x2A  /* server -> client: ubah teks & warna label */
+#define P_LABEL_POS     0x2B  /* server -> client: pindahkan label statis */
+
 /* ---- Protokol UDP query (server browser), port sama dengan TCP ---- */
 #define QUERY_MAGIC   "ROMP"
 #define QUERY_MAGIC_LEN 4

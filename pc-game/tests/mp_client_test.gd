@@ -51,6 +51,7 @@ func _run() -> void:
 	_net.player_pos.connect(_on_pos)
 	_net.chat_msg.connect(_on_chat)
 	_net.vehicle_spawn.connect(_on_vspawn)
+	_net.label_spawn.connect(_on_lspawn)
 	_net.teleport.connect(_on_teleport)
 	_net.ping_updated.connect(_on_ping)
 
@@ -66,6 +67,9 @@ func _run() -> void:
 
 	# --- 3. Kendaraan: peer kirim /veh -> VEH_SPAWN model 411 ---
 	_check(await _wait("veh", 10.0), "veh_spawn_diterima")
+
+	# --- 3b. 3D text label: peer kirim /lblgodot -> LABEL_SPAWN (0x28) ---
+	_check(await _wait("label", 10.0), "label_spawn_diterima")
 
 	# --- 4. Teleport 0x27 via /tpgodot ---
 	_net.send_chat("/tpgodot 500 600 70")
@@ -127,6 +131,14 @@ func _on_vspawn(_vid: int, model: int, _x: float, _y: float, _z: float,
 		_angle: float, _c1: int, _c2: int, _hp: int, _d: int) -> void:
 	if model == 411:
 		_ev["veh"] = true
+
+
+func _on_lspawn(_lid: int, atype: int, _aid: int, x: float, y: float,
+		z: float, dd: float, color: int, text: String) -> void:
+	if atype == 0 and text == "Label Godot" and absf(x - 30.0) < 0.5 \
+			and absf(y - 40.0) < 0.5 and absf(z - 5.0) < 0.5 \
+			and absf(dd - 100.0) < 0.5 and color == 0xFFFF00FF:
+		_ev["label"] = true
 
 
 func _on_teleport(x: float, y: float, z: float) -> void:

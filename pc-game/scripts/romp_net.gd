@@ -25,6 +25,10 @@ const T_LEAVE := 0x23
 const T_LIST := 0x24
 const T_INT_VW := 0x25
 const T_POS_SET := 0x27
+const T_LABEL_SPAWN := 0x28
+const T_LABEL_DESPAWN := 0x29
+const T_LABEL_TEXT := 0x2A
+const T_LABEL_POS := 0x2B
 const T_PING := 0x30
 const T_PONG := 0x31
 const T_NUI := 0x40
@@ -59,6 +63,10 @@ signal vehicle_seat(vid: int, seat: int, playerid: int)
 signal weapon_shot(shooterid: int, weaponid: int, hittype: int, hitid: int, x: float, y: float, z: float)
 signal int_vw(interior: int, virtual_world: int)
 signal teleport(x: float, y: float, z: float)
+signal label_spawn(labelid: int, attach_type: int, attach_id: int, x: float, y: float, z: float, drawdist: float, color: int, text: String)
+signal label_despawn(labelid: int)
+signal label_text(labelid: int, color: int, text: String)
+signal label_pos(labelid: int, x: float, y: float, z: float)
 signal nui_message(json_text: String)
 signal ping_updated(ms: int)
 
@@ -344,6 +352,23 @@ func _dispatch(ftype: int, payload: PackedByteArray) -> void:
 			int_vw.emit(r.u8(), r.u32())
 		T_POS_SET:
 			teleport.emit(r.f32(), r.f32(), r.f32())
+		T_LABEL_SPAWN:
+			var lid := r.u16()
+			var atype := r.u8()
+			var aid := r.u16()
+			var lx := r.f32()
+			var ly := r.f32()
+			var lz := r.f32()
+			var ldd := r.f32()
+			var lcolor := r.u32()
+			var ltext := r.str8()
+			label_spawn.emit(lid, atype, aid, lx, ly, lz, ldd, lcolor, ltext)
+		T_LABEL_DESPAWN:
+			label_despawn.emit(r.u16())
+		T_LABEL_TEXT:
+			label_text.emit(r.u16(), r.u32(), r.str8())
+		T_LABEL_POS:
+			label_pos.emit(r.u16(), r.f32(), r.f32(), r.f32())
 		T_PING:
 			_reply_pong(r.u32())
 		T_PONG:

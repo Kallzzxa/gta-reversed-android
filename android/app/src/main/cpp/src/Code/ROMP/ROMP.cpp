@@ -267,6 +267,34 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
                 platform_->OnNuiFocus(focused);
             break;
         }
+        case PacketType::LABEL_SPAWN: {
+            // Server membuat/menampilkan 3D text label (romp.create3DTextLabel).
+            LabelSpawnInfo li;
+            if (!parse_label_spawn(payload, len, li)) break;
+            platform_->OnLabelSpawn(li);
+            break;
+        }
+        case PacketType::LABEL_DESPAWN: {
+            if (len < 2) break;
+            uint16_t labelid = static_cast<uint16_t>(payload[0] |
+                                                     (payload[1] << 8));
+            platform_->OnLabelDespawn(labelid);
+            break;
+        }
+        case PacketType::LABEL_TEXT: {
+            // Server mengubah teks & warna label (romp.update3DTextLabelText).
+            LabelTextInfo lt;
+            if (!parse_label_text(payload, len, lt)) break;
+            platform_->OnLabelText(lt.labelid, lt.color, lt.text);
+            break;
+        }
+        case PacketType::LABEL_POS: {
+            // Server memindahkan label statis (romp.set3DTextLabelPos).
+            LabelPosInfo lp;
+            if (!parse_label_pos(payload, len, lp)) break;
+            platform_->OnLabelPos(lp.labelid, lp.x, lp.y, lp.z);
+            break;
+        }
         default:
             // Tipe tak dikenal: abaikan (forward-compat protokol).
             break;

@@ -248,6 +248,67 @@ perjalanan dari posisi lama diabaikan anti-cheat (grace 2 detik) supaya
 tidak memicu deteksi teleport palsu. Untuk NPC, `setPlayerPos` di-routing
 ke `npc_set_pos` (tak ada paket `0x27` — NPC tak punya socket).
 
+### 0x28 LABEL_SPAWN (Server -> Client)
+3D text label ala SA-MP `Create3DTextLabel` muncul. Label statis memakai
+posisi dunia; label yang di-attach memakai offset dari entity — client
+menghitung posisi label dari posisi pemain/kendaraan yang sudah di-sync
+(`0x11`/`0x13`), jadi server tidak perlu mengirim update posisi berkala.
+
+```
+u16 labelid
+u8  attach_type   // 0 = statis, 1 = pemain, 2 = kendaraan
+u16 attach_id     // playerid / vehicleid; 0xFFFF bila statis
+float x, y, z    // statis: posisi dunia; attached: offset dari entity
+float drawdist   // jarak render
+u32 color        // 0xRRGGBBAA ala SA-MP
+u8  textlen
+char text[textlen]   // UTF-8
+```
+
+### 0x29 LABEL_DESPAWN (Server -> Client)
+Label hilang (dihapus gamemode, atau ikut terhapus saat pemain disconnect
+/ kendaraan dihancurkan — ala SA-MP).
+
+```
+u16 labelid
+```
+
+### 0x2A LABEL_TEXT (Server -> Client)
+Ubah teks & warna label (`romp.update3DTextLabelText`).
+
+```
+u16 labelid
+u32 color        // 0xRRGGBBAA
+u8  textlen
+char text[textlen]
+```
+
+### 0x2B LABEL_POS (Server -> Client)
+Pindahkan label statis (`romp.set3DTextLabelPos`). Client mengabaikan
+paket ini untuk label yang di-attach.
+
+```
+u16 labelid
+float x, y, z
+```
+
+Label di-scope virtual world: `0x28`-`0x2B` hanya dikirim ke pemain yang
+vw-nya sama dengan vw efektif label (vw sendiri bila statis, vw entity
+bila di-attach). Saat pemain pindah vw, label vw lama di-despawn dan
+label vw baru di-spawn ulang ke pemain itu; label yang di-attach ke
+pemain tersebut ikut pindah vw dan di-resync ke semua viewer. Label yang
+di-attach ke kendaraan ikut pindah saat kendaraan ganti vw
+(`romp.setVehicleVirtualWorld`).
+
+API Lua (lihat `server/README.md`):
+`romp.create3DTextLabel(text, color, x, y, z, drawDist [, vw])`,
+`romp.delete3DTextLabel(id)`, `romp.update3DTextLabelText(id, color, text)`,
+`romp.set3DTextLabelPos(id, x, y, z)`,
+`romp.attach3DTextLabelToPlayer(id, pid [, ox, oy, oz])`,
+`romp.attach3DTextLabelToVehicle(id, vid [, ox, oy, oz])`,
+`romp.get3DTextLabels()` + konstanta `romp.LABEL_STATIC/LABEL_PLAYER/LABEL_VEHICLE`.
+Tak ada event Lua (label bersifat pasif, seperti di SA-MP).
+
 ## Interior & Virtual World (ala SA-MP)
 
 Setiap pemain punya `interior` (0-255) dan `virtual world` (0-2^31-1),
@@ -257,6 +318,7 @@ mereka sama. Yang di-scope:
 - `0x11 PLAYER_POS`, chat pemain (`0x20`/`KIND_CHAT`, `/me`), `0x18 WPN_SYNC`
 - `0x22 PLAYER_JOIN` / `0x23 PLAYER_LEAVE` (entity)
 - `0x24 PLAYER_LIST` (hanya yang terlihat)
+- `0x28`-`0x2B` 3D text label (vw efektif label; lihat atas)
 
 Pengumuman server (`romp.sendChatToAll`, join/kick) tetap global.
 Saat pemain pindah vw/interior, server otomatis mengirim `0x25` ke pemain

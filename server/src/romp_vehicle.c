@@ -3,6 +3,7 @@
  * Lihat romp_vehicle.h untuk desain protokol & API.
  */
 #include "romp_vehicle.h"
+#include "romp_label.h"
 #include "romp_lua.h"
 
 static Vehicle *g_vehicles = NULL;
@@ -173,6 +174,8 @@ int vehicle_destroy(int id) {
         if ((*pp)->id == id) {
             Vehicle *v = *pp;
             eject_all(v, 1);
+            /* 3D text label yang di-attach ikut terhapus (ala SA-MP) */
+            label_on_vehicle_destroy(id);
             bcast_veh_despawn(id, v->vw);
             *pp = v->next;
             free(v);
@@ -387,6 +390,8 @@ int vehicle_set_vw(int id, uint32_t vw) {
     bcast_veh_despawn(v->id, old);
     v->vw = vw;
     bcast_veh_spawn(v);
+    /* 3D text label yang di-attach ikut pindah vw */
+    label_sync_vehicle_world(v->id, old);
     for (int s = 0; s < VEH_SEATS; s++) {
         int occ = vehicle_occupant(v->id, s);
         if (occ >= 0) bcast_veh_seat(v, s, occ);

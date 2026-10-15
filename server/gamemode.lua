@@ -122,6 +122,7 @@ end
 -- Halaman UI: android/.../assets/romp/nui/textdraw.html
 -- ============================================================
 local demoTds = {}  -- id textdraw global demo
+local demoLabel = {}  -- id pemain -> id 3D text label demo
 
 local function hapusDemoTd()
     for _, tdid in ipairs(demoTds) do romp.destroyTextDraw(tdid) end
@@ -176,6 +177,9 @@ function onPlayerLeave(id, name, reason)
     local rs = reason == 1 and "di-kick" or reason == 2 and "timeout" or "keluar"
     romp.sendChatToAll(romp.KIND_SYS,
         "*** " .. name .. " (" .. id .. ") " .. rs .. ".")
+    -- Label yang di-attach sudah dihapus otomatis oleh server,
+    -- tapi referensi demo tetap dibersihkan.
+    demoLabel[id] = nil
     return true
 end
 
@@ -288,6 +292,43 @@ function onPlayerCommand(id, name, cmd, args)
         else
             romp.sendChatToPlayer(id, romp.KIND_INFO,
                 "*** Pakai: /tp <x> <y> <z>")
+        end
+        return true
+    elseif cmd == "label" then
+        -- 3D text label ala SA-MP (Create3DTextLabel): /label <teks>
+        -- Label statis dibuat di posisi pemain, lalu di-attach ke pemain
+        -- supaya mengikuti ke mana pun ia pergi.
+        if args == "" then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Pakai: /label <teks>")
+            return true
+        end
+        local x, y, z = romp.getPlayerPos(id)
+        if not x then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Posisi kamu belum diketahui server.")
+            return true
+        end
+        local lid = romp.create3DTextLabel(args, 0xFFFF00FF, x, y, z + 1.0, 80.0)
+        if lid and romp.attach3DTextLabelToPlayer(lid, id) then
+            demoLabel[id] = lid
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Label 3D dibuat & ditempel ke kamu (id " .. lid .. ").")
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal membuat label.")
+        end
+        return true
+    elseif cmd == "labeldel" then
+        -- Hapus label demo milik pemain.
+        local lid = demoLabel[id]
+        if lid and romp.delete3DTextLabel(lid) then
+            demoLabel[id] = nil
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Label 3D dihapus.")
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Kamu belum punya label (/label dulu).")
         end
         return true
     end

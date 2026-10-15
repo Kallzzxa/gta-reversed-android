@@ -118,6 +118,31 @@ bridge `window.romp.postMessage`, fokus sentuhan; JNI TODO seperti chat).
 | `romp.banIP(ip)` / `romp.unbanIP(ip)` / `romp.isIPBanned(ip)` | Ban IP (in-memory, dicek saat handshake) |
 | `romp.announceNow()` | Paksa announce ke master sekarang |
 
+**3D text label ala SA-MP (`Create3DTextLabel`):**
+
+| Fungsi | Keterangan |
+|---|---|
+| `romp.create3DTextLabel(text, color, x, y, z, drawDist [, vw])` | Buat label statis → labelid / nil. `color` = `0xRRGGBBAA`, `drawDist` <= 0 = default 100 |
+| `romp.delete3DTextLabel(id)` | Hapus label → `true`/`false` |
+| `romp.update3DTextLabelText(id, color, text)` | Ubah teks & warna → `true`/`false` |
+| `romp.set3DTextLabelPos(id, x, y, z)` | Pindahkan label statis → `true`/`false` (gagal bila di-attach) |
+| `romp.attach3DTextLabelToPlayer(id, pid [, ox, oy, oz])` | Tempel ke pemain (default offset di atas kepala) → `true`/`false` |
+| `romp.attach3DTextLabelToVehicle(id, vid [, ox, oy, oz])` | Tempel ke kendaraan → `true`/`false` |
+| `romp.get3DTextLabels()` | Array `{ {id, text, color, x, y, z, drawdist, vw, attach={type, pid/vid, ox, oy, oz}}, ... }` |
+| `romp.LABEL_STATIC` / `LABEL_PLAYER` / `LABEL_VEHICLE` | Konstanta `attach.type` (0/1/2) |
+
+Label yang di-attach ikut terhapus saat pemain disconnect / kendaraan
+dihancurkan (ala SA-MP), dan ikut pindah virtual world bersama entity-nya.
+Paket: `0x28` LABEL_SPAWN / `0x29` LABEL_DESPAWN / `0x2A` LABEL_TEXT /
+`0x2B` LABEL_POS (lihat `PROTOCOL.md`).
+
+```lua
+-- Contoh: papan nama melayang di atas pemain.
+local lid = romp.create3DTextLabel("Toko Bang Jago", 0xFFFF00FF, 100.0, 200.0, 3.0, 80.0)
+romp.attach3DTextLabelToPlayer(lid, playerid)  -- mengikuti pemain
+romp.update3DTextLabelText(lid, 0x00FF00FF, "Toko Bang Jago [BUKA]")
+```
+
 ### Database SQLite untuk gamemode (skor, akun)
 
 Tanpa server eksternal: cukup set `database <path>` di `server.cfg`

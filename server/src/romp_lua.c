@@ -5,6 +5,7 @@
 #include "romp_lua.h"
 #include "romp_server.h"
 #include "romp_vehicle.h"
+#include "romp_label.h"
 #include "romp_weapon.h"
 #include "romp_anticheat.h"
 #include "romp_sqlite.h"
@@ -769,6 +770,110 @@ static int l_romp_get_vehicles(lua_State *Ls) {
 
 /* ---------------- Senjata ala SA-MP ---------------- */
 
+
+/* ---------------- API 3D text label ala SA-MP ----------------
+ * romp.create3DTextLabel(text, color, x, y, z, drawDist [, vw])
+ *   -> labelid | nil. color = 0xRRGGBBAA. drawDist <= 0 = default 100.
+ * romp.delete3DTextLabel(id) -> bool
+ * romp.update3DTextLabelText(id, color, text) -> bool
+ *   (ala SA-MP Update3DTextLabelText)
+ * romp.set3DTextLabelPos(id, x, y, z) -> bool (hanya label statis)
+ * romp.attach3DTextLabelToPlayer(id, pid [, ox, oy, oz]) -> bool
+ *   (ala SA-MP Attach3DTextLabelToPlayer; default offset di atas kepala)
+ * romp.attach3DTextLabelToVehicle(id, vid [, ox, oy, oz]) -> bool
+ *   (ala SA-MP Attach3DTextLabelToVehicle)
+ * romp.get3DTextLabels() -> tabel array
+ *   { {id,text,color,x,y,z,drawdist,vw,attach={type,pid/vid,ox,oy,oz}}, ... }
+ *   attach.type: 0=statis, 1=pemain, 2=kendaraan.
+ * Tak ada event: label bersifat pasif seperti di SA-MP.
+ */
+
+static int l_romp_create_label(lua_State *Ls) {
+    const char *text = luaL_checkstring(Ls, 1);
+    uint32_t color = (uint32_t)luaL_checkinteger(Ls, 2);
+    float x = (float)luaL_checknumber(Ls, 3);
+    float y = (float)luaL_checknumber(Ls, 4);
+    float z = (float)luaL_checknumber(Ls, 5);
+    float dd = (float)luaL_checknumber(Ls, 6);
+    uint32_t vw = (uint32_t)luaL_optinteger(Ls, 7, 0);
+    int id = label_create(text, color, x, y, z, dd, vw);
+    if (id < 0) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, id);
+    return 1;
+}
+
+static int l_romp_delete_label(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    lua_pushboolean(Ls, label_destroy(id));
+    return 1;
+}
+
+static int l_romp_update_label_text(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    uint32_t color = (uint32_t)luaL_checkinteger(Ls, 2);
+    const char *text = luaL_checkstring(Ls, 3);
+    lua_pushboolean(Ls, label_set_text(id, color, text));
+    return 1;
+}
+
+static int l_romp_set_label_pos(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    float x = (float)luaL_checknumber(Ls, 2);
+    float y = (float)luaL_checknumber(Ls, 3);
+    float z = (float)luaL_checknumber(Ls, 4);
+    lua_pushboolean(Ls, label_set_pos(id, x, y, z));
+    return 1;
+}
+
+static int l_romp_attach_label_player(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    int pid = (int)luaL_checkinteger(Ls, 2);
+    float ox = (float)luaL_optnumber(Ls, 3, 0.0);
+    float oy = (float)luaL_optnumber(Ls, 4, 0.0);
+    float oz = (float)luaL_optnumber(Ls, 5, 2.6); /* di atas kepala */
+    lua_pushboolean(Ls, label_attach_player(id, pid, ox, oy, oz));
+    return 1;
+}
+
+static int l_romp_attach_label_vehicle(lua_State *Ls) {
+    int id = (int)luaL_checkinteger(Ls, 1);
+    int vid = (int)luaL_checkinteger(Ls, 2);
+    float ox = (float)luaL_optnumber(Ls, 3, 0.0);
+    float oy = (float)luaL_optnumber(Ls, 4, 0.0);
+    float oz = (float)luaL_optnumber(Ls, 5, 1.6); /* di atas atap */
+    lua_pushboolean(Ls, label_attach_vehicle(id, vid, ox, oy, oz));
+    return 1;
+}
+
+static int l_romp_get_labels(lua_State *Ls) {
+    lua_newtable(Ls);
+    int i = 1;
+    for (Label3D *l = label_first(); l; l = l->next) {
+        lua_newtable(Ls);
+        lua_pushinteger(Ls, l->id);    lua_setfield(Ls, -2, "id");
+        lua_pushstring(Ls, l->text);   lua_setfield(Ls, -2, "text");
+        lua_pushinteger(Ls, (lua_Integer)l->color); lua_setfield(Ls, -2, "color");
+        lua_pushnumber(Ls, (lua_Number)l->x); lua_setfield(Ls, -2, "x");
+        lua_pushnumber(Ls, (lua_Number)l->y); lua_setfield(Ls, -2, "y");
+        lua_pushnumber(Ls, (lua_Number)l->z); lua_setfield(Ls, -2, "z");
+        lua_pushnumber(Ls, (lua_Number)l->drawdist); lua_setfield(Ls, -2, "drawdist");
+        lua_pushinteger(Ls, (lua_Integer)label_eff_vw(l)); lua_setfield(Ls, -2, "vw");
+        lua_newtable(Ls);
+        lua_pushinteger(Ls, l->attach_type); lua_setfield(Ls, -2, "type");
+        if (l->attach_type == LABEL_ATTACH_PLAYER) {
+            lua_pushinteger(Ls, l->attach_id); lua_setfield(Ls, -2, "pid");
+        } else if (l->attach_type == LABEL_ATTACH_VEHICLE) {
+            lua_pushinteger(Ls, l->attach_id); lua_setfield(Ls, -2, "vid");
+        }
+        lua_pushnumber(Ls, (lua_Number)l->x); lua_setfield(Ls, -2, "ox");
+        lua_pushnumber(Ls, (lua_Number)l->y); lua_setfield(Ls, -2, "oy");
+        lua_pushnumber(Ls, (lua_Number)l->z); lua_setfield(Ls, -2, "oz");
+        lua_setfield(Ls, -2, "attach");
+        lua_rawseti(Ls, -2, i++);
+    }
+    return 1;
+}
+
 static int l_romp_give_weapon(lua_State *Ls) {
     int pid = (int)luaL_checkinteger(Ls, 1);
     int wid = (int)luaL_checkinteger(Ls, 2);
@@ -1043,6 +1148,18 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_get_vehicle_passenger); lua_setfield(Ls, -2, "getVehiclePassenger");
     lua_pushcfunction(Ls, l_romp_respawn_vehicle);  lua_setfield(Ls, -2, "respawnVehicle");
     lua_pushcfunction(Ls, l_romp_get_vehicles);      lua_setfield(Ls, -2, "getVehicles");
+    /* 3D text label ala SA-MP (Create3DTextLabel) */
+    lua_pushcfunction(Ls, l_romp_create_label);       lua_setfield(Ls, -2, "create3DTextLabel");
+    lua_pushcfunction(Ls, l_romp_delete_label);       lua_setfield(Ls, -2, "delete3DTextLabel");
+    lua_pushcfunction(Ls, l_romp_update_label_text);  lua_setfield(Ls, -2, "update3DTextLabelText");
+    lua_pushcfunction(Ls, l_romp_set_label_pos);      lua_setfield(Ls, -2, "set3DTextLabelPos");
+    lua_pushcfunction(Ls, l_romp_attach_label_player); lua_setfield(Ls, -2, "attach3DTextLabelToPlayer");
+    lua_pushcfunction(Ls, l_romp_attach_label_vehicle); lua_setfield(Ls, -2, "attach3DTextLabelToVehicle");
+    lua_pushcfunction(Ls, l_romp_get_labels);         lua_setfield(Ls, -2, "get3DTextLabels");
+    /* konstanta attach label: 0=statis, 1=pemain, 2=kendaraan */
+    lua_pushinteger(Ls, LABEL_ATTACH_NONE);    lua_setfield(Ls, -2, "LABEL_STATIC");
+    lua_pushinteger(Ls, LABEL_ATTACH_PLAYER); lua_setfield(Ls, -2, "LABEL_PLAYER");
+    lua_pushinteger(Ls, LABEL_ATTACH_VEHICLE); lua_setfield(Ls, -2, "LABEL_VEHICLE");
     /* senjata ala SA-MP */
     lua_pushcfunction(Ls, l_romp_give_weapon);       lua_setfield(Ls, -2, "giveWeapon");
     lua_pushcfunction(Ls, l_romp_remove_player_weapon); lua_setfield(Ls, -2, "removePlayerWeapon");
