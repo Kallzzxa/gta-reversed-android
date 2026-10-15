@@ -78,6 +78,8 @@ enum class PacketType : uint8_t {
     // RemovePlayerAttachedObject), server -> client.
     ATTACH_OBJ   = 0x3F,  // set: pid+index+modelid+bone+9xf32 (43B payload);
                           // remove: pid+index+modelid=0 (6B payload)
+    // Weapon skill ala SA-MP (SetPlayerSkillLevel), server -> client.
+    SKILL_SET    = 0x43,  // level berubah: pid+skill+u16 level (4B payload)
 };
 
 // Alasan PLAYER_LEAVE (u8 reason).
@@ -697,6 +699,24 @@ inline bool parse_attach_obj(const uint8_t* data, size_t len,
         if (!r.get_float(out.scale[i])) return false;
     }
     return true;
+}
+
+// ---- Weapon skill ala SA-MP (server -> client) ----
+
+struct SkillSetInfo {
+    uint8_t pid = 0;      // pemain yang skill-nya berubah (u8)
+    uint8_t skill = 0;    // id skill 0-10 ala SA-MP (WEAPONSKILL_*)
+    uint16_t level = 0;   // level 0-1000
+};
+
+// 0x43 SKILL_SET: u8 pid | u8 skill | u16 level (LE) (4 byte payload).
+inline bool parse_skill_set(const uint8_t* data, size_t len,
+                            SkillSetInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u8(out.pid)) return false;
+    if (!r.get_u8(out.skill)) return false;
+    if (!r.get_u16(out.level)) return false;
+    return len == 4;  // tolak payload kepanjangan/kependekan
 }
 
 struct ChatMsgInfo {

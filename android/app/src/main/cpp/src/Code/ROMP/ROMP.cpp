@@ -426,6 +426,13 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
             }
             break;
         }
+        case PacketType::SKILL_SET: {
+            // Weapon skill (romp.setPlayerSkillLevel): per-pemain.
+            SkillSetInfo si;
+            if (!parse_skill_set(payload, len, si)) break;
+            platform_->OnPlayerSkill(si.pid, si.skill, si.level);
+            break;
+        }
         default:
             // Tipe tak dikenal: abaikan (forward-compat protokol).
             break;

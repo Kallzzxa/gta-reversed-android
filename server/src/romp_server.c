@@ -22,6 +22,7 @@
 #include "romp_audio.h"
 #include "romp_world.h"
 #include "romp_attach.h"
+#include "romp_skill.h"
 
 #include <time.h>
 #include <pthread.h>
@@ -561,6 +562,8 @@ static void do_leave(Client *c, int reason) {
     audio_on_player_leave(c);
     /* bersihkan state attached object pemain ini (ala SA-MP) */
     attach_on_player_leave(c);
+    /* reset weapon skill ke default (per-pemain, tanpa paket) */
+    skill_on_player_leave(c);
     /* bersihkan params kendaraan per-pemain miliknya (ala SA-MP) */
     vehicle_params_player_cleanup(c->id);
     uint8_t b[4];
@@ -621,6 +624,8 @@ int npc_connect(const char *name) {
     c->vehicle_id = -1;
     c->vehicle_seat = -1;
     c->ping_ms = -1; /* belum terukur sampai probe pertama dijawab */
+    /* Weapon skill: semua mulai dari level default ala SA-MP. */
+    skill_init(c);
     c->last_activity = now_ms();
     strncpy(c->ip, "npc", sizeof(c->ip) - 1);
     c->next = g_clients;
@@ -652,6 +657,8 @@ void npc_disconnect(int id, int reason) {
     vehicle_params_player_cleanup(id);
     /* bersihkan state attached object milik NPC ini */
     attach_on_player_leave(c);
+    /* reset weapon skill milik NPC ini ke default */
+    skill_on_player_leave(c);
     /* salin field yang dipakai setelah free */
     int nid = c->id;
     uint8_t interior = c->interior;
@@ -822,6 +829,8 @@ static void handle_hello(Client *c, const uint8_t *p, size_t n) {
     c->ac_set_ms = 0;
     c->ac_warnings = 0;
     c->ac_stat_known = 0;
+    /* Weapon skill: semua mulai dari level default ala SA-MP. */
+    skill_init(c);
     c->last_activity = now_ms();
     do_join(c);
 }

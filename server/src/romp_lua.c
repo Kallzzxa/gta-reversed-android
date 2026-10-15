@@ -15,6 +15,7 @@
 #include "romp_audio.h"
 #include "romp_world.h"
 #include "romp_attach.h"
+#include "romp_skill.h"
 
 #include "../vendor/sqlite/sqlite3.h"
 
@@ -1498,6 +1499,51 @@ static int l_romp_get_player_attached_objects(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- API weapon skill ala SA-MP ----------------
+ * romp.setPlayerSkillLevel(pid, skill, level) -> bool
+ *   Mirip SA-MP SetPlayerSkillLevel: set level skill senjata pemain
+ *   (0..1000). skill 0..10 (romp.SKILL_PISTOL .. romp.SKILL_SNIPERRIFLE),
+ *   pemain baru mulai dari romp.SKILL_DEFAULT_LEVEL (1). Paket 0x43
+ *   SKILL_SET dikirim hanya ke pemain target (per-pemain, seperti di
+ *   SA-MP — skill mempengaruhi handling senjata client-nya sendiri).
+ *   false bila pemain/skill/level tak valid.
+ * romp.getPlayerSkillLevel(pid, skill) -> level | nil
+ *   (ala SA-MP GetPlayerSkillLevel; nil bila pemain/skill tak valid)
+ * romp.getPlayerSkillLevels(pid)
+ *   -> array 11 level { [1]=level skill 0, ..., [11]=level skill 10 }
+ *      | nil (pemain tak valid)
+ */
+static int l_romp_set_player_skill_level(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int skill = (int)luaL_checkinteger(Ls, 2);
+    int level = (int)luaL_checkinteger(Ls, 3);
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && skill_set(c, skill, level));
+    return 1;
+}
+
+static int l_romp_get_player_skill_level(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int skill = (int)luaL_checkinteger(Ls, 2);
+    Client *c = client_by_id(pid);
+    int lvl = c ? skill_get(c, skill) : -1;
+    if (lvl < 0) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, (lua_Integer)lvl);
+    return 1;
+}
+
+static int l_romp_get_player_skill_levels(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(pid);
+    if (!c) { lua_pushnil(Ls); return 1; }
+    lua_newtable(Ls);
+    for (int s = 0; s < SKILL_COUNT; s++) {
+        lua_pushinteger(Ls, (lua_Integer)c->skill[s]);
+        lua_rawseti(Ls, -2, s + 1); /* Lua 1-based */
+    }
+    return 1;
+}
+
 /* ---------------- API world settings ala SA-MP ----------------
  * romp.setGravity(gravity) -> bool
  *   ala SA-MP SetGravity; default GTA:SA 0.008. Valid 0.001..0.5,
@@ -1887,6 +1933,24 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_get_player_attached_objects); lua_setfield(Ls, -2, "getPlayerAttachedObjects");
     /* maks slot attached object per pemain ala SA-MP */
     lua_pushinteger(Ls, ATTACH_MAX_SLOTS); lua_setfield(Ls, -2, "ATTACH_MAX_SLOTS");
+    /* weapon skill ala SA-MP (SetPlayerSkillLevel/GetPlayerSkillLevel) */
+    lua_pushcfunction(Ls, l_romp_set_player_skill_level); lua_setfield(Ls, -2, "setPlayerSkillLevel");
+    lua_pushcfunction(Ls, l_romp_get_player_skill_level); lua_setfield(Ls, -2, "getPlayerSkillLevel");
+    lua_pushcfunction(Ls, l_romp_get_player_skill_levels); lua_setfield(Ls, -2, "getPlayerSkillLevels");
+    /* konstanta skill senjata ala SA-MP (WEAPONSKILL_* di a_samp.inc) */
+    lua_pushinteger(Ls, SKILL_PISTOL);         lua_setfield(Ls, -2, "SKILL_PISTOL");
+    lua_pushinteger(Ls, SKILL_PISTOL_SILENCED); lua_setfield(Ls, -2, "SKILL_PISTOL_SILENCED");
+    lua_pushinteger(Ls, SKILL_DESERT_EAGLE);  lua_setfield(Ls, -2, "SKILL_DESERT_EAGLE");
+    lua_pushinteger(Ls, SKILL_SHOTGUN);       lua_setfield(Ls, -2, "SKILL_SHOTGUN");
+    lua_pushinteger(Ls, SKILL_SAWNOFF_SHOTGUN); lua_setfield(Ls, -2, "SKILL_SAWNOFF_SHOTGUN");
+    lua_pushinteger(Ls, SKILL_SPAS12_SHOTGUN); lua_setfield(Ls, -2, "SKILL_SPAS12_SHOTGUN");
+    lua_pushinteger(Ls, SKILL_MICRO_UZI);     lua_setfield(Ls, -2, "SKILL_MICRO_UZI");
+    lua_pushinteger(Ls, SKILL_MP5);            lua_setfield(Ls, -2, "SKILL_MP5");
+    lua_pushinteger(Ls, SKILL_AK47);           lua_setfield(Ls, -2, "SKILL_AK47");
+    lua_pushinteger(Ls, SKILL_M4);             lua_setfield(Ls, -2, "SKILL_M4");
+    lua_pushinteger(Ls, SKILL_SNIPERRIFLE);   lua_setfield(Ls, -2, "SKILL_SNIPERRIFLE");
+    lua_pushinteger(Ls, SKILL_COUNT);          lua_setfield(Ls, -2, "SKILL_COUNT");
+    lua_pushinteger(Ls, SKILL_DEFAULT_LEVEL); lua_setfield(Ls, -2, "SKILL_DEFAULT_LEVEL");
     /* world settings ala SA-MP (SetGravity/SetWeather/SetWorldTime) */
     lua_pushcfunction(Ls, l_romp_set_gravity); lua_setfield(Ls, -2, "setGravity");
     lua_pushcfunction(Ls, l_romp_get_gravity); lua_setfield(Ls, -2, "getGravity");

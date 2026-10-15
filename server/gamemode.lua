@@ -493,6 +493,55 @@ function onPlayerCommand(id, name, cmd, args)
                 "*** Slot kosong / index 0-9. (/attach dulu).")
         end
         return true
+    elseif cmd == "skill" then
+        -- Weapon skill ala SA-MP (SetPlayerSkillLevel):
+        -- /skill <skill 0-10> <level 0-1000>. Nama skill bisa pakai angka
+        -- atau nama: pistol, silenced, deagle, shotgun, sawnoff, spas,
+        -- uzi, mp5, ak47, m4, sniper.
+        local names = {
+            pistol = 0, silenced = 1, deagle = 2, shotgun = 3,
+            sawnoff = 4, spas = 5, uzi = 6, mp5 = 7, ak47 = 8,
+            m4 = 9, sniper = 10,
+        }
+        local sname = {"Pistol", "Silenced", "Deagle", "Shotgun",
+            "Sawnoff", "Spas12", "Uzi", "MP5", "AK47", "M4", "Sniper"}
+        local sk, lv = args:match("(%S+) (%-?%d+)")
+        sk = tonumber(sk) or names[sk and sk:lower() or ""]
+        lv = tonumber(lv)
+        if sk == nil or lv == nil then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Pakai: /skill <0-10|nama> <level 0-1000>.")
+            return true
+        end
+        if romp.setPlayerSkillLevel(id, sk, lv) then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Skill " .. (sname[sk + 1] or sk) ..
+                " = " .. lv .. ".")
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal: skill 0-10, level 0-1000.")
+        end
+        return true
+    elseif cmd == "skillget" then
+        -- Lihat level skill (GetPlayerSkillLevel): /skillget <0-10>.
+        local sk = tonumber(args)
+        local lv = sk and romp.getPlayerSkillLevel(id, sk)
+        romp.sendChatToPlayer(id, romp.KIND_INFO,
+            "*** Skill " .. tostring(sk) .. " = " ..
+            (lv and tostring(lv) or "? (skill 0-10)") .. ".")
+        return true
+    elseif cmd == "skills" then
+        -- Tampilkan semua 11 level skill pemain.
+        local sname = {"Pistol", "Silenced", "Deagle", "Shotgun",
+            "Sawnoff", "Spas12", "Uzi", "MP5", "AK47", "M4", "Sniper"}
+        local t = romp.getPlayerSkillLevels(id) or {}
+        local parts = {}
+        for i = 0, 10 do
+            parts[#parts + 1] = sname[i + 1] .. "=" .. tostring(t[i + 1])
+        end
+        romp.sendChatToPlayer(id, romp.KIND_INFO,
+            "*** Skill: " .. table.concat(parts, " "))
+        return true
     elseif cmd == "modif" then
         -- Komponen kendaraan ala SA-MP (AddVehicleComponent/paintjob):
         -- /modif -> buat Infernus (411) di depan pemain + pasang spoiler

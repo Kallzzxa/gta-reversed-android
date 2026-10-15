@@ -128,6 +128,14 @@ public:
     virtual void OnAttachObject(const AttachObjInfo& /*info*/) {}
     virtual void OnDetachObject(uint8_t /*pid*/, uint8_t /*index*/) {}
 
+    // Weapon skill ala SA-MP (paket 0x43, dari romp.setPlayerSkillLevel).
+    // Dikirim hanya ke pemain yang skill-nya berubah. Default no-op;
+    // platform game menimpa untuk menerapkan level ke handling senjata.
+    // TODO(GAME): terapkan ke stat senjata GTA:SA (CStats /
+    //   skill-dependent weapon handling, 0-1000).
+    virtual void OnPlayerSkill(uint8_t /*pid*/, uint8_t /*skill*/,
+                               uint16_t /*level*/) {}
+
     // Log ke konsol game / logcat.
     virtual void Log(const std::string& msg) = 0;
 

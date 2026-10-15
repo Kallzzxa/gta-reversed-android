@@ -295,6 +295,36 @@ romp.setPlayerAttachedObject(id, 0, 18632, 6,
 romp.removePlayerAttachedObject(id, 0)
 ```
 
+### Weapon skill ala SA-MP (`SetPlayerSkillLevel` / `GetPlayerSkillLevel`)
+
+Level skill senjata per pemain (mempengaruhi handling senjata client:
+akurasi, kecepatan bidik, dsb — seperti di SA-MP). 11 skill id 0..10
+ala SA-MP (`WEAPONSKILL_*`): 0=Pistol, 1=Silenced, 2=Desert Eagle,
+3=Shotgun, 4=Sawnoff, 5=Spas12, 6=Micro Uzi, 7=MP5, 8=AK47, 9=M4,
+10=Sniper. Level 0..1000; pemain baru (termasuk NPC) mulai dari
+`romp.SKILL_DEFAULT_LEVEL` (1). State otoritatif server, bersifat
+per-pemain: paket `0x43` SKILL_SET dikirim hanya ke pemiliknya (tidak
+di-broadcast, tanpa scope vw). Tak perlu resync saat join (selalu mulai
+dari default); state di-reset ke default saat pemain keluar.
+
+| API | Keterangan |
+|-----|------------|
+| `romp.setPlayerSkillLevel(pid, skill, level)` | Set level skill → `true`/`false`. `skill` 0-10, `level` 0-1000. |
+| `romp.getPlayerSkillLevel(pid, skill)` | Level skill saat ini (int) / nil bila pemain/skill tak valid. |
+| `romp.getPlayerSkillLevels(pid)` | Array 11 level `{[1]=level skill 0, ..., [11]=level skill 10}` / nil. |
+| `romp.SKILL_PISTOL` .. `romp.SKILL_SNIPERRIFLE` | Konstanta id skill 0..10. |
+| `romp.SKILL_COUNT` / `romp.SKILL_DEFAULT_LEVEL` | Konstanta = 11 / = 1. |
+
+Paket: `0x43` SKILL_SET (frame 5 byte: pid, skill, u16 level — lihat `PROTOCOL.md`).
+Tak ada event (skill bersifat pasif, seperti di SA-MP).
+
+```lua
+-- /skill: naikkan skill M4 ke 800.
+romp.setPlayerSkillLevel(id, romp.SKILL_M4, 800)
+-- /skills: tampilkan semua level.
+local t = romp.getPlayerSkillLevels(id)
+```
+
 ### World settings ala SA-MP (gravity, weather, world time)
 
 State dunia bersifat global (sama untuk semua pemain) dan otoritatif di

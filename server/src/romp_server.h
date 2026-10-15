@@ -69,6 +69,9 @@ typedef int SOCKET;
 /* ---- Attached object ala SA-MP (lihat romp_attach.h & PROTOCOL.md) ---- */
 #define P_ATTACH_OBJ  0x3F  /* server -> client: set/remove attached object */
 
+/* ---- Weapon skill ala SA-MP (lihat romp_skill.h & PROTOCOL.md) ---- */
+#define P_SKILL_SET   0x43  /* server -> client: level skill pemain berubah */
+
 /* ---- Sinkronisasi senjata & tembakan ala SA-MP (lihat PROTOCOL.md) ---- */
 #define P_WPN         0x17  /* client -> server: event tembakan */
 #define P_WPN_SYNC    0x18  /* server -> client: broadcast tembakan */
@@ -176,6 +179,9 @@ extern Config g_cfg;
  * 13=l forearm, 14=r forearm, 15=l clavicle, 16=r clavicle, 17=neck,
  * 18=jaw. */
 #define ATTACH_MAX_SLOTS 10
+
+/* Jumlah skill senjata ala SA-MP (lihat romp_skill.h): id 0..10. */
+#define SKILL_COUNT 11
 typedef struct {
     int      used;      /* 1 = slot terisi */
     uint32_t modelid;   /* model objek SA-MP, != 0 */
@@ -249,6 +255,10 @@ typedef struct Client {
      * otoritatif server. Di-broadcast vw-scoped (0x3F) ke semua pemain di
      * vw pemilik, termasuk pemiliknya sendiri. */
     AttachSlot attach[ATTACH_MAX_SLOTS];
+    /* Weapon skill ala SA-MP (lihat romp_skill.h): level 0..1000 per
+     * skill, otoritatif server, default SKILL_DEFAULT_LEVEL. Per-pemain:
+     * 0x43 SKILL_SET hanya dikirim ke pemiliknya sendiri. */
+    int      skill[SKILL_COUNT];
     struct Client *next;
 } Client;
 

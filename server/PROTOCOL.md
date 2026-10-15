@@ -320,6 +320,37 @@ API Lua (lihat `server/README.md`):
 Konstanta: `romp.ATTACH_MAX_SLOTS` (= 10).
 Tak ada event Lua (attach bersifat pasif, seperti di SA-MP).
 
+### 0x43 SKILL_SET (Server -> Client)
+Weapon skill ala SA-MP (`SetPlayerSkillLevel` / `GetPlayerSkillLevel`):
+level skill senjata per pemain, 11 skill (id 0..10 ala SA-MP
+`WEAPONSKILL_*`: 0=Pistol, 1=Silenced, 2=Desert Eagle, 3=Shotgun,
+4=Sawnoff, 5=Spas12, 6=Micro Uzi, 7=MP5, 8=AK47, 9=M4, 10=Sniper).
+Level 0..1000; pemain baru (termasuk NPC) mulai dari
+`romp.SKILL_DEFAULT_LEVEL` (1). State otoritatif server (`Client.skill`).
+
+Frame (5 byte):
+
+```
+u8  pid        // pemain yang skill-nya berubah
+u8  skill      // id skill 0-10
+u16 level      // level 0-1000 (LE)
+```
+
+Skill bersifat per-pemain dan TIDAK di-broadcast: `0x43` dikirim hanya
+ke pemain target (no-op untuk NPC — NPC tak punya socket, state-nya
+tetap tersimpan dan bisa dibaca gamemode). Tak ada scope virtual world
+(seperti audio stream). Tak perlu resync saat join: pemain baru selalu
+mulai dari default. State di-reset ke default saat pemain keluar (tanpa
+paket — tak ada client lain yang menerima paket ini).
+
+API Lua (lihat `server/README.md`):
+`romp.setPlayerSkillLevel(pid, skill, level)` -> bool,
+`romp.getPlayerSkillLevel(pid, skill)` -> level | nil,
+`romp.getPlayerSkillLevels(pid)` -> array 11 level | nil.
+Konstanta: `romp.SKILL_PISTOL` .. `romp.SKILL_SNIPERRIFLE` (0..10),
+`romp.SKILL_COUNT` (= 11), `romp.SKILL_DEFAULT_LEVEL` (= 1).
+Tak ada event Lua (skill bersifat pasif, seperti di SA-MP).
+
 Test: `~/workspace/romp/tests/test_vehicleparams.py`
 (+ `test_vehicleparams_gamemode.lua`) — cek set/get/validasi/broadcast/resync/vw/per-player.
 

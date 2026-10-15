@@ -136,6 +136,7 @@ func _setup_multiplayer() -> void:
 	net.vehicle_params_p.connect(_on_vehicle_params_p)
 	net.attach_obj_set.connect(_on_attach_obj_set)
 	net.attach_obj_remove.connect(_on_attach_obj_remove)
+	net.skill_set.connect(_on_skill_set)
 	net.teleport.connect(_on_teleport)
 	net.ping_updated.connect(_on_ping_updated)
 	net.label_spawn.connect(_on_label_spawn)
@@ -316,6 +317,18 @@ func _on_attach_obj_set(pid: int, index: int, modelid: int, bone: int,
 func _on_attach_obj_remove(pid: int, index: int) -> void:
 	if _remotes.has(pid):
 		_remotes[pid].remove_attach(index)
+
+
+## Weapon skill ala SA-MP (0x43): level skill senjata pemain. Disimpan
+## per-pemain (hanya dikirim ke pemiliknya); dipakai handling senjata
+## client (akurasi/kecepatan bidik ala GTA:SA).
+var _player_skills := {}  # pid -> Array 11 level
+
+func _on_skill_set(pid: int, skill: int, level: int) -> void:
+	if not _player_skills.has(pid):
+		_player_skills[pid] = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+	if skill >= 0 and skill < 11:
+		_player_skills[pid][skill] = level
 
 
 func _on_teleport(x: float, y: float, z: float) -> void:
