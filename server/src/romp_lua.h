@@ -81,6 +81,11 @@ void lua_on_player_death(int victimid, int killerid, int reason);
  * romp.setPlayerWantedLevel berhasil — onPlayerWantedLevelChange(pid,
  * oldlevel, newlevel). Dipakai gamemode untuk logika polisi. */
 void lua_on_wanted_level_change(int pid, int oldlevel, int newlevel);
+/* Event uang pemain ala SA-MP (perpanjangan RO-MP): menyala setiap
+ * romp.setPlayerMoney/givePlayerMoney/resetPlayerMoney berhasil —
+ * onPlayerMoneyChange(pid, oldamount, newamount). Dipakai gamemode untuk
+ * logika bank/payday. */
+void lua_on_player_money_change(int pid, int32_t oldamount, int32_t newamount);
 /* Event interior & virtual world ala SA-MP (tidak ada default C):
  * onPlayerInteriorChange(pid, old, new),
  * onPlayerVirtualWorldChange(pid, old, new). */

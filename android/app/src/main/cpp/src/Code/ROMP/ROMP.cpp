@@ -472,6 +472,15 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
             platform_->OnPlayerWanted(wi.pid, wi.level);
             break;
         }
+        case PacketType::MONEY_SET: {
+            // Uang pemain otoritatif ala SA-MP (romp.setPlayerMoney/
+            // givePlayerMoney/resetPlayerMoney): per-pemain, hanya
+            // saldo milik sendiri yang diterima client ini.
+            MoneySetInfo mi;
+            if (!parse_money_set(payload, len, mi)) break;
+            platform_->OnPlayerMoney(mi.pid, mi.amount);
+            break;
+        }
         default:
             // Tipe tak dikenal: abaikan (forward-compat protokol).
             break;

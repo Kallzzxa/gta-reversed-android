@@ -94,6 +94,11 @@ enum class PacketType : uint8_t {
     // server -> semua client (broadcast global).
     WANTED_SET   = 0x48,  // level wanted berubah: u8 pid + u8 level
                           // (0=bersih .. 6=paling dicari) (2B payload)
+    // Uang pemain otoritatif ala SA-MP (SetPlayerMoney/GivePlayerMoney/
+    // ResetPlayerMoney/GetPlayerMoney), server -> client (per-pemain,
+    // hanya ke pemilik — uang hanya tampil di HUD milik sendiri).
+    MONEY_SET    = 0x49,  // saldo berubah: u8 pid + s32 amount LE
+                          // (-999999999..999999999) (5B payload)
 };
 
 // Alasan PLAYER_LEAVE (u8 reason).
@@ -789,6 +794,25 @@ inline bool parse_wanted_set(const uint8_t* data, size_t len,
     if (!r.get_u8(out.pid)) return false;
     if (!r.get_u8(out.level)) return false;
     return len == 2;  // tolak payload kepanjangan/kependekan
+}
+
+// ---- Uang pemain otoritatif ala SA-MP (server -> client, per-pemain) ----
+
+// Info saldo pemain ala SA-MP (0x49 MONEY_SET).
+struct MoneySetInfo {
+    uint8_t pid = 0;       // pemain yang saldonya berubah (u8)
+    int32_t amount = 0;    // saldo baru, s32 LE (-999999999..999999999)
+};
+
+// 0x49 MONEY_SET: u8 pid | s32 amount LE (5 byte payload).
+inline bool parse_money_set(const uint8_t* data, size_t len,
+                            MoneySetInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u8(out.pid)) return false;
+    uint32_t u;
+    if (!r.get_u32(u)) return false;
+    out.amount = static_cast<int32_t>(u);
+    return len == 5;  // tolak payload kepanjangan/kependekan
 }
 
 struct ChatMsgInfo {

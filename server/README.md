@@ -458,6 +458,57 @@ Paket: `0x48` WANTED_SET (frame 3 byte: u8 pid + u8 level, server →
 semua client, global) — lihat `PROTOCOL.md`. Client C++:
 `IROMPPlatform::OnPlayerWanted`; Godot: sinyal `wanted_set`.
 
+### Uang pemain otoritatif ala SA-MP (`SetPlayerMoney` / `GivePlayerMoney` / `ResetPlayerMoney` / `GetPlayerMoney`)
+
+Saldo per pemain ala SA-MP. State otoritatif server (`Client.money`,
+default 0 termasuk NPC). Setiap `romp.setPlayerMoney` /
+`romp.givePlayerMoney` / `romp.resetPlayerMoney` yang berhasil mengirim
+paket `0x49` MONEY_SET HANYA ke pemain bersangkutan (per-pemain — uang
+hanya tampil di HUD milik sendiri ala SA-MP, orang lain tak melihat) +
+menyalakan event Lua `onPlayerMoneyChange(pid, oldamount, newamount)`
+(perpanjangan RO-MP; SA-MP tak punya event ini). Pemain yang baru join
+di-resync saldo miliknya sendiri.
+
+Anti-dupe dasar: server satu-satunya sumber kebenaran — client tidak
+pernah bisa mengubah uangnya sendiri (tak ada paket client -> server
+untuk uang). Semua perubahan lewat API server; rentang di-clamp ke
+-999999999..999999999 sehingga overflow tak mungkin terjadi
+(`givePlayerMoney` menjenuhkan hasil, bukan melimpah).
+
+| API | Keterangan |
+|-----|------------|
+| `romp.setPlayerMoney(pid, amount)` | Set saldo (rentang -999999999..999999999) → `true`/`false`. Kirim `0x49` + event. |
+| `romp.givePlayerMoney(pid, delta)` | Tambah/kurangi saldo (negatif = kurangi) → `true`/`false`. Hasil dijenuhkan ke rentang. |
+| `romp.resetPlayerMoney(pid)` | Saldo kembali ke 0 → `true`/`false`. |
+| `romp.getPlayerMoney(pid)` | Saldo saat ini (int) / nil bila pemain tak valid. |
+
+Event: `onPlayerMoneyChange(pid, oldamount, newamount)` — menyala
+setiap perubahan saldo yang berhasil.
+
+```lua
+-- /kasih: transfer dari saldo sendiri ke pemain lain (anti-dupe:
+-- transfer hanya lewat server, saldo diverifikasi dulu).
+local mine = romp.getPlayerMoney(id) or 0
+if mine >= amt then
+    romp.givePlayerMoney(id, -amt)
+    romp.givePlayerMoney(tp, amt)
+end
+
+-- Event: umumkan transaksi besar ala berita ekonomi RP.
+function onPlayerMoneyChange(pid, oldamount, newamount)
+    if math.abs(newamount - oldamount) >= 1000000 then
+        romp.sendChatToAll(romp.KIND_SYS,
+            "*** Transaksi besar: " .. oldamount .. " -> " .. newamount)
+    end
+end
+```
+
+Paket: `0x49` MONEY_SET (frame 6 byte: u8 pid + s32 amount LE, server →
+pemilik saja) — lihat `PROTOCOL.md`. Client C++:
+`IROMPPlatform::OnPlayerMoney`; Godot: sinyal `money_set`.
+Demo di `server/gamemode.lua`: `/uang` (cek saldo), `/setuang <id>
+<jumlah>` (set), `/kasih <id> <jumlah>` (transfer).
+
 ### World settings ala SA-MP (gravity, weather, world time)
 
 State dunia bersifat global (sama untuk semua pemain) dan otoritatif di

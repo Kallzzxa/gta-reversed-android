@@ -84,6 +84,10 @@ typedef int SOCKET;
 #define P_WANTED_SET  0x48  /* server -> semua client: wanted pemain berubah
                                (pid+level, global) */
 
+/* ---- Uang pemain otoritatif ala SA-MP (lihat romp_money.h & PROTOCOL.md) ---- */
+#define P_MONEY_SET   0x49  /* server -> client: saldo berubah
+                               (pid+s32 amount LE, hanya ke pemilik) */
+
 /* ---- Sinkronisasi senjata & tembakan ala SA-MP (lihat PROTOCOL.md) ---- */
 #define P_WPN         0x17  /* client -> server: event tembakan */
 #define P_WPN_SYNC    0x18  /* server -> client: broadcast tembakan */
@@ -291,6 +295,10 @@ typedef struct Client {
      * paling dicari. Otoritatif server, default 0, di-broadcast global
      * (0x48 WANTED_SET) ke semua pemain. */
     uint8_t  wanted_level;
+    /* Uang pemain otoritatif ala SA-MP (lihat romp_money.h):
+     * otoritatif server, default 0, dikirim per-pemain (0x49 MONEY_SET)
+     * hanya ke pemiliknya sendiri. */
+    int32_t  money;
     struct Client *next;
 } Client;
 

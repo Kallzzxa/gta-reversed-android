@@ -163,6 +163,13 @@ public:
     //   tiap pemain remote; trigger skin/mobil polisi saat level >= 3.
     virtual void OnPlayerWanted(uint8_t /*pid*/, uint8_t /*level*/) {}
 
+    // Uang pemain otoritatif ala SA-MP (paket 0x49 MONEY_SET, dari
+    // romp.setPlayerMoney/givePlayerMoney/resetPlayerMoney): saldo pemain
+    // pid berubah menjadi amount. Per-pemain — client hanya menerima
+    // saldo miliknya sendiri. Default no-op.
+    // TODO(GAME): tampilkan saldo di HUD ala GTA:SA.
+    virtual void OnPlayerMoney(uint8_t /*pid*/, int32_t /*amount*/) {}
+
     // Log ke konsol game / logcat.
     virtual void Log(const std::string& msg) = 0;
 

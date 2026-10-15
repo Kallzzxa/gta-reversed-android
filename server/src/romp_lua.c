@@ -19,6 +19,7 @@
 #include "romp_marker.h"
 #include "romp_death.h"
 #include "romp_wanted.h"
+#include "romp_money.h"
 
 #include "../vendor/sqlite/sqlite3.h"
 
@@ -1576,6 +1577,60 @@ static int l_romp_get_player_wanted_level(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- API uang pemain otoritatif ala SA-MP ----------------
+ * romp.setPlayerMoney(pid, amount) -> bool
+ *   Mirip SA-MP SetPlayerMoney: set saldo pemain ke `amount`
+ *   (MONEY_MIN..MONEY_MAX; di luar rentang -> false). Server menyimpan
+ *   state otoritatif, mengirim 0x49 MONEY_SET hanya ke pemain tsb
+ *   (per-pemain — uang hanya tampil di HUD milik sendiri ala SA-MP), dan
+ *   menyalakan event onPlayerMoneyChange(pid, old, new) — perpanjangan
+ *   RO-MP (SA-MP tak punya event ini) untuk logika bank/payday di
+ *   gamemode. false bila pemain tak valid / amount di luar rentang
+ *   (state tak berubah, tanpa paket, tanpa event).
+ * romp.givePlayerMoney(pid, delta) -> bool
+ *   ala SA-MP GivePlayerMoney: tambah (atau kurangi bila negatif) saldo.
+ *   Hasil dijenuhkan ke MONEY_MIN..MONEY_MAX (anti overflow/dupe).
+ * romp.resetPlayerMoney(pid) -> bool
+ *   ala SA-MP ResetPlayerMoney: saldo kembali ke 0.
+ * romp.getPlayerMoney(pid) -> amount | nil
+ *   (ala SA-MP GetPlayerMoney; nil bila pemain tak valid)
+ */
+static int l_romp_set_player_money(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int64_t amount = (int64_t)luaL_checkinteger(Ls, 2);
+    if (!money_valid_amount(amount)) {
+        lua_pushboolean(Ls, 0);
+        return 1;
+    }
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && money_set(c, (int32_t)amount));
+    return 1;
+}
+
+static int l_romp_give_player_money(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int64_t delta = (int64_t)luaL_checkinteger(Ls, 2);
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && money_give(c, delta));
+    return 1;
+}
+
+static int l_romp_reset_player_money(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && money_reset(c));
+    return 1;
+}
+
+static int l_romp_get_player_money(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(pid);
+    int32_t amount = 0;
+    if (!c || !money_get(c, &amount)) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, (lua_Integer)amount);
+    return 1;
+}
+
 /* ---------------- API player marker ala SA-MP ----------------
  * romp.showPlayerMarkers(mode) -> bool
  *   Mirip SA-MP ShowPlayerMarkers: 0=off, 1=global, 2=streamed
@@ -2079,6 +2134,11 @@ static void script_register_api(lua_State *Ls) {
     /* wanted level ala SA-MP (SetPlayerWantedLevel/GetPlayerWantedLevel) */
     lua_pushcfunction(Ls, l_romp_set_player_wanted_level); lua_setfield(Ls, -2, "setPlayerWantedLevel");
     lua_pushcfunction(Ls, l_romp_get_player_wanted_level); lua_setfield(Ls, -2, "getPlayerWantedLevel");
+    /* uang pemain otoritatif ala SA-MP (SetPlayerMoney/GivePlayerMoney/ResetPlayerMoney/GetPlayerMoney) */
+    lua_pushcfunction(Ls, l_romp_set_player_money); lua_setfield(Ls, -2, "setPlayerMoney");
+    lua_pushcfunction(Ls, l_romp_give_player_money); lua_setfield(Ls, -2, "givePlayerMoney");
+    lua_pushcfunction(Ls, l_romp_reset_player_money); lua_setfield(Ls, -2, "resetPlayerMoney");
+    lua_pushcfunction(Ls, l_romp_get_player_money); lua_setfield(Ls, -2, "getPlayerMoney");
     /* konstanta skill senjata ala SA-MP (WEAPONSKILL_* di a_samp.inc) */
     lua_pushinteger(Ls, SKILL_PISTOL);         lua_setfield(Ls, -2, "SKILL_PISTOL");
     lua_pushinteger(Ls, SKILL_PISTOL_SILENCED); lua_setfield(Ls, -2, "SKILL_PISTOL_SILENCED");
@@ -2698,6 +2758,23 @@ void lua_on_wanted_level_change(int pid, int oldlevel, int newlevel) {
     EvWanted e = { pid, oldlevel, newlevel };
     fs_event("onPlayerWantedLevelChange", push_wanted, &e);
     call_event("onPlayerWantedLevelChange", push_wanted, &e);
+}
+
+/* Event uang pemain ala SA-MP (perpanjangan RO-MP — SA-MP tak punya
+ * event ini): onPlayerMoneyChange(pid, oldamount, newamount). */
+typedef struct { int pid; int32_t olda; int32_t newa; } EvMoney;
+static int push_money(lua_State *Ls, void *ud) {
+    EvMoney *e = (EvMoney *)ud;
+    lua_pushinteger(Ls, e->pid);
+    lua_pushinteger(Ls, (lua_Integer)e->olda);
+    lua_pushinteger(Ls, (lua_Integer)e->newa);
+    return 3;
+}
+
+void lua_on_player_money_change(int pid, int32_t oldamount, int32_t newamount) {
+    EvMoney e = { pid, oldamount, newamount };
+    fs_event("onPlayerMoneyChange", push_money, &e);
+    call_event("onPlayerMoneyChange", push_money, &e);
 }
 
 typedef struct { int pid; int oldi; int newi; } EvInt;

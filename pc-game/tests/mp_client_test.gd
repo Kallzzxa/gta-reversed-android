@@ -66,6 +66,7 @@ func _run() -> void:
 	_net.marker_mode.connect(_on_mmode)
 	_net.death_msg.connect(_on_dmsg)
 	_net.wanted_set.connect(_on_wanted)
+	_net.money_set.connect(_on_money)
 
 	# --- 1. Handshake + WELCOME ---
 	_net.connect_to("127.0.0.1", _port, "GodotTes", "rahasia")
@@ -156,6 +157,23 @@ func _run() -> void:
 	# end-to-end: wanted 4 untuk GodotTes sendiri via gamemode
 	_net.send_chat("/wantedgodot")
 	_check(await _wait("wanted_real", 10.0), "wanted_set_server_diterima")
+
+	# --- 5d. Uang pemain otoritatif ala SA-MP (0x49 MONEY_SET): frame
+	# sintetik langsung ke parser + end-to-end via /moneygodot
+	# (romp.givePlayerMoney -> 0x49 per-pemain) ---
+	_ev.erase("money_ok")
+	_ev.erase("money_real")
+	var mnypay := StreamPeerBuffer.new()
+	mnypay.big_endian = false
+	mnypay.put_u8(9)     # pid
+	mnypay.put_u32(12345)  # amount
+	_net._inbuf.append_array(_mk_frame(RompNet.T_MONEY_SET, mnypay.data_array))
+	_net._parse()
+	_check(_ev.get("money_ok", false), "money_set_diterima")
+	# end-to-end: givePlayerMoney(GodotTes, 7777) -> amount 7777 untuk diri
+	await create_timer(2.5).timeout  # jeda anti-spam server (maks 3/2dtk)
+	_net.send_chat("/moneygodot")
+	_check(await _wait("money_real", 10.0), "money_set_server_diterima")
 
 	# --- 6. Password salah -> REJECT -> connect_failed ---
 	_ev.erase("failed")
@@ -313,3 +331,12 @@ func _on_wanted(pid: int, level: int) -> void:
 		_ev["wanted_ok"] = true
 	if pid == _net.player_id and level == 4:
 		_ev["wanted_real"] = true
+
+
+func _on_money(pid: int, amount: int) -> void:
+	# Frame sintetik: pid=9, amount=12345; end-to-end /moneygodot:
+	# givePlayerMoney(GodotTes, 7777) -> amount 7777 untuk pemain sendiri.
+	if pid == 9 and amount == 12345:
+		_ev["money_ok"] = true
+	if pid == _net.player_id and amount == 7777:
+		_ev["money_real"] = true

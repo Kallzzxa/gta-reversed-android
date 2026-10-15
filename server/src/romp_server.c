@@ -26,6 +26,7 @@
 #include "romp_marker.h"
 #include "romp_death.h"
 #include "romp_wanted.h"
+#include "romp_money.h"
 
 #include <time.h>
 #include <pthread.h>
@@ -551,6 +552,9 @@ static void do_join(Client *c) {
     /* resync wanted level semua pemain yang connect */
     wanted_sync_join(c);
 
+    /* resync saldo miliknya sendiri ke pemain baru */
+    money_sync_join(c);
+
     /* resync world settings (gravity/weather/time) ke pemain baru */
     world_send_to(c);
 
@@ -585,6 +589,8 @@ static void do_leave(Client *c, int reason) {
     marker_on_player_leave(c);
     /* bersihkan wanted level pemain ini */
     wanted_on_player_leave(c);
+    /* bersihkan saldo pemain ini */
+    money_on_player_leave(c);
     /* bersihkan params kendaraan per-pemain miliknya (ala SA-MP) */
     vehicle_params_player_cleanup(c->id);
     uint8_t b[4];
@@ -651,6 +657,8 @@ int npc_connect(const char *name) {
     marker_init(c);
     /* Wanted level: 0 (bersih) ala SA-MP. */
     wanted_init(c);
+    /* Uang: 0 ala SA-MP. */
+    money_init(c);
     c->last_activity = now_ms();
     strncpy(c->ip, "npc", sizeof(c->ip) - 1);
     c->next = g_clients;
@@ -691,6 +699,8 @@ void npc_disconnect(int id, int reason) {
     marker_on_player_leave(c);
     /* bersihkan wanted level milik NPC ini */
     wanted_on_player_leave(c);
+    /* bersihkan saldo milik NPC ini */
+    money_on_player_leave(c);
     /* salin field yang dipakai setelah free */
     int nid = c->id;
     uint8_t interior = c->interior;
@@ -867,6 +877,8 @@ static void handle_hello(Client *c, const uint8_t *p, size_t n) {
     marker_init(c);
     /* Wanted level: 0 (bersih) ala SA-MP. */
     wanted_init(c);
+    /* Uang: 0 ala SA-MP. */
+    money_init(c);
     c->last_activity = now_ms();
     do_join(c);
 }

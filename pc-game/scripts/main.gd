@@ -142,6 +142,7 @@ func _setup_multiplayer() -> void:
 	net.marker_mode.connect(_on_marker_mode)
 	net.death_msg.connect(_on_death_msg)
 	net.wanted_set.connect(_on_wanted_set)
+	net.money_set.connect(_on_money_set)
 	net.teleport.connect(_on_teleport)
 	net.ping_updated.connect(_on_ping_updated)
 	net.label_spawn.connect(_on_label_spawn)
@@ -347,6 +348,29 @@ func _on_wanted_set(pid: int, level: int) -> void:
 	if level >= 3:
 		mp_chat.add_message(RompNet.CHAT_INFO,
 			"*** 🚔 %s kini wanted level %d!" % [_mp_name_of(pid), level])
+
+
+## Uang pemain otoritatif ala SA-MP (0x49 MONEY_SET): saldo pemain pid
+## berubah menjadi amount. Per-pemain — client hanya menerima saldo milik
+## sendiri. Disimpan untuk HUD uang (TODO: tampilkan di hud.gd).
+var _player_money := {}  # pid -> int amount
+
+## Format rupiah ala gamemode RP ("Rp1.000.000").
+func _rp(n: int) -> String:
+	var neg := n < 0
+	var s := str(absi(n))
+	var out := ""
+	while s.length() > 3:
+		out = "." + s.right(3) + out
+		s = s.left(s.length() - 3)
+	out = s + out
+	return ("-Rp" if neg else "Rp") + out
+
+func _on_money_set(pid: int, amount: int) -> void:
+	_player_money[pid] = amount
+	if pid == net.player_id:
+		mp_chat.add_message(RompNet.CHAT_INFO,
+			"*** 💰 Saldomu kini: %s" % [_rp(amount)])
 
 
 ## Player marker ala SA-MP (paket 0x44/0x45): warna marker efektif

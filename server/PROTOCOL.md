@@ -508,6 +508,50 @@ simpan per-pemain + pengumuman polisi di chat saat level >= 3).
 Demo: `/wanted <0-6>`, `/wantedof <id>` di `server/gamemode.lua`
 + event `onPlayerWantedLevelChange` yang mengumumkan ke chat.
 
+### 0x49 MONEY_SET (Server -> Client)
+
+Uang pemain otoritatif ala SA-MP (`SetPlayerMoney` / `GivePlayerMoney` /
+`ResetPlayerMoney` / `GetPlayerMoney`): dikirim server HANYA ke pemain
+bersangkutan setiap `romp.setPlayerMoney` / `romp.givePlayerMoney` /
+`romp.resetPlayerMoney` berhasil — sekaligus menyalakan event Lua
+`onPlayerMoneyChange(pid, oldamount, newamount)` (perpanjangan RO-MP;
+SA-MP tidak punya event ini — dipakai gamemode untuk logika bank/payday:
+catat transaksi besar, dsb). Per-pemain ala SA-MP: uang hanya tampil di
+HUD milik sendiri, orang lain tidak melihat saldo pemain ini, tidak
+di-scope virtual world/interior. Pemain yang join belakangan di-resync
+saldo miliknya sendiri via `money_sync_join`.
+
+Anti-dupe dasar: server satu-satunya sumber kebenaran — client tidak
+pernah bisa mengubah uangnya sendiri (tidak ada paket client -> server
+untuk uang). Semua perubahan lewat API server; rentang di-clamp ke
+`MONEY_MIN`..`MONEY_MAX` sehingga overflow tak mungkin terjadi
+(`money_give` menjenuhkan/saturate, bukan melimpah).
+
+Frame `0x49` MONEY_SET (6 byte):
+
+```
+u8  pid     // pemain yang saldonya berubah
+s32 amount  // saldo baru (LE), -999999999..999999999
+```
+
+Validasi: `pid` harus pemain yang sedang connect; `amount` dalam rentang
+`MONEY_MIN`..`MONEY_MAX`. Kembalikan `false` bila argumen tak valid
+(tanpa paket, tanpa event, state tak berubah).
+
+API Lua (lihat `server/README.md`):
+`romp.setPlayerMoney(pid, amount)` -> bool,
+`romp.givePlayerMoney(pid, delta)` -> bool,
+`romp.resetPlayerMoney(pid)` -> bool,
+`romp.getPlayerMoney(pid)` -> amount | nil.
+Event: `onPlayerMoneyChange(pid, oldamount, newamount)`.
+
+Client game menerapkan saldo dari `0x49` langsung
+(C++: `IROMPPlatform::OnPlayerMoney`; Godot: sinyal `money_set` ->
+simpan per-pemain + pengumuman di chat saat saldo sendiri berubah).
+Demo: `/uang`, `/setuang <id> <jumlah>`, `/kasih <id> <jumlah>`
+(transfer) di `server/gamemode.lua` + event `onPlayerMoneyChange`
+yang mengumumkan transaksi >= Rp1.000.000 ke chat.
+
 Test: `~/workspace/romp/tests/test_death.py`
 (+ `test_death_gamemode.lua`) — cek laporan valid/global broadcast/event/
 killer 255/validasi killer+reason/payload/manual-tanpa-event/NPC/joiner;

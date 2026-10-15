@@ -61,6 +61,20 @@
 -- jadi json.lua ada di sebelah gamemode.lua).
 local json = dofile("json.lua")
 
+-- Helper format rupiah ("Rp1.000.000").
+local function rp(n)
+    n = math.floor(n or 0)
+    local neg = n < 0
+    local s = tostring(math.abs(n))
+    local out = ""
+    while #s > 3 do
+        out = "." .. s:sub(-3) .. out
+        s = s:sub(1, -4)
+    end
+    out = s .. out
+    return (neg and "-Rp" or "Rp") .. out
+end
+
 -- ============================================================
 -- DEMO NUI: inventory ala ox_inventory. Ketik /inv di dalam game.
 -- Halaman UI: android/.../assets/romp/nui/inventory.html
@@ -206,6 +220,20 @@ function onPlayerWantedLevelChange(pid, oldlevel, newlevel)
     else
         romp.sendChatToPlayer(pid, romp.KIND_INFO,
             "*** Wanted level kamu sekarang: " .. newlevel .. ".")
+    end
+    return true
+end
+
+-- Uang pemain otoritatif ala SA-MP: perpanjangan RO-MP — event ini TIDAK
+-- ada di SA-MP, tapi memudahkan logika bank/payday di gamemode (catat
+-- transaksi besar, dsb).
+function onPlayerMoneyChange(pid, oldamount, newamount)
+    local name = romp.getPlayerName(pid) or ("id " .. pid)
+    if math.abs(newamount - oldamount) >= 1000000 then
+        -- Transaksi besar = umumkan ala berita ekonomi RP.
+        romp.sendChatToAll(romp.KIND_SYS,
+            "*** 💸 Transaksi besar: " .. name .. " "
+            .. rp(oldamount) .. " -> " .. rp(newamount) .. ".")
     end
     return true
 end
@@ -698,6 +726,63 @@ function onPlayerCommand(id, name, cmd, args)
             romp.sendChatToPlayer(id, romp.KIND_INFO,
                 "*** Gagal: pid tak valid.")
         end
+        return true
+    elseif cmd == "uang" then
+        -- Demo uang pemain otoritatif ala SA-MP (GetPlayerMoney):
+        -- /uang -> cek saldo sendiri (saldo tampil di HUD via 0x49).
+        local saldo = romp.getPlayerMoney(id)
+        romp.sendChatToPlayer(id, romp.KIND_INFO,
+            string.format("*** Saldo kamu: %s.", rp(saldo or 0)))
+        return true
+    elseif cmd == "setuang" then
+        -- Demo uang pemain otoritatif ala SA-MP (SetPlayerMoney):
+        -- /setuang <id> <jumlah> -> set saldo pemain (demo, semua boleh).
+        local tp, amt = args:match("(%d+)%s+([%-]?%d+)")
+        tp, amt = tonumber(tp), tonumber(amt)
+        if not tp or not amt then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Pakai: /setuang <id> <jumlah>.")
+            return true
+        end
+        if romp.setPlayerMoney(tp, amt) then
+            local tname = romp.getPlayerName(tp) or ("id " .. tp)
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                string.format("*** Saldo %s diset ke %s.",
+                    tname, rp(amt)))
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal: id tak valid atau jumlah di luar rentang.")
+        end
+        return true
+    elseif cmd == "kasih" then
+        -- Demo uang pemain otoritatif ala SA-MP (GivePlayerMoney):
+        -- /kasih <id> <jumlah> -> transfer dari saldo sendiri ke pemain
+        -- lain (anti-dupe: transfer hanya via server, saldo diverifikasi).
+        local tp, amt = args:match("(%d+)%s+(%d+)")
+        tp, amt = tonumber(tp), tonumber(amt)
+        if not tp or not amt or amt <= 0 then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Pakai: /kasih <id> <jumlah> (jumlah > 0).")
+            return true
+        end
+        local mine = romp.getPlayerMoney(id) or 0
+        if mine < amt then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                string.format("*** Saldo tak cukup (%s).", rp(mine)))
+            return true
+        end
+        local tname = romp.getPlayerName(tp)
+        if not tname then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal: id pemain tak valid.")
+            return true
+        end
+        romp.givePlayerMoney(id, -amt)
+        romp.givePlayerMoney(tp, amt)
+        romp.sendChatToPlayer(id, romp.KIND_INFO,
+            string.format("*** Kamu memberi %s kepada %s.", rp(amt), tname))
+        romp.sendChatToPlayer(tp, romp.KIND_INFO,
+            string.format("*** %s memberimu %s.", romp.getPlayerName(id), rp(amt)))
         return true
     elseif cmd == "modif" then
         -- Komponen kendaraan ala SA-MP (AddVehicleComponent/paintjob):
