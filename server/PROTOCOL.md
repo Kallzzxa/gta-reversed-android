@@ -508,6 +508,42 @@ simpan per-pemain + pengumuman polisi di chat saat level >= 3).
 Demo: `/wanted <0-6>`, `/wantedof <id>` di `server/gamemode.lua`
 + event `onPlayerWantedLevelChange` yang mengumumkan ke chat.
 
+### 0x53 TEAM_SET (Server -> Client)
+
+Tim pemain ala SA-MP (`SetPlayerTeam` / `GetPlayerTeam`): dikirim server
+ke SEMUA pemain setiap `romp.setPlayerTeam(pid, team)` berhasil —
+sekaligus menyalakan event Lua `onPlayerTeamChange(pid, oldteam,
+newteam)` (perpanjangan RO-MP; SA-MP tidak punya event ini — dipakai
+gamemode untuk logika gangwar/dm: warna marker per tim, respawn di base
+tim, dsb). Tim bersifat global ala SA-MP: semua orang melihat warna tim
+pemain lain (scoreboard, marker, nametag), tidak di-scope virtual
+world/interior. Pemain yang join belakangan di-resync tim semua yang
+connect via `team_sync_join` (termasuk miliknya sendiri, default
+`TEAM_NONE`).
+
+Frame `0x53` TEAM_SET (3 byte):
+
+```
+u8  pid    // pemain yang timnya berubah
+u8  team   // id tim 0..254; 255 = TEAM_NONE (tak punya tim ala NO_TEAM)
+```
+
+Validasi: `pid` harus pemain yang sedang connect; `team` 0..255.
+Kembalikan `false` bila argumen tak valid (tanpa broadcast, tanpa event,
+state tak berubah).
+
+API Lua (lihat `server/README.md`):
+`romp.setPlayerTeam(pid, team)` -> bool,
+`romp.getPlayerTeam(pid)` -> team | nil.
+Konstanta: `romp.TEAM_NONE` = 255.
+Event: `onPlayerTeamChange(pid, oldteam, newteam)`.
+
+Client game menerapkan tim dari `0x53` langsung
+(C++: `IROMPPlatform::OnPlayerTeam`; Godot: sinyal `team_set` ->
+simpan per-pemain + pengumuman pindah tim di chat).
+Demo: `/team [<0-254|255>]`, `/teamof <id>` di `server/gamemode.lua`
++ event `onPlayerTeamChange` yang mengumumkan ke chat.
+
 ### 0x49 MONEY_SET (Server -> Client)
 
 Uang pemain otoritatif ala SA-MP (`SetPlayerMoney` / `GivePlayerMoney` /

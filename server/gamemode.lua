@@ -284,6 +284,21 @@ function onPlayerWantedLevelChange(pid, oldlevel, newlevel)
     return true
 end
 
+-- Tim pemain ala SA-MP: perpanjangan RO-MP — event ini TIDAK ada di
+-- SA-MP, tapi memudahkan logika gangwar/dm di gamemode (warna marker,
+-- respawn di base tim, dsb).
+function onPlayerTeamChange(pid, oldteam, newteam)
+    local name = romp.getPlayerName(pid) or ("id " .. pid)
+    local function teamname(t)
+        if t == romp.TEAM_NONE then return "tanpa tim" end
+        return "tim " .. t
+    end
+    romp.sendChatToAll(romp.KIND_SYS,
+        "*** ⚔️ " .. name .. " pindah tim: "
+        .. teamname(oldteam) .. " -> " .. teamname(newteam) .. ".")
+    return true
+end
+
 -- Uang pemain otoritatif ala SA-MP: perpanjangan RO-MP — event ini TIDAK
 -- ada di SA-MP, tapi memudahkan logika bank/payday di gamemode (catat
 -- transaksi besar, dsb).
@@ -799,6 +814,43 @@ function onPlayerCommand(id, name, cmd, args)
             local tname = romp.getPlayerName(tp) or ("id " .. tp)
             romp.sendChatToPlayer(id, romp.KIND_INFO,
                 string.format("*** Wanted level %s: %d.", tname, lvl))
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal: pid tak valid.")
+        end
+        return true
+    elseif cmd == "team" then
+        -- Demo tim pemain ala SA-MP (SetPlayerTeam):
+        -- /team <0-254|255> -> set tim sendiri; /team saja -> lihat tim.
+        -- Broadcast 0x53 ke semua pemain + event onPlayerTeamChange
+        -- (lihat di atas). 255 = TEAM_NONE (tanpa tim ala SA-MP NO_TEAM).
+        local t = tonumber(args)
+        if t == nil then
+            local cur = romp.getPlayerTeam(id) or romp.TEAM_NONE
+            local txt = cur == romp.TEAM_NONE
+                and "tanpa tim (TEAM_NONE)"
+                or ("tim " .. cur)
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Tim kamu: " .. txt .. ". Pakai: /team <0-254|255>.")
+            return true
+        end
+        if romp.setPlayerTeam(id, t) then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                string.format("*** Tim kamu diset ke %d.", t))
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal: tim harus 0-255.")
+        end
+        return true
+    elseif cmd == "teamof" then
+        -- Lihat tim pemain lain (GetPlayerTeam): /teamof <id>.
+        local tp = tonumber(args)
+        local t = tp and romp.getPlayerTeam(tp)
+        if t ~= nil then
+            local tname = romp.getPlayerName(tp) or ("id " .. tp)
+            local txt = t == romp.TEAM_NONE and "tanpa tim" or ("tim " .. t)
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Tim " .. tname .. ": " .. txt .. ".")
         else
             romp.sendChatToPlayer(id, romp.KIND_INFO,
                 "*** Gagal: pid tak valid.")

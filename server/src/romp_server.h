@@ -84,6 +84,10 @@ typedef int SOCKET;
 #define P_WANTED_SET  0x48  /* server -> semua client: wanted pemain berubah
                                (pid+level, global) */
 
+/* ---- Tim pemain ala SA-MP (lihat romp_team.h & PROTOCOL.md) ---- */
+#define P_TEAM_SET    0x53  /* server -> semua client: tim pemain berubah
+                               (pid+team, global; 255 = tanpa tim) */
+
 /* ---- Uang pemain otoritatif ala SA-MP (lihat romp_money.h & PROTOCOL.md) ---- */
 #define P_MONEY_SET   0x49  /* server -> client: saldo berubah
                                (pid+s32 amount LE, hanya ke pemilik) */
@@ -316,6 +320,11 @@ typedef struct Client {
      * paling dicari. Otoritatif server, default 0, di-broadcast global
      * (0x48 WANTED_SET) ke semua pemain. */
     uint8_t  wanted_level;
+    /* Tim pemain ala SA-MP (lihat romp_team.h): 0..254 = id tim,
+     * 255 = TEAM_NONE (tak punya tim ala SA-MP NO_TEAM). Otoritatif
+     * server, default TEAM_NONE, di-broadcast global (0x53 TEAM_SET)
+     * ke semua pemain. */
+    uint8_t  team;
     /* Uang pemain otoritatif ala SA-MP (lihat romp_money.h):
      * otoritatif server, default 0, dikirim per-pemain (0x49 MONEY_SET)
      * hanya ke pemiliknya sendiri. */

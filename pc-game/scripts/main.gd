@@ -147,6 +147,7 @@ func _setup_multiplayer() -> void:
 	net.marker_mode.connect(_on_marker_mode)
 	net.death_msg.connect(_on_death_msg)
 	net.wanted_set.connect(_on_wanted_set)
+	net.team_set.connect(_on_team_set)
 	net.money_set.connect(_on_money_set)
 	net.teleport.connect(_on_teleport)
 	net.ping_updated.connect(_on_ping_updated)
@@ -446,6 +447,21 @@ func _on_wanted_set(pid: int, level: int) -> void:
 	if level >= 3:
 		mp_chat.add_message(RompNet.CHAT_INFO,
 			"*** 🚔 %s kini wanted level %d!" % [_mp_name_of(pid), level])
+
+
+## Tim pemain ala SA-MP (0x53 TEAM_SET): tim per-pemain (0..254 = id tim,
+## 255 = TEAM_NONE tanpa tim ala SA-MP NO_TEAM). Disimpan per-pemain;
+## dipakai warna nametag/scoreboard per tim (gangwar/dm).
+var _player_team := {}  # pid -> int team
+
+func _on_team_set(pid: int, team: int) -> void:
+	_player_team[pid] = team
+	if team == 255:
+		mp_chat.add_message(RompNet.CHAT_INFO,
+			"*** %s keluar dari tim (tanpa tim)." % _mp_name_of(pid))
+	else:
+		mp_chat.add_message(RompNet.CHAT_INFO,
+			"*** %s kini di tim %d." % [_mp_name_of(pid), team])
 
 
 ## Uang pemain otoritatif ala SA-MP (0x49 MONEY_SET): saldo pemain pid

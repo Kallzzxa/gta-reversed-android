@@ -26,6 +26,7 @@
 #include "romp_marker.h"
 #include "romp_death.h"
 #include "romp_wanted.h"
+#include "romp_team.h"
 #include "romp_money.h"
 #include "romp_spectate.h"
 #include "romp_key.h"
@@ -565,6 +566,9 @@ static void do_join(Client *c) {
     /* resync wanted level semua pemain yang connect */
     wanted_sync_join(c);
 
+    /* resync tim semua pemain yang connect */
+    team_sync_join(c);
+
     /* resync saldo miliknya sendiri ke pemain baru */
     money_sync_join(c);
 
@@ -608,6 +612,8 @@ static void do_leave(Client *c, int reason) {
     marker_on_player_leave(c);
     /* bersihkan wanted level pemain ini */
     wanted_on_player_leave(c);
+    /* bersihkan tim pemain ini */
+    team_on_player_leave(c);
     /* bersihkan saldo pemain ini */
     money_on_player_leave(c);
     /* bersihkan state spectate pemain ini + stop penonton yang menargetnya */
@@ -680,6 +686,8 @@ int npc_connect(const char *name) {
     marker_init(c);
     /* Wanted level: 0 (bersih) ala SA-MP. */
     wanted_init(c);
+    /* Tim: TEAM_NONE (tak punya tim) ala SA-MP NO_TEAM. */
+    team_init(c);
     /* Uang: 0 ala SA-MP. */
     money_init(c);
     /* Spectate: mati ala SA-MP. */
@@ -728,6 +736,8 @@ void npc_disconnect(int id, int reason) {
     marker_on_player_leave(c);
     /* bersihkan wanted level milik NPC ini */
     wanted_on_player_leave(c);
+    /* bersihkan tim milik NPC ini */
+    team_on_player_leave(c);
     /* bersihkan saldo milik NPC ini */
     money_on_player_leave(c);
     /* bersihkan state spectate milik NPC ini + stop penontonnya */
@@ -910,6 +920,8 @@ static void handle_hello(Client *c, const uint8_t *p, size_t n) {
     marker_init(c);
     /* Wanted level: 0 (bersih) ala SA-MP. */
     wanted_init(c);
+    /* Tim: TEAM_NONE (tak punya tim) ala SA-MP NO_TEAM. */
+    team_init(c);
     /* Uang: 0 ala SA-MP. */
     money_init(c);
     /* Spectate: mati ala SA-MP. */

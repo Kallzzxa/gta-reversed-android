@@ -66,6 +66,7 @@ func _run() -> void:
 	_net.marker_mode.connect(_on_mmode)
 	_net.death_msg.connect(_on_dmsg)
 	_net.wanted_set.connect(_on_wanted)
+	_net.team_set.connect(_on_team)
 	_net.money_set.connect(_on_money)
 	_net.veh_plate.connect(_on_plate)
 	_net.spectate.connect(_on_spectate)
@@ -167,6 +168,23 @@ func _run() -> void:
 	# end-to-end: wanted 4 untuk GodotTes sendiri via gamemode
 	_net.send_chat("/wantedgodot")
 	_check(await _wait("wanted_real", 10.0), "wanted_set_server_diterima")
+
+	# --- 5c2. Tim pemain ala SA-MP (0x53 TEAM_SET): frame sintetik
+	# langsung ke parser + end-to-end via /teamgodot
+	# (romp.setPlayerTeam -> broadcast 0x53) ---
+	_ev.erase("team_ok")
+	_ev.erase("team_real")
+	var tpay := StreamPeerBuffer.new()
+	tpay.big_endian = false
+	tpay.put_u8(9)    # pid
+	tpay.put_u8(2)    # team 2
+	_net._inbuf.append_array(_mk_frame(RompNet.T_TEAM_SET, tpay.data_array))
+	_net._parse()
+	_check(_ev.get("team_ok", false), "team_set_diterima")
+	# end-to-end: team 2 untuk GodotTes sendiri via gamemode
+	await create_timer(2.5).timeout  # jeda anti-spam server (maks 3/2dtk)
+	_net.send_chat("/teamgodot")
+	_check(await _wait("team_real", 10.0), "team_set_server_diterima")
 
 	# --- 5d. Uang pemain otoritatif ala SA-MP (0x49 MONEY_SET): frame
 	# sintetik langsung ke parser + end-to-end via /moneygodot
@@ -412,6 +430,15 @@ func _on_wanted(pid: int, level: int) -> void:
 		_ev["wanted_ok"] = true
 	if pid == _net.player_id and level == 4:
 		_ev["wanted_real"] = true
+
+
+func _on_team(pid: int, team: int) -> void:
+	# Frame sintetik: (9,2); end-to-end /teamgodot: team 2 untuk
+	# pemain sendiri.
+	if pid == 9 and team == 2:
+		_ev["team_ok"] = true
+	if pid == _net.player_id and team == 2:
+		_ev["team_real"] = true
 
 
 func _on_money(pid: int, amount: int) -> void:

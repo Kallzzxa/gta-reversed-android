@@ -19,6 +19,7 @@
 #include "romp_marker.h"
 #include "romp_death.h"
 #include "romp_wanted.h"
+#include "romp_team.h"
 #include "romp_money.h"
 #include "romp_spectate.h"
 #include "romp_key.h"
@@ -1609,6 +1610,36 @@ static int l_romp_get_player_wanted_level(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- API tim pemain ala SA-MP ----------------
+ * romp.setPlayerTeam(pid, team) -> bool
+ *   Mirip SA-MP SetPlayerTeam: set tim 0..255 (255 = TEAM_NONE, tak punya
+ *   tim ala SA-MP NO_TEAM). Server menyimpan state otoritatif, broadcast
+ *   0x53 TEAM_SET ke SEMUA pemain (tim terlihat semua orang ala SA-MP:
+ *   warna scoreboard/marker/nametag), dan menyalakan event
+ *   onPlayerTeamChange(pid, oldteam, newteam) — perpanjangan RO-MP
+ *   (SA-MP tak punya event ini) untuk logika gangwar/dm di gamemode
+ *   (pindah warna marker, respawn di base tim, dsb).
+ *   false bila pemain tak valid / team di luar 0..255 (state tak berubah).
+ * romp.getPlayerTeam(pid) -> team | nil
+ *   (ala SA-MP GetPlayerTeam; nil bila pemain tak valid)
+ */
+static int l_romp_set_player_team(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int team = (int)luaL_checkinteger(Ls, 2);
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && team_set(c, team));
+    return 1;
+}
+
+static int l_romp_get_player_team(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(pid);
+    int t = c ? team_get(c) : -1;
+    if (t < 0) { lua_pushnil(Ls); return 1; }
+    lua_pushinteger(Ls, (lua_Integer)t);
+    return 1;
+}
+
 /* ---------------- API uang pemain otoritatif ala SA-MP ----------------
  * romp.setPlayerMoney(pid, amount) -> bool
  *   Mirip SA-MP SetPlayerMoney: set saldo pemain ke `amount`
@@ -2334,6 +2365,11 @@ static void script_register_api(lua_State *Ls) {
     /* wanted level ala SA-MP (SetPlayerWantedLevel/GetPlayerWantedLevel) */
     lua_pushcfunction(Ls, l_romp_set_player_wanted_level); lua_setfield(Ls, -2, "setPlayerWantedLevel");
     lua_pushcfunction(Ls, l_romp_get_player_wanted_level); lua_setfield(Ls, -2, "getPlayerWantedLevel");
+    /* tim pemain ala SA-MP (SetPlayerTeam/GetPlayerTeam) */
+    lua_pushcfunction(Ls, l_romp_set_player_team); lua_setfield(Ls, -2, "setPlayerTeam");
+    lua_pushcfunction(Ls, l_romp_get_player_team); lua_setfield(Ls, -2, "getPlayerTeam");
+    /* konstanta tak punya tim ala SA-MP NO_TEAM (a_samp.inc) */
+    lua_pushinteger(Ls, TEAM_NONE); lua_setfield(Ls, -2, "TEAM_NONE");
     /* uang pemain otoritatif ala SA-MP (SetPlayerMoney/GivePlayerMoney/ResetPlayerMoney/GetPlayerMoney) */
     lua_pushcfunction(Ls, l_romp_set_player_money); lua_setfield(Ls, -2, "setPlayerMoney");
     lua_pushcfunction(Ls, l_romp_give_player_money); lua_setfield(Ls, -2, "givePlayerMoney");
@@ -3003,6 +3039,23 @@ void lua_on_wanted_level_change(int pid, int oldlevel, int newlevel) {
     EvWanted e = { pid, oldlevel, newlevel };
     fs_event("onPlayerWantedLevelChange", push_wanted, &e);
     call_event("onPlayerWantedLevelChange", push_wanted, &e);
+}
+
+/* Event tim pemain ala SA-MP (perpanjangan RO-MP — SA-MP tak punya
+ * event ini): onPlayerTeamChange(pid, oldteam, newteam). */
+typedef struct { int pid; int oldt; int newt; } EvTeam;
+static int push_team(lua_State *Ls, void *ud) {
+    EvTeam *e = (EvTeam *)ud;
+    lua_pushinteger(Ls, e->pid);
+    lua_pushinteger(Ls, e->oldt);
+    lua_pushinteger(Ls, e->newt);
+    return 3;
+}
+
+void lua_on_team_change(int pid, int oldteam, int newteam) {
+    EvTeam e = { pid, oldteam, newteam };
+    fs_event("onPlayerTeamChange", push_team, &e);
+    call_event("onPlayerTeamChange", push_team, &e);
 }
 
 /* Event uang pemain ala SA-MP (perpanjangan RO-MP — SA-MP tak punya

@@ -81,6 +81,10 @@ void lua_on_player_death(int victimid, int killerid, int reason);
  * romp.setPlayerWantedLevel berhasil — onPlayerWantedLevelChange(pid,
  * oldlevel, newlevel). Dipakai gamemode untuk logika polisi. */
 void lua_on_wanted_level_change(int pid, int oldlevel, int newlevel);
+/* Event tim pemain ala SA-MP (perpanjangan RO-MP): menyala setiap
+ * romp.setPlayerTeam berhasil — onPlayerTeamChange(pid, oldteam, newteam).
+ * Dipakai gamemode untuk logika gangwar/dm (warna marker, base tim). */
+void lua_on_team_change(int pid, int oldteam, int newteam);
 /* Event uang pemain ala SA-MP (perpanjangan RO-MP): menyala setiap
  * romp.setPlayerMoney/givePlayerMoney/resetPlayerMoney berhasil —
  * onPlayerMoneyChange(pid, oldamount, newamount). Dipakai gamemode untuk

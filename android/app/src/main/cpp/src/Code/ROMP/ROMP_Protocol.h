@@ -93,6 +93,8 @@ enum class PacketType : uint8_t {
     // Wanted level ala SA-MP (SetPlayerWantedLevel/GetPlayerWantedLevel),
     // server -> semua client (broadcast global).
     WANTED_SET   = 0x48,  // level wanted berubah: u8 pid + u8 level
+    TEAM_SET     = 0x53,  // tim pemain berubah: u8 pid + u8 team
+                          // (255 = TEAM_NONE, tanpa tim ala NO_TEAM)
                           // (0=bersih .. 6=paling dicari) (2B payload)
     // Uang pemain otoritatif ala SA-MP (SetPlayerMoney/GivePlayerMoney/
     // ResetPlayerMoney/GetPlayerMoney), server -> client (per-pemain,
@@ -820,6 +822,23 @@ inline bool parse_wanted_set(const uint8_t* data, size_t len,
     Reader r(data, len);
     if (!r.get_u8(out.pid)) return false;
     if (!r.get_u8(out.level)) return false;
+    return len == 2;  // tolak payload kepanjangan/kependekan
+}
+
+// ---- Tim pemain ala SA-MP (server -> client, broadcast global) ----
+
+// Info tim pemain ala SA-MP (0x53 TEAM_SET).
+struct TeamSetInfo {
+    uint8_t pid = 0;   // pemain yang timnya berubah (u8)
+    uint8_t team = 0;  // id tim 0..254; 255 = TEAM_NONE (tanpa tim) (u8)
+};
+
+// 0x53 TEAM_SET: u8 pid | u8 team (2 byte payload).
+inline bool parse_team_set(const uint8_t* data, size_t len,
+                           TeamSetInfo& out) {
+    Reader r(data, len);
+    if (!r.get_u8(out.pid)) return false;
+    if (!r.get_u8(out.team)) return false;
     return len == 2;  // tolak payload kepanjangan/kependekan
 }
 

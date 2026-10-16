@@ -477,6 +477,14 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
             platform_->OnPlayerWanted(wi.pid, wi.level);
             break;
         }
+        case PacketType::TEAM_SET: {
+            // Tim pemain ala SA-MP (romp.setPlayerTeam): id tim 0..254,
+            // 255 = tanpa tim, broadcast global.
+            TeamSetInfo ti;
+            if (!parse_team_set(payload, len, ti)) break;
+            platform_->OnPlayerTeam(ti.pid, ti.team);
+            break;
+        }
         case PacketType::MONEY_SET: {
             // Uang pemain otoritatif ala SA-MP (romp.setPlayerMoney/
             // givePlayerMoney/resetPlayerMoney): per-pemain, hanya

@@ -458,6 +458,50 @@ Paket: `0x48` WANTED_SET (frame 3 byte: u8 pid + u8 level, server →
 semua client, global) — lihat `PROTOCOL.md`. Client C++:
 `IROMPPlatform::OnPlayerWanted`; Godot: sinyal `wanted_set`.
 
+### Tim pemain ala SA-MP (`SetPlayerTeam` / `GetPlayerTeam`)
+
+Tim per pemain ala SA-MP: 0..254 = id tim (dipakai gangwar/dm),
+255 = `TEAM_NONE` (tak punya tim, ala SA-MP `NO_TEAM`). State otoritatif
+server (`Client.team`, default `TEAM_NONE` termasuk NPC). Setiap
+`romp.setPlayerTeam` yang berhasil di-broadcast ke SEMUA pemain via
+paket `0x53` TEAM_SET (global — tim terlihat semua orang ala SA-MP:
+warna scoreboard/marker/nametag, tanpa scope vw/interior) +
+menyalakan event Lua `onPlayerTeamChange(pid, oldteam, newteam)`
+(perpanjangan RO-MP; SA-MP tidak punya event ini). Pemain yang baru
+join di-resync tim semua yang connect (termasuk miliknya sendiri).
+
+Event ini memudahkan logika gangwar/dm di gamemode: warna marker per
+tim, respawn di base tim, friendly-fire off antar anggota tim, dsb.
+Demo di `server/gamemode.lua`: `/team [<0-254|255>]` (set/lihat tim
+sendiri), `/teamof <id>` (lihat tim pemain lain) + handler
+`onPlayerTeamChange` yang mengumumkan pindah tim ke chat.
+
+| API | Keterangan |
+|-----|------------|
+| `romp.setPlayerTeam(pid, team)` | Set tim 0..255 → `true`/`false`. Broadcast `0x53` + event. |
+| `romp.getPlayerTeam(pid)` | Id tim saat ini (int, 255 = tanpa tim) / nil bila pemain tak valid. |
+| `romp.TEAM_NONE` | Konstanta 255 — tak punya tim ala SA-MP `NO_TEAM`. |
+
+Event: `onPlayerTeamChange(pid, oldteam, newteam)` — menyala
+setiap perubahan tim yang berhasil.
+
+```lua
+-- /team: masuk tim 1 (mis. gang "Grove").
+romp.setPlayerTeam(id, 1)
+
+-- Event: warnai marker + respawn di base tim saat pindah tim.
+function onPlayerTeamChange(pid, oldteam, newteam)
+    local n = romp.getPlayerName(pid) or ("id " .. pid)
+    romp.sendChatToAll(romp.KIND_SYS,
+        "*** ⚔️ " .. n .. " pindah dari tim " .. oldteam
+        .. " ke tim " .. newteam .. ".")
+end
+```
+
+Paket: `0x53` TEAM_SET (frame 3 byte: u8 pid + u8 team, server →
+semua client, global) — lihat `PROTOCOL.md`. Client C++:
+`IROMPPlatform::OnPlayerTeam`; Godot: sinyal `team_set`.
+
 ### Uang pemain otoritatif ala SA-MP (`SetPlayerMoney` / `GivePlayerMoney` / `ResetPlayerMoney` / `GetPlayerMoney`)
 
 Saldo per pemain ala SA-MP. State otoritatif server (`Client.money`,

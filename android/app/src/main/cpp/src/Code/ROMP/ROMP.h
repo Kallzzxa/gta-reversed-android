@@ -163,6 +163,14 @@ public:
     //   tiap pemain remote; trigger skin/mobil polisi saat level >= 3.
     virtual void OnPlayerWanted(uint8_t /*pid*/, uint8_t /*level*/) {}
 
+    // Tim pemain ala SA-MP (paket 0x53 TEAM_SET, dari
+    // romp.setPlayerTeam): tim pemain pid berubah menjadi team
+    // (0..254 = id tim, 255 = TEAM_NONE tanpa tim ala NO_TEAM).
+    // Broadcast global — client menerima tim semua pemain. Default no-op.
+    // TODO(GAME): warnai nametag/scoreboard/marker pemain remote sesuai
+    //   tim (mis. tim 1 = biru, tim 2 = merah) untuk gangwar/dm.
+    virtual void OnPlayerTeam(uint8_t /*pid*/, uint8_t /*team*/) {}
+
     // Uang pemain otoritatif ala SA-MP (paket 0x49 MONEY_SET, dari
     // romp.setPlayerMoney/givePlayerMoney/resetPlayerMoney): saldo pemain
     // pid berubah menjadi amount. Per-pemain — client hanya menerima
