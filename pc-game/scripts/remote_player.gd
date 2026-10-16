@@ -118,6 +118,22 @@ func remove_attach(index: int) -> void:
 		_attaches.erase(index)
 
 
+## Animasi pemain ala SA-MP (paket 0x4E ANIM_SET / 0x4F ANIM_CLEAR):
+## tampilkan nama animasi sebagai suffix nametag ped remote; string kosong
+## menghapus suffix. PLACEHOLDER visual: Godot tak punya anim lib GTA, jadi
+## animasi "dance"/"walk" hanya ditandai teks sampai tersedia (TODO(anim)).
+var _base_nametag := ""
+var _anim_tag := ""
+
+func set_animation_tag(animname: String) -> void:
+	if _nametag == null:
+		return
+	if _base_nametag == "":
+		_base_nametag = _nametag.text
+	_anim_tag = animname
+	_nametag.text = _base_nametag + ((" [💃 " + animname + "]") if animname != "" else "")
+
+
 ## Player marker ala SA-MP (paket 0x44): warnai nametag 3D pemain dengan
 ## warna marker efektif dari server (0xRRGGBBAA ala SA-MP).
 func set_marker_color(color_u32: int) -> void:

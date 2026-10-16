@@ -29,6 +29,7 @@
 #include "romp_money.h"
 #include "romp_spectate.h"
 #include "romp_key.h"
+#include "romp_anim.h"
 
 #include <time.h>
 #include <pthread.h>
@@ -436,6 +437,8 @@ void player_set_world(Client *c, int interior, uint32_t vw) {
      * viewer baru menyembunyikan ped-nya. */
     spectate_on_world_change();
     spectate_sync_join(c);
+    /* Animasi ala SA-MP: clear ke viewer lama + resync 0x4E ke viewer baru. */
+    anim_on_world_change(c);
     if (c->spectating)
         spectate_broadcast(c);
     log_msg("[vw] %s (id %d): interior %d->%d, vw %u->%u",
@@ -571,6 +574,9 @@ static void do_join(Client *c) {
     /* resync status spectate pemain lain yang terlihat ke pemain baru */
     spectate_sync_join(c);
 
+    /* resync animasi pemain lain yang terlihat ke pemain baru */
+    anim_sync_join(c);
+
     /* beritahu yang lain (hanya yang se-vw & se-interior) */
     size_t jn = build_join(b, c);
     broadcast_scoped(b, jn, c, c);
@@ -606,6 +612,8 @@ static void do_leave(Client *c, int reason) {
     money_on_player_leave(c);
     /* bersihkan state spectate pemain ini + stop penonton yang menargetnya */
     spectate_on_player_leave(c);
+    /* reset animasi pemain ini diam-diam (P_LEAVE sudah hapus ped) */
+    anim_leave(c);
     /* bersihkan params kendaraan per-pemain miliknya (ala SA-MP) */
     vehicle_params_player_cleanup(c->id);
     uint8_t b[4];
@@ -678,6 +686,8 @@ int npc_connect(const char *name) {
     spectate_init(c);
     /* Key state: tak ada tombol ditekan ala SA-MP. */
     key_init(c);
+    /* Animasi pemain: tak ada animasi ala SA-MP. */
+    anim_init(c);
     c->last_activity = now_ms();
     strncpy(c->ip, "npc", sizeof(c->ip) - 1);
     c->next = g_clients;
@@ -722,6 +732,8 @@ void npc_disconnect(int id, int reason) {
     money_on_player_leave(c);
     /* bersihkan state spectate milik NPC ini + stop penontonnya */
     spectate_on_player_leave(c);
+    /* reset animasi milik NPC ini diam-diam */
+    anim_leave(c);
     /* salin field yang dipakai setelah free */
     int nid = c->id;
     uint8_t interior = c->interior;
@@ -904,6 +916,8 @@ static void handle_hello(Client *c, const uint8_t *p, size_t n) {
     spectate_init(c);
     /* Key state: tak ada tombol ditekan ala SA-MP. */
     key_init(c);
+    /* Animasi pemain: tak ada animasi ala SA-MP. */
+    anim_init(c);
     c->last_activity = now_ms();
     do_join(c);
 }

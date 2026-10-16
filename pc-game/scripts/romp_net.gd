@@ -59,6 +59,8 @@ const T_MONEY_SET := 0x49
 const T_VEH_PLATE := 0x4A
 const T_SPECTATE := 0x4B
 const T_KEY_SYNC := 0x4D
+const T_ANIM_SET := 0x4E
+const T_ANIM_CLEAR := 0x4F
 const T_NUI := 0x40
 
 const VER := 1
@@ -123,6 +125,8 @@ signal money_set(pid: int, amount: int)
 signal veh_plate(vid: int, plate: String)
 signal spectate(pid: int, spectating: int, target_type: int, target: int, mode: int)
 signal key_sync(pid: int, keys: int)
+signal anim_set(pid: int, animlib: String, animname: String, flags: int, timems: int)
+signal anim_clear(pid: int)
 signal nui_message(json_text: String)
 signal ping_updated(ms: int)
 
@@ -453,6 +457,16 @@ func _dispatch(ftype: int, payload: PackedByteArray) -> void:
 			# tombol ala SA-MP). Broadcast vw-scoped ke viewer yang
 			# melihat pemain itu + resync saat join / pindah vw.
 			key_sync.emit(r.u8(), r.u16())
+		T_ANIM_SET:
+			# Animasi pemain ala SA-MP (0x4E): u8 pid + u8 liblen + lib +
+			# u8 namelen + name + u8 flags (bit0=loop, bit1=lockx,
+			# bit2=locky, bit3=freeze, bit4=forcesync) + u16 timems LE.
+			# Broadcast vw-scoped + resync saat join / pindah vw.
+			anim_set.emit(r.u8(), r.str8(), r.str8(), r.u8(), r.u16())
+		T_ANIM_CLEAR:
+			# Animasi dihentikan ala SA-MP ClearAnimations (0x4F): u8 pid.
+			# Broadcast vw-scoped.
+			anim_clear.emit(r.u8())
 		T_WPN_SYNC:
 			var shooter := r.u16()
 			var weapon := r.u16()

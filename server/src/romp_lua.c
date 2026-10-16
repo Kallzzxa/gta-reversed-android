@@ -22,6 +22,7 @@
 #include "romp_money.h"
 #include "romp_spectate.h"
 #include "romp_key.h"
+#include "romp_anim.h"
 
 #include "../vendor/sqlite/sqlite3.h"
 
@@ -1859,6 +1860,81 @@ static int l_romp_get_player_keys(lua_State *Ls) {
     return 1;
 }
 
+/* ---------------- API animasi pemain ala SA-MP ----------------
+ * romp.applyAnimationForPlayer(pid, animlib, animname[, loop=0[, lockx=0[,
+ *   locky=0[, freeze=0[, time=250[, forcesync=0]]]]]]) -> bool
+ *   ala SA-MP ApplyAnimation(playerid, animlib[], animname[], loop,
+ *   lockx, locky, freeze, time, forcesync): terapkan animasi GTA ke ped
+ *   pemain — client yang melihat pemain itu menerima 0x4E ANIM_SET lalu
+ *   memutar animasi di game. lib & name wajib 1..32 char (false bila tak
+ *   valid, state tak berubah). loop/lockx/locky/freeze/forcesync = 0/1;
+ *   forcesync hanya flag (server selalu broadcast ke semua viewer).
+ *   time (ms) dibatasi 0..65535. Event: onPlayerApplyAnimation(pid, animlib,
+ *   animname). Idempoten bila state persis sama (true tanpa broadcast
+ *   ulang). NPC boleh diberi animasi.
+ * romp.clearAnimationsForPlayer(pid) -> bool
+ *   ala SA-MP ClearAnimations: hentikan animasi (broadcast 0x4F ANIM_CLEAR
+ *   vw-scoped) + event onPlayerClearAnimations(pid). false bila pemain
+ *   tak sedang beranimasi.
+ * romp.getPlayerAnimation(pid) -> table | nil
+ *   table { animlib, animname, loop, lockx, locky, freeze, time } dari
+ *   state otoritatif server; nil bila tak sedang beranimasi / tak valid.
+ * Konstanta flag: romp.ANIM_FLAG_LOOP/LOCKX/LOCKY/FREEZE/FORCESYNC.
+ */
+static int l_romp_apply_animation_for_player(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    const char *lib = luaL_checkstring(Ls, 2);
+    const char *name = luaL_checkstring(Ls, 3);
+    int loop = (int)luaL_optinteger(Ls, 4, 0);
+    int lockx = (int)luaL_optinteger(Ls, 5, 0);
+    int locky = (int)luaL_optinteger(Ls, 6, 0);
+    int freeze = (int)luaL_optinteger(Ls, 7, 0);
+    int timems = (int)luaL_optinteger(Ls, 8, 250);
+    int forcesync = (int)luaL_optinteger(Ls, 9, 0);
+    uint8_t flags = 0;
+    if (loop) flags |= ANIM_FLAG_LOOP;
+    if (lockx) flags |= ANIM_FLAG_LOCKX;
+    if (locky) flags |= ANIM_FLAG_LOCKY;
+    if (freeze) flags |= ANIM_FLAG_FREEZE;
+    if (forcesync) flags |= ANIM_FLAG_FORCESYNC;
+    if (timems < 0) timems = 0;
+    if (timems > 65535) timems = 65535;
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && anim_apply(c, lib, name, flags,
+                                       (uint16_t)timems));
+    return 1;
+}
+
+static int l_romp_clear_animations_for_player(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && anim_clear(c));
+    return 1;
+}
+
+static int l_romp_get_player_animation(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(pid);
+    if (!c || !c->handshaked || c->dead || !c->animactive) {
+        lua_pushnil(Ls);
+        return 1;
+    }
+    lua_newtable(Ls);
+    lua_pushstring(Ls, c->animlib);   lua_setfield(Ls, -2, "animlib");
+    lua_pushstring(Ls, c->animname);  lua_setfield(Ls, -2, "animname");
+    lua_pushboolean(Ls, (c->animflags & ANIM_FLAG_LOOP) != 0);
+    lua_setfield(Ls, -2, "loop");
+    lua_pushboolean(Ls, (c->animflags & ANIM_FLAG_LOCKX) != 0);
+    lua_setfield(Ls, -2, "lockx");
+    lua_pushboolean(Ls, (c->animflags & ANIM_FLAG_LOCKY) != 0);
+    lua_setfield(Ls, -2, "locky");
+    lua_pushboolean(Ls, (c->animflags & ANIM_FLAG_FREEZE) != 0);
+    lua_setfield(Ls, -2, "freeze");
+    lua_pushinteger(Ls, (lua_Integer)c->animtime);
+    lua_setfield(Ls, -2, "time");
+    return 1;
+}
+
 /* ---------------- API world settings ala SA-MP ----------------
  * romp.setGravity(gravity) -> bool
  *   ala SA-MP SetGravity; default GTA:SA 0.008. Valid 0.001..0.5,
@@ -2304,6 +2380,17 @@ static void script_register_api(lua_State *Ls) {
     lua_pushinteger(Ls, DEATH_KILLER_NONE); lua_setfield(Ls, -2, "DEATH_KILLER_NONE");
     /* key state ala SA-MP (OnPlayerKeyStateChange) */
     lua_pushcfunction(Ls, l_romp_get_player_keys); lua_setfield(Ls, -2, "getPlayerKeys");
+    lua_pushcfunction(Ls, l_romp_apply_animation_for_player);
+    lua_setfield(Ls, -2, "applyAnimationForPlayer");
+    lua_pushcfunction(Ls, l_romp_clear_animations_for_player);
+    lua_setfield(Ls, -2, "clearAnimationsForPlayer");
+    lua_pushcfunction(Ls, l_romp_get_player_animation);
+    lua_setfield(Ls, -2, "getPlayerAnimation");
+    lua_pushinteger(Ls, ANIM_FLAG_LOOP);     lua_setfield(Ls, -2, "ANIM_FLAG_LOOP");
+    lua_pushinteger(Ls, ANIM_FLAG_LOCKX);    lua_setfield(Ls, -2, "ANIM_FLAG_LOCKX");
+    lua_pushinteger(Ls, ANIM_FLAG_LOCKY);    lua_setfield(Ls, -2, "ANIM_FLAG_LOCKY");
+    lua_pushinteger(Ls, ANIM_FLAG_FREEZE);   lua_setfield(Ls, -2, "ANIM_FLAG_FREEZE");
+    lua_pushinteger(Ls, ANIM_FLAG_FORCESYNC); lua_setfield(Ls, -2, "ANIM_FLAG_FORCESYNC");
     lua_pushinteger(Ls, KEY_ACTION);           lua_setfield(Ls, -2, "KEY_ACTION");
     lua_pushinteger(Ls, KEY_CROUCH);           lua_setfield(Ls, -2, "KEY_CROUCH");
     lua_pushinteger(Ls, KEY_FIRE);             lua_setfield(Ls, -2, "KEY_FIRE");
@@ -2974,6 +3061,38 @@ void lua_on_player_key_change(int pid, uint16_t newkeys, uint16_t oldkeys) {
     EvKeys e = { pid, newkeys, oldkeys };
     fs_event("onPlayerKeyStateChange", push_keys, &e);
     call_event("onPlayerKeyStateChange", push_keys, &e);
+}
+
+/* Event animasi pemain ala SA-MP (perpanjangan RO-MP): menyala saat
+ * ApplyAnimation diterapkan — onPlayerApplyAnimation(pid, animlib, animname);
+ * dan saat dihentikan — onPlayerClearAnimations(pid). */
+typedef struct { int pid; const char *lib; const char *name; } EvAnim;
+static int push_anim(lua_State *Ls, void *ud) {
+    EvAnim *e = (EvAnim *)ud;
+    lua_pushinteger(Ls, e->pid);
+    lua_pushstring(Ls, e->lib);
+    lua_pushstring(Ls, e->name);
+    return 3;
+}
+
+/* Varian hanya-pid untuk onPlayerClearAnimations. */
+static int push_anim_pid(lua_State *Ls, void *ud) {
+    EvAnim *e = (EvAnim *)ud;
+    lua_pushinteger(Ls, e->pid);
+    return 1;
+}
+
+void lua_on_player_apply_animation(int pid, const char *animlib,
+                                   const char *animname) {
+    EvAnim e = { pid, animlib, animname };
+    fs_event("onPlayerApplyAnimation", push_anim, &e);
+    call_event("onPlayerApplyAnimation", push_anim, &e);
+}
+
+void lua_on_player_clear_animations(int pid) {
+    EvAnim e = { pid, NULL, NULL };
+    fs_event("onPlayerClearAnimations", push_anim_pid, &e);
+    call_event("onPlayerClearAnimations", push_anim_pid, &e);
 }
 
 typedef struct { int pid; int oldi; int newi; } EvInt;

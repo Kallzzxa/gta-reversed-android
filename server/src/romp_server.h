@@ -102,6 +102,13 @@ typedef int SOCKET;
 #define P_KEY_SYNC    0x4D  /* server -> client: state tombol pemain berubah
                                (pid+u16 keys LE, broadcast vw-scoped) */
 
+/* ---- Animasi pemain ala SA-MP (lihat romp_anim.h & PROTOCOL.md) ---- */
+#define P_ANIM_SET    0x4E  /* server -> client: animasi pemain diterapkan
+                               (pid+liblen+lib+namelen+name+flags+timems,
+                               broadcast vw-scoped) */
+#define P_ANIM_CLEAR  0x4F  /* server -> client: animasi pemain dihentikan
+                               (pid, broadcast vw-scoped) */
+
 /* ---- Sinkronisasi senjata & tembakan ala SA-MP (lihat PROTOCOL.md) ---- */
 #define P_WPN         0x17  /* client -> server: event tembakan */
 #define P_WPN_SYNC    0x18  /* server -> client: broadcast tembakan */
@@ -327,6 +334,15 @@ typedef struct Client {
      * berubah (0x4D KEY_SYNC). Momenter: tak di-resync saat join baru. */
     uint16_t keys;            /* state tombol terakhir */
     uint64_t last_key_ms;     /* rate limit laporan key state */
+    /* Animasi pemain ala SA-MP (lihat romp_anim.h): library & nama animasi
+     * terakhir (paket 0x4E ANIM_SET / 0x4F ANIM_CLEAR, broadcast vw-scoped).
+     * Momenter ala SA-MP: di-resync ke pemain baru yang join & saat pindah
+     * vw/interior, di-reset saat leave. */
+    char     animlib[33];     /* library animasi aktif, "" = tak ada */
+    char     animname[33];    /* nama animasi aktif */
+    uint8_t  animflags;       /* bitmask ANIM_FLAG_* */
+    uint16_t animtime;        /* durasi (ms) ala SA-MP */
+    uint8_t  animactive;      /* 1 = sedang beranimasi */
     struct Client *next;
 } Client;
 

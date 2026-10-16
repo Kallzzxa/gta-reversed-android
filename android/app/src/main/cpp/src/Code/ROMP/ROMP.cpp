@@ -513,6 +513,23 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
             platform_->OnPlayerKeys(ki.pid, ki.keys);
             break;
         }
+        case PacketType::ANIM_SET: {
+            // Animasi pemain ala SA-MP (romp.applyAnimationForPlayer):
+            // broadcast vw-scoped + resync saat join / pindah vw.
+            AnimSetInfo ai;
+            if (!parse_anim_set(payload, len, ai)) break;
+            platform_->OnPlayerAnimation(ai.pid, ai.animlib, ai.animname,
+                                         ai.flags, ai.timems);
+            break;
+        }
+        case PacketType::ANIM_CLEAR: {
+            // Animasi dihentikan (romp.clearAnimationsForPlayer, ala
+            // SA-MP ClearAnimations): broadcast vw-scoped.
+            uint8_t pid = 0;
+            if (!parse_anim_clear(payload, len, pid)) break;
+            platform_->OnPlayerClearAnimations(pid);
+            break;
+        }
         default:
             // Tipe tak dikenal: abaikan (forward-compat protokol).
             break;

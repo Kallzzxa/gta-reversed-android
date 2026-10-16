@@ -202,6 +202,21 @@ public:
     //   nembak/jongkok dari bit KEY_FIRE/KEY_CROUCH; chat bubble sprint).
     virtual void OnPlayerKeys(uint8_t /*pid*/, uint16_t /*keys*/) {}
 
+    // Animasi pemain ala SA-MP (paket 0x4E ANIM_SET / 0x4F ANIM_CLEAR,
+    // dari romp.applyAnimationForPlayer/clearAnimationsForPlayer):
+    // pemain pid mulai (animlib/animname, mis. "DANCING"/"dnce_m_a",
+    // flags bit0=loop/bit1=lockx/bit2=locky/bit3=freeze/bit4=forcesync,
+    // timems durasi ms) atau berhenti beranimasi. Broadcast vw-scoped +
+    // resync saat join / pindah vw. Default no-op.
+    // TODO(GAME): putar animasi di ped remote via GTA anim lib
+    //   (mis. CAnimManager::BlendAnimation) bila reversal tersedia.
+    virtual void OnPlayerAnimation(uint8_t /*pid*/,
+                                   const std::string& /*animlib*/,
+                                   const std::string& /*animname*/,
+                                   uint8_t /*flags*/,
+                                   uint16_t /*timems*/) {}
+    virtual void OnPlayerClearAnimations(uint8_t /*pid*/) {}
+
     // Log ke konsol game / logcat.
     virtual void Log(const std::string& msg) = 0;
 

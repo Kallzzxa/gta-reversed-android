@@ -637,6 +637,32 @@ saat state benar-benar berubah). Konstanta (sama dengan `a_samp.inc`):
 Demo: `/keys [id]` + handler (umumkan tombol yang baru ditekan) di
 `server/gamemode.lua`.
 
+### Animasi pemain ala SA-MP (`ApplyAnimation` / `ClearAnimations`)
+
+`romp.applyAnimationForPlayer(pid, animlib, animname[, loop[, lockx[,
+locky[, freeze[, time[, forcesync]]]]]])` menerapkan animasi GTA ke ped
+pemain — client yang melihat pemain itu menerima paket `0x4E ANIM_SET`
+lalu memutar animasi (`DANCING`/`dnce_m_a`). `lib` & `name` wajib 1..32
+char; `time` (ms) default 250. `romp.clearAnimationsForPlayer(pid)`
+menghentikan (paket `0x4F ANIM_CLEAR`). Idempoten bila state persis sama
+(`true` tanpa broadcast). Momenter ala SA-MP: pemain baru join menerima
+resync `0x4E`; pindah vw/interior mengirim `0x4F` ke viewer lama + `0x4E`
+ke viewer baru; leave me-reset diam-diam. NPC boleh diberi animasi.
+
+| API | Keterangan |
+|-----|------------|
+| `romp.applyAnimationForPlayer(pid, lib, name[, loop[, lockx[, locky[, freeze[, time[, forcesync]]]]]])` | bool: terapkan animasi + broadcast vw-scoped + event |
+| `romp.clearAnimationsForPlayer(pid)` | bool: hentikan animasi + broadcast + event; false bila tak beranimasi |
+| `romp.getPlayerAnimation(pid)` | table `{ animlib, animname, loop, lockx, locky, freeze, time }` / nil |
+
+Event (perpanjangan RO-MP — SA-MP tak punya callback ini):
+`onPlayerApplyAnimation(pid, animlib, animname)` dan
+`onPlayerClearAnimations(pid)`.
+Konstanta flag: `romp.ANIM_FLAG_LOOP`=1, `LOCKX`=2, `LOCKY`=4,
+`FREEZE`=8, `FORCESYNC`=16.
+Demo: `/anim [lib] [name] [loop]`, `/clearanim` + handler
+`onPlayerApplyAnimation` (umumkan `/me` menari) di `server/gamemode.lua`.
+
 ### Database SQLite untuk gamemode (skor, akun)
 
 Tanpa server eksternal: cukup set `database <path>` di `server.cfg`

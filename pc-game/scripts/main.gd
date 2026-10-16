@@ -138,6 +138,8 @@ func _setup_multiplayer() -> void:
 	net.veh_plate.connect(_on_vehicle_plate)
 	net.spectate.connect(_on_spectate)
 	net.key_sync.connect(_on_key_sync)
+	net.anim_set.connect(_on_anim_set)
+	net.anim_clear.connect(_on_anim_clear)
 	net.attach_obj_set.connect(_on_attach_obj_set)
 	net.attach_obj_remove.connect(_on_attach_obj_remove)
 	net.skill_set.connect(_on_skill_set)
@@ -244,6 +246,8 @@ func _on_player_left(pid: int, _reason: int) -> void:
 	if _remotes.has(pid):
 		_remotes[pid].queue_free()
 		_remotes.erase(pid)
+	_anim_state.erase(pid)
+	_keys_state.erase(pid)
 	_mp_players = _mp_players.filter(func(p: Dictionary) -> bool: return int(p["id"]) != pid)
 	_refresh_scoreboard()
 
@@ -362,6 +366,34 @@ func _on_key_sync(pid: int, keys: int) -> void:
 	# tidak ada chat/efek otomatis tiap berubah). Handler game membaca
 	# _keys_state[pid] saat butuh (mis. pose nembak/jongkok ped remote).
 	_keys_state[pid] = keys
+
+
+## Animasi pemain ala SA-MP (0x4E ANIM_SET / 0x4F ANIM_CLEAR —
+## romp.applyAnimationForPlayer / clearAnimationsForPlayer).
+var _anim_state := {}  # pid -> { animlib, animname, flags, timems }
+
+
+func _on_anim_set(pid: int, animlib: String, animname: String,
+		flags: int, timems: int) -> void:
+	# Simpan state animasi per pemain; Godot tak punya anim lib GTA jadi
+	# cukup tampilkan di nametag ped remote (mis. "Nama [💃 dnce_m_a]").
+	# TODO(anim): putar animasi GTA nyata bila anim lib tersedia.
+	_anim_state[pid] = {"animlib": animlib, "animname": animname,
+		"flags": flags, "timems": timems}
+	if _remotes.has(pid):
+		_remotes[pid].set_animation_tag(animname)
+	if pid == net.player_id:
+		mp_chat.add_message(RompNet.CHAT_INFO,
+			"*** Kamu beranimasi: %s %s." % [animlib, animname])
+
+
+func _on_anim_clear(pid: int) -> void:
+	_anim_state.erase(pid)
+	if _remotes.has(pid):
+		_remotes[pid].set_animation_tag("")
+	if pid == net.player_id:
+		mp_chat.add_message(RompNet.CHAT_INFO,
+			"*** Animasi dihentikan.")
 
 
 func _on_vehicle_params(vid: int, engine: int, lights: int, alarm: int,

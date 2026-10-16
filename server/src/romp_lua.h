@@ -96,6 +96,13 @@ void lua_on_player_spectate(int pid, int spectating, int targettype,
  * (0x4C KEY_STATE) — onPlayerKeyStateChange(pid, newkeys, oldkeys).
  * newkeys/oldkeys = bitmask KEY_* (romp_key.h), 0 = tak ada tombol ditekan. */
 void lua_on_player_key_change(int pid, uint16_t newkeys, uint16_t oldkeys);
+/* Event animasi pemain ala SA-MP: menyala saat ApplyAnimation diterapkan
+ * — onPlayerApplyAnimation(pid, animlib, animname); dan saat dihentikan —
+ * onPlayerClearAnimations(pid). Perpanjangan RO-MP (SA-MP tak punya
+ * callback ini), untuk logika gamemode (mis. /me otomatis saat menari). */
+void lua_on_player_apply_animation(int pid, const char *animlib,
+                                   const char *animname);
+void lua_on_player_clear_animations(int pid);
 /* Event interior & virtual world ala SA-MP (tidak ada default C):
  * onPlayerInteriorChange(pid, old, new),
  * onPlayerVirtualWorldChange(pid, old, new). */

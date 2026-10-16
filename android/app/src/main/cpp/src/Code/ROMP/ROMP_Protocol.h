@@ -118,6 +118,14 @@ enum class PacketType : uint8_t {
                           // (3B payload); broadcast vw-scoped ke viewer
                           // yang melihat pemain itu + resync saat join /
                           // pindah vw
+    // Animasi pemain ala SA-MP (romp.applyAnimationForPlayer /
+    // romp.clearAnimationsForPlayer), server -> client.
+    ANIM_SET     = 0x4E,  // u8 pid + u8 liblen + lib + u8 namelen + name +
+                          // u8 flags + u16 timems LE
+                          // (liblen/namelen 1..32; flags: bit0=loop,
+                          // bit1=lockx, bit2=locky, bit3=freeze,
+                          // bit4=forcesync)
+    ANIM_CLEAR   = 0x4F,  // u8 pid (hentikan animasi, ala ClearAnimations)
 };
 
 // Alasan PLAYER_LEAVE (u8 reason).
@@ -910,6 +918,44 @@ inline std::vector<uint8_t> build_key_state(uint32_t keys) {
     std::vector<uint8_t> p;
     put_u16(p, static_cast<uint16_t>(keys & 0xFFFFu));
     return make_frame(PacketType::KEY_STATE, p);
+}
+
+// ---- Animasi pemain ala SA-MP (ApplyAnimation / ClearAnimations) ----
+
+// Info animasi pemain ala SA-MP (0x4E ANIM_SET).
+struct AnimSetInfo {
+    uint8_t pid = 0;       // pemain yang beranimasi (u8)
+    std::string animlib;   // library animasi GTA (1..32 char, mis. "DANCING")
+    std::string animname;  // nama animasi (1..32 char, mis. "dnce_m_a")
+    uint8_t flags = 0;     // bit0=loop, bit1=lockx, bit2=locky,
+                           // bit3=freeze, bit4=forcesync
+    uint16_t timems = 0;   // durasi (ms) ala SA-MP
+};
+
+// 0x4E ANIM_SET: u8 pid | u8 liblen | lib | u8 namelen | name | u8 flags |
+// u16 timems LE (payload 6..68 byte).
+inline bool parse_anim_set(const uint8_t* data, size_t len,
+                           AnimSetInfo& out) {
+    Reader r(data, len);
+    uint8_t llen = 0, nlen = 0;
+    if (!r.get_u8(out.pid)) return false;
+    if (!r.get_u8(llen)) return false;
+    if (llen < 1 || llen > 32) return false;
+    if (!r.get_str(out.animlib, llen)) return false;
+    if (!r.get_u8(nlen)) return false;
+    if (nlen < 1 || nlen > 32) return false;
+    if (!r.get_str(out.animname, nlen)) return false;
+    if (!r.get_u8(out.flags)) return false;
+    if (!r.get_u16(out.timems)) return false;
+    return r.remaining() == 0;  // tolak payload kepanjangan
+}
+
+// 0x4F ANIM_CLEAR: u8 pid (1 byte payload).
+inline bool parse_anim_clear(const uint8_t* data, size_t len,
+                             uint8_t& out_pid) {
+    Reader r(data, len);
+    if (!r.get_u8(out_pid)) return false;
+    return r.remaining() == 0;  // tolak payload kepanjangan
 }
 
 struct ChatMsgInfo {

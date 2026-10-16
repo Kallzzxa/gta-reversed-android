@@ -726,6 +726,74 @@ parse unit C++ di `tests/client/test_spectate_parse.cpp`;
 cek sinyal Godot (sintetik + end-to-end `/specgodot`) di
 `pc-game/tests/mp_client_test.gd` (via `test_godot_mp.py`).
 
+### 0x4E ANIM_SET & 0x4F ANIM_CLEAR (Server -> Client)
+
+Animasi pemain ala SA-MP (`ApplyAnimation` / `ClearAnimations`):
+gamemode memanggil `romp.applyAnimationForPlayer(pid, animlib, animname,
+loop, lockx, locky, freeze, time, forcesync)`; server menyimpan state
+ototritatif per-pemain lalu broadcast `0x4E ANIM_SET` ke semua viewer yang
+melihat pemain itu (vw+interior scoped ala relay posisi `0x11`, termasuk
+dirinya sendiri) + menyalakan event Lua `onPlayerApplyAnimation(pid,
+animlib, animname)`. Client memutar animasi GTA dari library/nama itu
+(mis. `DANCING` / `dnce_m_a`). `romp.clearAnimationsForPlayer(pid)`
+menghentikan (broadcast `0x4F ANIM_CLEAR` + event `onPlayerClearAnimations
+(pid)`). Tidak ada paket client -> server untuk animasi.
+
+Frame `0x4E` ANIM_SET (6 + liblen + namelen byte, maks 71):
+
+```
+u8  pid         // pemain yang beranimasi
+u8  liblen      // 1..32 panjang library
+u8  lib[liblen] // library animasi GTA (mis. "DANCING")
+u8  namelen     // 1..32 panjang nama
+u8  name[namelen] // nama animasi (mis. "dnce_m_a")
+u8  flags       // bit0=loop, bit1=lockx, bit2=locky, bit3=freeze,
+                // bit4=forcesync (ala argumen ApplyAnimation)
+u16 timems      // LE durasi (ms) ala SA-MP (default 250)
+```
+
+Frame `0x4F` ANIM_CLEAR (2 byte):
+
+```
+u8  pid         // pemain yang animasinya dihentikan
+```
+
+Validasi server: `pid` harus connect; `lib`/`name` 1..32 char; `flags`
+hanya 5 bit yang dikenal. Idempoten: state persis sama -> `true` tanpa
+broadcast ulang. `clear` saat tak beranimasi -> `false` (tanpa broadcast/
+event). Animasi bersifat momenter ala SA-MP: pemain yang baru join
+menerima resync `0x4E` untuk semua pemain yang sedang beranimasi di
+vw+interior-nya (`anim_sync_join`); saat pemain pindah vw/interior, viewer
+lama menerima `0x4F` dan viewer baru menerima `0x4E`; saat leave state
+di-reset diam-diam (`P_LEAVE` sudah menghapus ped di semua client).
+NPC boleh diberi animasi (state + broadcast jalan, tanpa socket).
+
+API Lua (lihat `server/README.md`):
+`romp.applyAnimationForPlayer(pid, animlib, animname[, loop[, lockx[,
+locky[, freeze[, time[, forcesync]]]]]]])` -> bool;
+`romp.clearAnimationsForPlayer(pid)` -> bool;
+`romp.getPlayerAnimation(pid)` -> table | nil
+(`{ animlib, animname, loop, lockx, locky, freeze, time }`).
+Event `onPlayerApplyAnimation(pid, animlib, animname)` &
+`onPlayerClearAnimations(pid)` — perpanjangan RO-MP (SA-MP tak punya
+callback ini).
+Konstanta: `romp.ANIM_FLAG_LOOP`/`LOCKX`/`LOCKY`/`FREEZE`/`FORCESYNC`.
+
+Client C++: `IROMPPlatform::OnPlayerAnimation` / `OnPlayerClearAnimations`;
+Godot: sinyal `anim_set`/`anim_clear` -> disimpan per-pemain di `main.gd`
++ nama animasi ditampilkan sebagai suffix nametag ped remote
+(animasi GTA nyata = TODO(anim) — menunggu reversal anim lib).
+Demo: `/anim [lib] [name] [loop]`, `/clearanim` + handler
+`onPlayerApplyAnimation` (umumkan `/me` saat menari) di
+`server/gamemode.lua`.
+
+Test: `~/workspace/romp/tests/test_anim.py` — apply/clear, broadcast
+viewer, event, idempotensi, validasi (lib/name kosong/>32, pid invalid,
+flags invalid), scope vw, resync join, pindah vw (clear lama + set baru),
+leave reset, NPC, demo gamemode; parse unit C++ di
+`tests/client/test_anim_parse.cpp`; cek sinyal Godot di
+`pc-game/tests/mp_client_test.gd` (via `test_godot_mp.py`).
+
 ### 0x21 CHAT_MSG
 
 ```

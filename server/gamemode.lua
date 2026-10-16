@@ -231,6 +231,23 @@ function onPlayerKeyStateChange(pid, newkeys, oldkeys)
     return true
 end
 
+-- Animasi pemain ala SA-MP: perpanjangan RO-MP (SA-MP tak punya callback).
+-- Contoh: /me otomatis saat menari supaya RP hidup.
+function onPlayerApplyAnimation(pid, animlib, animname)
+    if animlib == "DANCING" then
+        local name = romp.getPlayerName(pid) or ("id " .. pid)
+        romp.sendChatToAll(romp.KIND_ME,
+            "*** " .. name .. " mulai menari (" .. animname .. ")")
+    end
+    return true
+end
+
+function onPlayerClearAnimations(pid)
+    local name = romp.getPlayerName(pid) or ("id " .. pid)
+    romp.log("Animasi " .. name .. " (id " .. pid .. ") dihentikan")
+    return true
+end
+
 -- Kill feed ala SA-MP: menyala hanya untuk laporan kematian dari client
 -- (paket 0x46), TIDAK untuk /deathmsg (romp.sendDeathMessage manual).
 function onPlayerDeath(victimid, killerid, reason)
@@ -1100,6 +1117,40 @@ function onPlayerCommand(id, name, cmd, args)
             romp.sendChatToPlayer(id, romp.KIND_INFO,
                 "*** ⌨ Tombol " .. who .. ": 0x" ..
                 string.format("%04X", k) .. " (" .. key_names(k) .. ")")
+        end
+        return true
+    elseif cmd == "anim" then
+        -- Terapkan animasi ala SA-MP (romp.applyAnimationForPlayer):
+        -- /anim <lib> <name> [loop] — mis. /anim DANCING dnce_m_a 1.
+        -- Tanpa argumen: info animasi aktif (romp.getPlayerAnimation).
+        local lib, name, loop = args:match("(%S+)%s+(%S+)%s*(%d*)")
+        if not lib or not name then
+            local a = romp.getPlayerAnimation(id)
+            if a then
+                romp.sendChatToPlayer(id, romp.KIND_INFO,
+                    "*** 💃 Animasi aktif: " .. a.animlib .. " " .. a.animname ..
+                    " (loop=" .. tostring(a.loop) .. ", time=" .. a.time .. ")")
+            else
+                romp.sendChatToPlayer(id, romp.KIND_INFO,
+                    "*** Pakai: /anim <lib> <name> [loop]. Contoh: /anim DANCING dnce_m_a 1")
+            end
+        else
+            local ok = romp.applyAnimationForPlayer(id, lib, name,
+                tonumber(loop) or 0)
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                ok and ("*** 💃 Animasi " .. lib .. " " .. name ..
+                    " diterapkan ke kamu.")
+                or "*** Animasi gagal (lib/name 1..32 char).")
+        end
+        return true
+    elseif cmd == "clearanim" then
+        -- Hentikan animasi ala SA-MP ClearAnimations.
+        if romp.clearAnimationsForPlayer(id) then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** 💃 Animasi dihentikan.")
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Kamu tidak sedang beranimasi.")
         end
         return true
     end

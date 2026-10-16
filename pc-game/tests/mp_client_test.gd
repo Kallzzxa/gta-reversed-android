@@ -70,6 +70,8 @@ func _run() -> void:
 	_net.veh_plate.connect(_on_plate)
 	_net.spectate.connect(_on_spectate)
 	_net.key_sync.connect(_on_key_sync)
+	_net.anim_set.connect(_on_anim_set)
+	_net.anim_clear.connect(_on_anim_clear)
 
 	# --- 1. Handshake + WELCOME ---
 	_net.connect_to("127.0.0.1", _port, "GodotTes", "rahasia")
@@ -221,6 +223,38 @@ func _run() -> void:
 	await create_timer(2.5).timeout  # jeda anti-spam server (maks 3/2dtk)
 	_net.send_chat("/specgodot")
 	_check(await _wait("spec_real", 10.0), "spectate_server_diterima")
+
+	# --- 5g. Animasi pemain ala SA-MP (0x4E ANIM_SET / 0x4F ANIM_CLEAR):
+	# frame sintetik langsung ke parser + end-to-end via /animgodot
+	# (romp.applyAnimationForPlayer(GodotTes, DANCING, dnce_m_a) -> 0x4E) ---
+	_ev.erase("anim_ok")
+	_ev.erase("anim_clear_ok")
+	_ev.erase("anim_real")
+	var apay := StreamPeerBuffer.new()
+	apay.big_endian = false
+	apay.put_u8(5)    # pid
+	var alib := "DANCING".to_utf8_buffer()
+	apay.put_u8(alib.size())  # liblen
+	apay.put_data(alib)       # "DANCING"
+	var aname := "dnce_m_a".to_utf8_buffer()
+	apay.put_u8(aname.size())  # namelen
+	apay.put_data(aname)       # "dnce_m_a"
+	apay.put_u8(1)    # flags: loop
+	apay.put_u16(500) # timems
+	_net._inbuf.append_array(_mk_frame(RompNet.T_ANIM_SET, apay.data_array))
+	_net._parse()
+	_check(_ev.get("anim_ok", false), "anim_set_diterima")
+	var acpay := StreamPeerBuffer.new()
+	acpay.big_endian = false
+	acpay.put_u8(5)   # pid
+	_net._inbuf.append_array(_mk_frame(RompNet.T_ANIM_CLEAR, acpay.data_array))
+	_net._parse()
+	_check(_ev.get("anim_clear_ok", false), "anim_clear_diterima")
+	# end-to-end: /animgodot -> applyAnimationForPlayer untuk GodotTes
+	# (pid sendiri) + AEVT event -> 0x4E broadcast sungguhan
+	await create_timer(2.5).timeout  # jeda anti-spam server (maks 3/2dtk)
+	_net.send_chat("/animgodot")
+	_check(await _wait("anim_real", 10.0), "anim_set_server_diterima")
 
 	# --- 6. Password salah -> REJECT -> connect_failed ---
 	_ev.erase("failed")
@@ -415,3 +449,21 @@ func _on_key_sync(pid: int, keys: int) -> void:
 	# server broadcast 0x4D dengan pid peer ke viewer (Godot).
 	if keys == 0x0025 and pid == _ev.get("peer_pid", -2):
 		_ev["keysync"] = true
+
+
+func _on_anim_set(pid: int, animlib: String, animname: String,
+		flags: int, timems: int) -> void:
+	# Frame sintetik: (5, "DANCING", "dnce_m_a", loop, 500);
+	# end-to-end /animgodot: pemain sendiri beranimasi DANCING/dnce_m_a.
+	if pid == 5 and animlib == "DANCING" and animname == "dnce_m_a" \
+			and flags == 1 and timems == 500:
+		_ev["anim_ok"] = true
+	if pid == _net.player_id and animlib == "DANCING" \
+			and animname == "dnce_m_a":
+		_ev["anim_real"] = true
+
+
+func _on_anim_clear(pid: int) -> void:
+	# Frame sintetik: pid 5.
+	if pid == 5:
+		_ev["anim_clear_ok"] = true
