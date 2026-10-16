@@ -416,6 +416,36 @@ function onPlayerCommand(id, name, cmd, args)
         romp.sendChatToPlayer(id, romp.KIND_INFO,
             "*** Textdraw per-pemain ditampilkan (id " .. pt .. ").")
         return true
+    elseif cmd == "gt" then
+        -- GameText ala SA-MP (teks besar gaya GTA via NUI):
+        -- /gt <style 0-6> <teks>  — hanya kamu yang melihat.
+        local st, teks = args:match("^(%d+)%s+(.+)$")
+        if not teks then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Pakai: /gt <style 0-6> <teks>  (mis. /gt 0 ~r~WASTED~w~!)")
+        else
+            romp.gameTextForPlayer(id, teks, 4000, tonumber(st))
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** GameText style " .. st .. " ditampilkan (4 dtk).")
+        end
+        return true
+    elseif cmd == "gta" then
+        -- /gta <teks> — GameText untuk SEMUA pemain (style 0).
+        if args == "" then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Pakai: /gta <teks>")
+        else
+            local n = romp.gameTextForAll("~y~" .. args, 4000, 0)
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** GameText terkirim ke " .. n .. " pemain.")
+        end
+        return true
+    elseif cmd == "gthide" then
+        -- /gthide — sembunyikan GameText lebih awal.
+        romp.hideGameTextForPlayer(id)
+        romp.sendChatToPlayer(id, romp.KIND_INFO,
+            "*** GameText disembunyikan.")
+        return true
     elseif cmd == "kick" then
         -- contoh command admin sederhana: /kick <id> <alasan>
         local target, alasan = args:match("^(%d+)%s*(.*)$")

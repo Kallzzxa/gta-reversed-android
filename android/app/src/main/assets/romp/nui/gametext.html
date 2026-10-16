@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>RO-MP GameText</title>
+<style>
+  /* Overlay GameText ala SA-MP: teks besar gaya GTA di atas game.
+     Satu WebView transparan, sentuhan tembus (pointer-events: none).
+     Halaman ini khusus GameText; fitur NUI lain punya halamannya sendiri. */
+  * { box-sizing: border-box; margin: 0; padding: 0;
+      -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden;
+      background: transparent; }
+  #gt-layer { position: absolute; inset: 0; pointer-events: none;
+      display: none; }
+  #gt-layer.show { display: block; }
+  #gt-box { position: absolute; left: 0; right: 0; text-align: center;
+      pointer-events: none; }
+  #gt-text {
+      font-family: "Arial Black", Impact, "Helvetica Neue", sans-serif;
+      font-weight: 900; color: #fff; line-height: 1.15;
+      /* outline hitam tebal khas GTA */
+      text-shadow:
+        -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000,
+        0 -2px 0 #000, 0 2px 0 #000, -2px 0 0 #000, 2px 0 0 #000,
+        0 4px 10px rgba(0,0,0,.55);
+      letter-spacing: 1px; word-break: break-word;
+  }
+  /* --- posisi per style --- */
+  .s0 #gt-box, .s1 #gt-box, .s2 #gt-box { top: 38%; }
+  .s0 #gt-text, .s1 #gt-text, .s2 #gt-text { font-size: min(11vw, 64px); }
+  .s2 #gt-box, .s6 #gt-box { background: rgba(0,0,0,.55);
+      padding: 10px 0; }
+  .s3 #gt-box, .s6 #gt-box { top: 12%; }
+  .s3 #gt-text, .s6 #gt-text { font-size: min(6vw, 34px); }
+  .s4 #gt-box { bottom: 16%; top: auto; }
+  .s4 #gt-text { font-size: min(6vw, 34px); }
+  .s5 #gt-box { top: 44%; }
+  .s5 #gt-text { font-size: min(9vw, 52px); }
+  /* style 0: fade in/out ala "WASTED" */
+  @keyframes gtFade { 0% { opacity: 0; transform: scale(1.25); }
+      12% { opacity: 1; transform: scale(1); }
+      82% { opacity: 1; transform: scale(1); }
+      100% { opacity: 0; transform: scale(0.98); } }
+  .s0 #gt-text { animation: gtFade 3s ease forwards; }
+</style>
+</head>
+<body>
+<div id="gt-layer"><div id="gt-box"><div id="gt-text"></div></div></div>
+<script>
+// Server -> UI: romp.gameTextForPlayer / gameTextForAll / hideGameText
+// (via 0x40 NUI_MESSAGE), dikirim helper server/gametext.lua.
+window.onRomMessage = function (json) {
+  var msg;
+  try { msg = JSON.parse(json); } catch (e) { return; }
+  if (msg.action === "gameText") show(msg);
+  else if (msg.action === "hideGameText") hide();
+};
+
+var layer = document.getElementById("gt-layer");
+var textEl = document.getElementById("gt-text");
+var hideTimer = null;
+var typeTimer = null;
+
+// Kode warna ala SA-MP: ~r~ ~g~ ~b~ ~y~ ~p~ ~w~ ~l~ ~h~, ~n~ = baris baru.
+var COLORS = { r: "#ff4d4d", g: "#4dff4d", b: "#4da6ff", y: "#ffff4d",
+               p: "#cc66ff", w: "#ffffff", l: "#141414", h: "#999999" };
+
+function esc(s) {
+  return String(s === undefined || s === null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function richText(raw) {
+  var html = esc(raw).replace(/~n~/gi, "<br>");
+  html = html.replace(/~([rgbypwlh])~/gi, function (m, c) {
+    return "</span><span style=\"color:" + COLORS[c.toLowerCase()] + "\">";
+  });
+  // Buang </span> pembuka yang yatim bila teks diawali kode warna.
+  html = "<span>" + html + "</span>".replace("<span></span>", "");
+  return html;
+}
+
+function stopTimers() {
+  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+  if (typeTimer) { clearInterval(typeTimer); typeTimer = null; }
+}
+
+function hide() {
+  stopTimers();
+  layer.className = "";
+  textEl.innerHTML = "";
+}
+
+// Efek mesin ketik (style 5): ungkap karakter satu per satu.
+function typewriter(html, totalMs) {
+  var tmp = document.createElement("div");
+  tmp.innerHTML = html;
+  var nodes = [];
+  (function walk(n) {
+    for (var i = 0; i < n.childNodes.length; i++) {
+      var c = n.childNodes[i];
+      if (c.nodeType === 3) nodes.push(c);
+      else walk(c);
+    }
+  })(tmp);
+  var total = 0, i;
+  for (i = 0; i < nodes.length; i++) total += nodes[i].nodeValue.length;
+  if (total === 0) { textEl.innerHTML = html; return; }
+  for (i = 0; i < nodes.length; i++) {
+    nodes[i]._full = nodes[i].nodeValue;
+    nodes[i].nodeValue = "";
+  }
+  textEl.innerHTML = "";
+  textEl.appendChild(tmp);
+  var step = Math.max(15, Math.floor(totalMs * 0.6 / total));
+  var ni = 0, ci = 0;
+  typeTimer = setInterval(function () {
+    var n = nodes[ni];
+    ci++;
+    n.nodeValue = n._full.slice(0, ci);
+    if (ci >= n._full.length) { ni++; ci = 0; }
+    if (ni >= nodes.length) { clearInterval(typeTimer); typeTimer = null; }
+  }, step);
+}
+
+function show(m) {
+  stopTimers();
+  var style = Math.floor(Number(m.style) || 0);
+  if (style < 0 || style > 6) style = 0;
+  var time = Math.floor(Number(m.time) || 3000);
+  if (time < 100) time = 100;
+  layer.className = "show s" + style;
+  var html = richText(m.text);
+  if (style === 5) typewriter(html, time);
+  else textEl.innerHTML = html;
+  // Client sembunyikan sendiri setelah `time` ms; server juga mencatat
+  // kedaluwarsa via timer (lihat server/gametext.lua).
+  hideTimer = setTimeout(hide, time);
+}
+</script>
+</body>
+</html>

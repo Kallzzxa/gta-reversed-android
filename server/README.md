@@ -120,6 +120,8 @@ bridge `window.romp.postMessage`, fokus sentuhan; JNI TODO seperti chat).
 | `romp.getServerInfo()` | Table `{hostname, motd, port, maxplayers, players, hasPassword, query, announce}` |
 | `romp.banIP(ip)` / `romp.unbanIP(ip)` / `romp.isIPBanned(ip)` | Ban IP (in-memory, dicek saat handshake) |
 | `romp.announceNow()` | Paksa announce ke master sekarang |
+| `romp.gameTextForPlayer(pid, text, time, style)` / `romp.gameTextForAll(text, time, style)` / `romp.gameTextForPlayers(pids, text, time, style)` | GameText ala SA-MP: teks besar gaya GTA via NUI (helper `server/gametext.lua`; `time` ms default 3000, `style` 0..6). Demo: `/gt`, `/gta`, `/gthide` |
+| `romp.hideGameTextForPlayer(pid)` / `romp.hideGameTextForAll()` / `romp.getGameText(pid)` | Sembunyikan lebih awal / teks yang sedang tampil |
 
 **3D text label ala SA-MP (`Create3DTextLabel`):**
 

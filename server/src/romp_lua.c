@@ -2671,6 +2671,7 @@ static const struct { const char *file; const char *desc; } g_helpers[] = {
     { "nametag.lua",    "API nametag & chat bubble aktif" },
     { "gangzone.lua",   "API gang zone aktif" },
     { "marker.lua",     "API player marker (radar) aktif" },
+    { "gametext.lua",   "API GameText ala SA-MP aktif" },
 };
 
 /* Siapkan satu modul script: state baru + API + file + helper.

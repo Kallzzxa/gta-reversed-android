@@ -1364,6 +1364,39 @@ Textdraw global yang sedang tampil otomatis dikirim ulang ke pemain yang
 baru join; textdraw per-pemain dibersihkan saat pemain leave.
 Halaman UI referensi: `android/app/src/main/assets/romp/nui/textdraw.html`.
 
+### GameText ala SA-MP (NUI_MESSAGE `0x40`)
+
+Murni helper Lua `server/gametext.lua` (dimuat otomatis seperti
+`dialog.lua`; tidak ada paket/protokol baru di server C): teks besar gaya
+GTA di layar, ala `GameTextForPlayer`/`GameTextForAll`.
+
+API: `romp.gameTextForPlayer(pid, text, time, style)` /
+`romp.gameTextForAll(text, time, style)` /
+`romp.gameTextForPlayers(pids, text, time, style)` /
+`romp.hideGameTextForPlayer(pid)` / `romp.hideGameTextForAll()` /
+`romp.getGameText(pid)` (perpanjangan RO-MP, SA-MP tidak punya).
+`time` = ms tampil (default 3000, dijepit 500..30000), `style` = 0..6
+(default 0; di luar rentang dinormalkan ke 0):
+0=besar tengah fade in/out ala "WASTED", 1=besar tengah, 2=besar tengah +
+latar gelap, 3=banner kecil tengah atas, 4=banner kecil tengah bawah,
+5=tengah efek mesin ketik, 6=banner atas + latar gelap.
+Teks maks 256 karakter; mendukung kode warna ala SA-MP
+`~r~ ~g~ ~b~ ~y~ ~p~ ~w~ ~l~ ~h~` dan `~n~` baris baru.
+Teks kedaluwarsa otomatis setelah `time` (timer server-side per pemain;
+client juga menyembunyikan sendiri), dibersihkan saat leave.
+Tidak ada resync saat join (ala SA-MP).
+
+Pesan 0x40 yang dikirim:
+
+```json
+{"action":"gameText","text":"~r~WASTED","time":4000,"style":0}
+{"action":"hideGameText"}
+```
+
+Halaman UI referensi: `android/app/src/main/assets/romp/nui/gametext.html`.
+Demo di `server/gamemode.lua`: `/gt <style> <teks>`, `/gta <teks>`,
+`/gthide`.
+
 ### Checkpoint ala SA-MP (via NUI)
 
 API Lua di `server/checkpoint.lua` (dimuat otomatis seperti `dialog.lua`).
