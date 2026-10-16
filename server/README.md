@@ -569,8 +569,23 @@ dan dikirim ulang ke pemain yang baru join.
 | `romp.setWorldTime(hour [, minute])` | → `true`/`false`; hour 0..23, minute 0..59 |
 | `romp.getWorldTime()` | → `hour, minute` |
 
-Paket: `0x39` WORLD_SET (lihat `PROTOCOL.md`). Tak ada event
-(world settings bersifat pasif, seperti di SA-MP).
+**Override per-pemain ala SA-MP** (jam/cuaca pemain tsb saja; pemain
+lain tak dapat paket — pemain baru mengikuti dunia global; pemain yang
+punya override menerima nilai efektifnya saat dunia global berubah):
+
+| API | Keterangan |
+|-----|------------|
+| `romp.setPlayerTime(pid, hour, minute)` | ala `SetPlayerTime`; → `true`/`false` (hour 0..23, minute 0..59) |
+| `romp.getPlayerTime(pid)` | → `hour, minute, is_override` \| nil (nilai efektif) |
+| `romp.setPlayerWeather(pid, weatherid)` | ala `SetPlayerWeather`; → `true`/`false` (0..255) |
+| `romp.getPlayerWeather(pid)` | → `weather, is_override` \| nil (nilai efektif) |
+| `romp.togglePlayerClock(pid, toggle)` | ala `TogglePlayerClock`; 1 = jam jalan, 0 = dibekukan |
+| `romp.isPlayerClockEnabled(pid)` | → `true`/`false` \| nil |
+
+Paket: `0x39` WORLD_SET (nilai efektif per-pemain — override bila ada,
+global bila tidak) + `0x54` CLOCK_SET (lihat `PROTOCOL.md`). Gravity
+tetap global (SA-MP tak punya override gravity per-pemain). Tak ada
+event (setter bersifat pasif, seperti di SA-MP).
 
 ```lua
 -- Contoh: zona moon gravity + cuaca badai + tengah malam.

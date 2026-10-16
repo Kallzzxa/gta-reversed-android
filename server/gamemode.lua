@@ -856,6 +856,107 @@ function onPlayerCommand(id, name, cmd, args)
                 "*** Gagal: pid tak valid.")
         end
         return true
+    elseif cmd == "ptime" then
+        -- Demo override jam per-pemain ala SA-MP (SetPlayerTime):
+        -- /ptime <jam> <menit> -> override jam sendiri (0x39 efektif
+        -- hanya ke kamu); /ptime saja -> lihat jam efektif kamu.
+        local h, m = args:match("^(%d+)%s+(%d+)$")
+        if h == nil then
+            local eh, em, ov = romp.getPlayerTime(id)
+            if eh ~= nil then
+                romp.sendChatToPlayer(id, romp.KIND_INFO,
+                    string.format("*** Jam kamu: %02d:%02d%s. Pakai: /ptime <jam> <menit>.",
+                        eh, em, ov and " (override)" or " (global)"))
+            else
+                romp.sendChatToPlayer(id, romp.KIND_INFO,
+                    "*** Gagal membaca jam.")
+            end
+            return true
+        end
+        if romp.setPlayerTime(id, tonumber(h), tonumber(m)) then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                string.format("*** Jam kamu dioverride ke %02d:%02d.",
+                    tonumber(h), tonumber(m)))
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal: jam 0-23, menit 0-59.")
+        end
+        return true
+    elseif cmd == "ptimeof" then
+        -- Lihat jam efektif pemain lain: /ptimeof <id>.
+        local tp = tonumber(args)
+        local eh, em, ov
+        if tp then eh, em, ov = romp.getPlayerTime(tp) end
+        if eh ~= nil then
+            local tname = romp.getPlayerName(tp) or ("id " .. tp)
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                string.format("*** Jam %s: %02d:%02d%s.",
+                    tname, eh, em, ov and " (override)" or " (global)"))
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal: pid tak valid.")
+        end
+        return true
+    elseif cmd == "pweather" then
+        -- Demo override cuaca per-pemain ala SA-MP (SetPlayerWeather):
+        -- /pweather <id cuaca> -> override cuaca sendiri (0x39 efektif
+        -- hanya ke kamu); /pweather saja -> lihat cuaca efektif kamu.
+        local w = tonumber(args)
+        if w == nil then
+            local ew, ov = romp.getPlayerWeather(id)
+            if ew ~= nil then
+                romp.sendChatToPlayer(id, romp.KIND_INFO,
+                    string.format("*** Cuaca kamu: %d%s. Pakai: /pweather <id cuaca>.",
+                        ew, ov and " (override)" or " (global)"))
+            else
+                romp.sendChatToPlayer(id, romp.KIND_INFO,
+                    "*** Gagal membaca cuaca.")
+            end
+            return true
+        end
+        if romp.setPlayerWeather(id, w) then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                string.format("*** Cuaca kamu dioverride ke %d.", w))
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal: id cuaca 0-255.")
+        end
+        return true
+    elseif cmd == "pweatherof" then
+        -- Lihat cuaca efektif pemain lain: /pweatherof <id>.
+        local tp = tonumber(args)
+        local ew, ov
+        if tp then ew, ov = romp.getPlayerWeather(tp) end
+        if ew ~= nil then
+            local tname = romp.getPlayerName(tp) or ("id " .. tp)
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                string.format("*** Cuaca %s: %d%s.",
+                    tname, ew, ov and " (override)" or " (global)"))
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Gagal: pid tak valid.")
+        end
+        return true
+    elseif cmd == "pclock" then
+        -- Demo toggle jam ala SA-MP (TogglePlayerClock):
+        -- /pclock off -> bekukan jam sendiri (0x54 ke kamu);
+        -- /pclock on -> jalankan lagi; /pclock saja -> status.
+        if args == "" then
+            local st = romp.isPlayerClockEnabled(id)
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Jam kamu: " .. (st == nil and "tak diketahui"
+                    or (st and "berjalan" or "dibekukan"))
+                .. ". Pakai: /pclock [on|off].")
+            return true
+        end
+        local on = args ~= "off"
+        if romp.togglePlayerClock(id, on and 1 or 0) then
+            romp.sendChatToPlayer(id, romp.KIND_INFO,
+                "*** Jam kamu " .. (on and "berjalan kembali." or "dibekukan."))
+        else
+            romp.sendChatToPlayer(id, romp.KIND_INFO, "*** Gagal.")
+        end
+        return true
     elseif cmd == "uang" then
         -- Demo uang pemain otoritatif ala SA-MP (GetPlayerMoney):
         -- /uang -> cek saldo sendiri (saldo tampil di HUD via 0x49).

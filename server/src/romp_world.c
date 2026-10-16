@@ -3,6 +3,7 @@
  * Lihat romp_world.h untuk desain protokol & API.
  */
 #include "romp_world.h"
+#include "romp_pworld.h" /* PWORLD_FOLLOW_GLOBAL untuk frame efektif */
 
 /* ---- Helper frame (duplikat kecil dari romp_server.c agar modul mandiri) ---- */
 static void wput_f32(uint8_t *b, float v) {
@@ -17,13 +18,25 @@ static int   g_weather = WORLD_WEATHER_DEFAULT;
 static int   g_hour    = WORLD_HOUR_DEFAULT;
 static int   g_minute  = WORLD_MINUTE_DEFAULT;
 
-/* Bangun payload 0x39 WORLD_SET: f32 gravity | u8 weather | u8 hour | u8 minute */
-static size_t world_build(uint8_t *b) {
+/* Bangun payload 0x39 WORLD_SET: f32 gravity | u8 weather | u8 hour | u8 minute.
+ * Nilai EFEKTIF untuk client c: override per-pemain (lihat romp_pworld.h)
+ * dipakai bila ada, global bila tidak. Gravity tetap global (SA-MP tak
+ * punya override gravity per-pemain). c boleh NULL = nilai global murni. */
+static size_t world_build_for(const Client *c, uint8_t *b) {
+    int weather = g_weather, hour = g_hour, minute = g_minute;
+    if (c) {
+        if (c->pworld_weather != PWORLD_FOLLOW_GLOBAL)
+            weather = c->pworld_weather;
+        if (c->pworld_hour != PWORLD_FOLLOW_GLOBAL) {
+            hour = c->pworld_hour;
+            minute = c->pworld_minute;
+        }
+    }
     b[0] = P_WORLD_SET;
     wput_f32(b + 1, g_gravity);
-    b[5] = (uint8_t)g_weather;
-    b[6] = (uint8_t)g_hour;
-    b[7] = (uint8_t)g_minute;
+    b[5] = (uint8_t)weather;
+    b[6] = (uint8_t)hour;
+    b[7] = (uint8_t)minute;
     return 8;
 }
 
@@ -65,13 +78,19 @@ void  world_get_time(int *hour, int *minute) {
 int world_send_to(Client *c) {
     if (!c || !c->handshaked || c->dead || c->is_npc) return 0;
     uint8_t b[8];
-    client_send_frame(c, b, world_build(b));
+    /* Nilai efektif per-pemain (override-aware) — dipakai juga oleh
+     * pworld_set_time/pworld_set_weather untuk satu pemain. */
+    client_send_frame(c, b, world_build_for(c, b));
     return 1;
 }
 
 void world_broadcast(void) {
-    uint8_t b[8];
-    broadcast_frame(b, world_build(b), NULL);
+    /* Override-aware: pemain yang punya override menerima 0x39 efektif
+     * (override mereka dipertahankan), pemain lain menerima nilai global
+     * baru. Filtering sama seperti broadcast_frame (handshaked, tak mati,
+     * bukan NPC). */
+    for (Client *c = g_clients; c; c = c->next)
+        world_send_to(c);
 }
 
 void world_init_from_config(void) {

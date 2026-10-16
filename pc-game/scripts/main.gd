@@ -148,6 +148,7 @@ func _setup_multiplayer() -> void:
 	net.death_msg.connect(_on_death_msg)
 	net.wanted_set.connect(_on_wanted_set)
 	net.team_set.connect(_on_team_set)
+	net.clock_set.connect(_on_clock_set)
 	net.money_set.connect(_on_money_set)
 	net.teleport.connect(_on_teleport)
 	net.ping_updated.connect(_on_ping_updated)
@@ -462,6 +463,20 @@ func _on_team_set(pid: int, team: int) -> void:
 	else:
 		mp_chat.add_message(RompNet.CHAT_INFO,
 			"*** %s kini di tim %d." % [_mp_name_of(pid), team])
+
+
+## Toggle jam pemain ala SA-MP (0x54 CLOCK_SET, dari romp.togglePlayerClock):
+## jam berjalan (enabled) atau dibekukan. Per-pemain — client hanya menerima
+## miliknya sendiri (+ resync saat join). Disimpan; client tak boleh
+## memajukan jam dunia sendiri bila server membekukannya.
+var _local_clock_enabled := true
+
+func _on_clock_set(pid: int, enabled: bool) -> void:
+	if pid == net.player_id:
+		_local_clock_enabled = enabled
+		mp_chat.add_message(RompNet.CHAT_INFO,
+			"*** Jam duniamu %s oleh server." %
+				("berjalan kembali" if enabled else "dibekukan"))
 
 
 ## Uang pemain otoritatif ala SA-MP (0x49 MONEY_SET): saldo pemain pid

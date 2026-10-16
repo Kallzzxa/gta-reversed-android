@@ -171,6 +171,15 @@ public:
     //   tim (mis. tim 1 = biru, tim 2 = merah) untuk gangwar/dm.
     virtual void OnPlayerTeam(uint8_t /*pid*/, uint8_t /*team*/) {}
 
+    // Toggle jam pemain ala SA-MP (paket 0x54 CLOCK_SET, dari
+    // romp.togglePlayerClock): jam pemain pid berjalan (enabled=true)
+    // atau dibekukan (enabled=false) ala TogglePlayerClock.
+    // Per-pemain — client hanya menerima miliknya sendiri. Default no-op.
+    // TODO(GAME): bekukan/hidupkan lagi majunya jam dunia di HUD game
+    //   lokal bila clock dibekukan (client tak boleh memajukan jam
+    //   sendiri saat server membekukannya).
+    virtual void OnPlayerClock(uint8_t /*pid*/, bool /*enabled*/) {}
+
     // Uang pemain otoritatif ala SA-MP (paket 0x49 MONEY_SET, dari
     // romp.setPlayerMoney/givePlayerMoney/resetPlayerMoney): saldo pemain
     // pid berubah menjadi amount. Per-pemain — client hanya menerima

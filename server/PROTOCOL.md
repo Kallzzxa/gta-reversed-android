@@ -544,6 +544,54 @@ simpan per-pemain + pengumuman pindah tim di chat).
 Demo: `/team [<0-254|255>]`, `/teamof <id>` di `server/gamemode.lua`
 + event `onPlayerTeamChange` yang mengumumkan ke chat.
 
+### 0x54 CLOCK_SET (Server -> Client)
+
+Toggle jam pemain ala SA-MP (`TogglePlayerClock`): dikirim server HANYA
+ke pemain yang dituju setiap `romp.togglePlayerClock(pid, toggle)`
+dipanggil — bersamaan dengan state `pworld_clock` yang otoritatif di
+server. Pemain yang join belakangan di-resync via `pworld_sync_join`
+(0x39 efektif sendiri sudah dikirim `world_send_to` di `do_join`).
+
+Pasangan fitur ini: `romp.setPlayerTime(pid, hour, minute)` dan
+`romp.setPlayerWeather(pid, weatherid)` ala SA-MP `SetPlayerTime` /
+`SetPlayerWeather` — override jam/cuaca untuk pemain tsb SAJA. Server
+menyimpan override di `Client`, lalu mengirim 0x39 WORLD_SET **efektif**
+(hanya ke pemain itu; format 0x39 tidak berubah: gravity global + cuaca &
+jam efektif). Pemain lain tidak menerima paket apa pun — persis seperti
+SA-MP. Perubahan dunia GLOBAL (`romp.setGravity`/`setWeather`/
+`setWorldTime`) tetap di-broadcast, tapi override-aware: pemain yang
+punya override menerima 0x39 efektif (override mereka dipertahankan),
+pemain lain menerima nilai global baru. Gravity selalu global (SA-MP
+tidak punya override gravity per-pemain).
+
+Frame `0x54` CLOCK_SET (3 byte):
+
+```
+u8  pid            // pemain yang jamnya di-toggle
+u8  clock_enabled  // 1 = jam berjalan, 0 = dibekukan
+```
+
+Validasi: `pid` harus pemain yang sedang connect (NPC didukung: state
+disimpan, paket ke NPC no-op). Nilai `toggle` apa pun diterima
+(0 = beku, selain itu = jalan). `romp.togglePlayerClock` selalu
+mengembalikan `true` bila pemain valid.
+
+API Lua (lihat `server/README.md`):
+`romp.setPlayerTime(pid, hour, minute)` -> bool (hour 0..23, minute 0..59),
+`romp.getPlayerTime(pid)` -> hour, minute, is_override | nil (jam efektif),
+`romp.setPlayerWeather(pid, weatherid)` -> bool (0..255),
+`romp.getPlayerWeather(pid)` -> weather, is_override | nil (cuaca efektif),
+`romp.togglePlayerClock(pid, toggle)` -> bool,
+`romp.isPlayerClockEnabled(pid)` -> bool | nil.
+Tak ada event Lua (setter bersifat pasif, seperti di SA-MP).
+
+Client game menerapkan toggle dari `0x54` langsung
+(C++: `IROMPPlatform::OnPlayerClock`; Godot: sinyal `clock_set` ->
+simpan milik pemain lokal + pengumuman di chat; client tak boleh
+memajukan jam sendiri bila dibekukan).
+Demo: `/ptime <jam> <menit>`, `/ptimeof <id>`, `/pweather <id|->`,
+`/pweatherof <id>`, `/pclock [on|off]` di `server/gamemode.lua`.
+
 ### 0x49 MONEY_SET (Server -> Client)
 
 Uang pemain otoritatif ala SA-MP (`SetPlayerMoney` / `GivePlayerMoney` /
@@ -1098,11 +1146,18 @@ World settings ala SA-MP: gravitasi, cuaca, dan jam dunia. State bersifat
 server. Setiap perubahan di-broadcast ke semua client, dan dikirim ulang
 ke pemain yang baru join (resync saat handshake).
 
+**Per-pemain override (lihat 0x54 CLOCK_SET):** nilai `weather` dan
+`hour`/`minute` yang diterima client bersifat *efektif* — bila pemain
+memakai `romp.setPlayerTime`/`romp.setPlayerWeather`, server mengirim
+0x39 ke pemain itu saja dengan nilai override-nya (format paket tetap
+sama). `gravity` selalu global (SA-MP tak punya override gravity
+per-pemain).
+
 ```
 f32 gravity   // gravitasi dunia (default GTA:SA 0.008)
-u8  weather   // id cuaca ala GTA:SA (default 10 = Sunny)
-u8  hour      // jam dunia 0-23 (default 12)
-u8  minute    // menit dunia 0-59 (default 0)
+u8  weather   // id cuaca ala GTA:SA (default 10 = Sunny) — efektif
+u8  hour      // jam dunia 0-23 (default 12) — efektif
+u8  minute    // menit dunia 0-59 (default 0) — efektif
 ```
 
 Nilai awal bisa dioverride dari `server.cfg`: `gravity`, `weather`,

@@ -62,6 +62,7 @@ const T_KEY_SYNC := 0x4D
 const T_ANIM_SET := 0x4E
 const T_ANIM_CLEAR := 0x4F
 const T_TEAM_SET := 0x53
+const T_CLOCK_SET := 0x54
 const T_NUI := 0x40
 
 const VER := 1
@@ -129,6 +130,7 @@ signal key_sync(pid: int, keys: int)
 signal anim_set(pid: int, animlib: String, animname: String, flags: int, timems: int)
 signal anim_clear(pid: int)
 signal team_set(pid: int, team: int)
+signal clock_set(pid: int, enabled: bool)
 signal nui_message(json_text: String)
 signal ping_updated(ms: int)
 
@@ -474,6 +476,12 @@ func _dispatch(ftype: int, payload: PackedByteArray) -> void:
 			# (0..254 = id tim, 255 = TEAM_NONE tanpa tim ala NO_TEAM),
 			# broadcast global + resync saat join.
 			team_set.emit(r.u8(), r.u8())
+		T_CLOCK_SET:
+			# Toggle jam pemain ala SA-MP (0x54 CLOCK_SET, dari
+			# romp.togglePlayerClock): u8 pid + u8 clock_enabled
+			# (1 = jam berjalan, 0 = dibekukan). Per-pemain — client
+			# hanya menerima miliknya sendiri (+ resync saat join).
+			clock_set.emit(r.u8(), r.u8() != 0)
 		T_WPN_SYNC:
 			var shooter := r.u16()
 			var weapon := r.u16()

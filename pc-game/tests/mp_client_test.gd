@@ -73,6 +73,7 @@ func _run() -> void:
 	_net.key_sync.connect(_on_key_sync)
 	_net.anim_set.connect(_on_anim_set)
 	_net.anim_clear.connect(_on_anim_clear)
+	_net.clock_set.connect(_on_clock)
 
 	# --- 1. Handshake + WELCOME ---
 	_net.connect_to("127.0.0.1", _port, "GodotTes", "rahasia")
@@ -273,6 +274,23 @@ func _run() -> void:
 	await create_timer(2.5).timeout  # jeda anti-spam server (maks 3/2dtk)
 	_net.send_chat("/animgodot")
 	_check(await _wait("anim_real", 10.0), "anim_set_server_diterima")
+
+	# --- 5h. Toggle jam pemain ala SA-MP (0x54 CLOCK_SET): frame sintetik
+	# langsung ke parser + end-to-end via /clockgodot
+	# (romp.togglePlayerClock(GodotTes, 0) -> 0x54 per-pemain) ---
+	_ev.erase("clock_ok")
+	_ev.erase("clock_real")
+	var ckpay := StreamPeerBuffer.new()
+	ckpay.big_endian = false
+	ckpay.put_u8(9)   # pid
+	ckpay.put_u8(0)   # clock_enabled=0 (dibekukan)
+	_net._inbuf.append_array(_mk_frame(RompNet.T_CLOCK_SET, ckpay.data_array))
+	_net._parse()
+	_check(_ev.get("clock_ok", false), "clock_set_diterima")
+	# end-to-end: /clockgodot -> togglePlayerClock(GodotTes, 0)
+	await create_timer(2.5).timeout  # jeda anti-spam server (maks 3/2dtk)
+	_net.send_chat("/clockgodot")
+	_check(await _wait("clock_real", 10.0), "clock_set_server_diterima")
 
 	# --- 6. Password salah -> REJECT -> connect_failed ---
 	_ev.erase("failed")
@@ -494,3 +512,12 @@ func _on_anim_clear(pid: int) -> void:
 	# Frame sintetik: pid 5.
 	if pid == 5:
 		_ev["anim_clear_ok"] = true
+
+
+func _on_clock(pid: int, enabled: bool) -> void:
+	# Frame sintetik: (9, false); end-to-end /clockgodot: clock dibekukan
+	# untuk pemain sendiri.
+	if pid == 9 and not enabled:
+		_ev["clock_ok"] = true
+	if pid == _net.player_id and not enabled:
+		_ev["clock_real"] = true

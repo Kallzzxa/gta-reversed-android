@@ -88,6 +88,10 @@ typedef int SOCKET;
 #define P_TEAM_SET    0x53  /* server -> semua client: tim pemain berubah
                                (pid+team, global; 255 = tanpa tim) */
 
+/* ---- Override dunia per-pemain ala SA-MP (lihat romp_pworld.h) ---- */
+#define P_CLOCK_SET   0x54  /* server -> client: toggle jam pemain
+                               (pid+clock_enabled, hanya ke pemain tsb) */
+
 /* ---- Uang pemain otoritatif ala SA-MP (lihat romp_money.h & PROTOCOL.md) ---- */
 #define P_MONEY_SET   0x49  /* server -> client: saldo berubah
                                (pid+s32 amount LE, hanya ke pemilik) */
@@ -352,6 +356,14 @@ typedef struct Client {
     uint8_t  animflags;       /* bitmask ANIM_FLAG_* */
     uint16_t animtime;        /* durasi (ms) ala SA-MP */
     uint8_t  animactive;      /* 1 = sedang beranimasi */
+    /* Override dunia per-pemain ala SA-MP (lihat romp_pworld.h):
+     * SetPlayerTime/SetPlayerWeather/TogglePlayerClock. Nilai efektif
+     * (override bila ada, global bila tidak) dikirim via 0x39 WORLD_SET
+     * hanya ke pemain ini; toggle jam via 0x54 CLOCK_SET. */
+    int      pworld_hour;     /* -1 = ikut jam global; 0..23 = override */
+    int      pworld_minute;   /* 0..59 (valid bila override jam aktif) */
+    int      pworld_weather;  /* -1 = ikut cuaca global; 0..255 = override */
+    uint8_t  pworld_clock;    /* 1 = jam berjalan (default), 0 = dibekukan */
     struct Client *next;
 } Client;
 

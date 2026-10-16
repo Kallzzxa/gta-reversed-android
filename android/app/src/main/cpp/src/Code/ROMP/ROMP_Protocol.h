@@ -96,6 +96,10 @@ enum class PacketType : uint8_t {
     TEAM_SET     = 0x53,  // tim pemain berubah: u8 pid + u8 team
                           // (255 = TEAM_NONE, tanpa tim ala NO_TEAM)
                           // (0=bersih .. 6=paling dicari) (2B payload)
+    // Override dunia per-pemain ala SA-MP (SetPlayerTime/SetPlayerWeather/
+    // TogglePlayerClock), server -> client (hanya ke pemain yang dituju).
+    CLOCK_SET    = 0x54,  // toggle jam: u8 pid + u8 clock_enabled
+                          // (1=jalan, 0=dibekukan) (2B payload)
     // Uang pemain otoritatif ala SA-MP (SetPlayerMoney/GivePlayerMoney/
     // ResetPlayerMoney/GetPlayerMoney), server -> client (per-pemain,
     // hanya ke pemilik — uang hanya tampil di HUD milik sendiri).
@@ -839,6 +843,25 @@ inline bool parse_team_set(const uint8_t* data, size_t len,
     Reader r(data, len);
     if (!r.get_u8(out.pid)) return false;
     if (!r.get_u8(out.team)) return false;
+    return len == 2;  // tolak payload kepanjangan/kependekan
+}
+
+// ---- Toggle jam pemain ala SA-MP (server -> client, per-pemain) ----
+
+// Info toggle jam pemain ala SA-MP (0x54 CLOCK_SET).
+struct ClockSetInfo {
+    uint8_t pid = 0;       // pemain yang jamnya di-toggle (u8)
+    bool enabled = true;   // true = jam berjalan, false = dibekukan (u8)
+};
+
+// 0x54 CLOCK_SET: u8 pid | u8 clock_enabled (2 byte payload).
+inline bool parse_clock_set(const uint8_t* data, size_t len,
+                            ClockSetInfo& out) {
+    Reader r(data, len);
+    uint8_t on = 0;
+    if (!r.get_u8(out.pid)) return false;
+    if (!r.get_u8(on)) return false;
+    out.enabled = (on != 0);
     return len == 2;  // tolak payload kepanjangan/kependekan
 }
 

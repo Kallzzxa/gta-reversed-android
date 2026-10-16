@@ -485,6 +485,15 @@ void Client::OnPacket(PacketType type, const uint8_t* payload, size_t len) {
             platform_->OnPlayerTeam(ti.pid, ti.team);
             break;
         }
+        case PacketType::CLOCK_SET: {
+            // Toggle jam pemain ala SA-MP (romp.togglePlayerClock):
+            // clock_enabled 1 = jam berjalan, 0 = dibekukan. Per-pemain,
+            // hanya dikirim ke pemain yang dituju.
+            ClockSetInfo ci;
+            if (!parse_clock_set(payload, len, ci)) break;
+            platform_->OnPlayerClock(ci.pid, ci.enabled);
+            break;
+        }
         case PacketType::MONEY_SET: {
             // Uang pemain otoritatif ala SA-MP (romp.setPlayerMoney/
             // givePlayerMoney/resetPlayerMoney): per-pemain, hanya

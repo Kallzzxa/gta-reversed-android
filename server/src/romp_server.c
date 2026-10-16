@@ -31,6 +31,7 @@
 #include "romp_spectate.h"
 #include "romp_key.h"
 #include "romp_anim.h"
+#include "romp_pworld.h"
 
 #include <time.h>
 #include <pthread.h>
@@ -572,8 +573,11 @@ static void do_join(Client *c) {
     /* resync saldo miliknya sendiri ke pemain baru */
     money_sync_join(c);
 
-    /* resync world settings (gravity/weather/time) ke pemain baru */
+    /* resync world settings (efektif per-pemain bila ada override) */
     world_send_to(c);
+
+    /* resync state jam per-pemain (0x54 CLOCK_SET) ke pemain baru */
+    pworld_sync_join(c);
 
     /* resync status spectate pemain lain yang terlihat ke pemain baru */
     spectate_sync_join(c);
@@ -620,6 +624,8 @@ static void do_leave(Client *c, int reason) {
     spectate_on_player_leave(c);
     /* reset animasi pemain ini diam-diam (P_LEAVE sudah hapus ped) */
     anim_leave(c);
+    /* bersihkan override dunia per-pemain (ikut global lagi bila rejoin) */
+    pworld_on_player_leave(c);
     /* bersihkan params kendaraan per-pemain miliknya (ala SA-MP) */
     vehicle_params_player_cleanup(c->id);
     uint8_t b[4];
@@ -696,6 +702,8 @@ int npc_connect(const char *name) {
     key_init(c);
     /* Animasi pemain: tak ada animasi ala SA-MP. */
     anim_init(c);
+    /* Override dunia per-pemain: ikut global, jam jalan ala SA-MP. */
+    pworld_init(c);
     c->last_activity = now_ms();
     strncpy(c->ip, "npc", sizeof(c->ip) - 1);
     c->next = g_clients;
@@ -744,6 +752,8 @@ void npc_disconnect(int id, int reason) {
     spectate_on_player_leave(c);
     /* reset animasi milik NPC ini diam-diam */
     anim_leave(c);
+    /* bersihkan override dunia per-pemain milik NPC ini */
+    pworld_on_player_leave(c);
     /* salin field yang dipakai setelah free */
     int nid = c->id;
     uint8_t interior = c->interior;
@@ -930,6 +940,8 @@ static void handle_hello(Client *c, const uint8_t *p, size_t n) {
     key_init(c);
     /* Animasi pemain: tak ada animasi ala SA-MP. */
     anim_init(c);
+    /* Override dunia per-pemain: ikut global, jam jalan ala SA-MP. */
+    pworld_init(c);
     c->last_activity = now_ms();
     do_join(c);
 }

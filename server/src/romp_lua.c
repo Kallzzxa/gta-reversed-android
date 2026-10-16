@@ -24,6 +24,7 @@
 #include "romp_spectate.h"
 #include "romp_key.h"
 #include "romp_anim.h"
+#include "romp_pworld.h"
 
 #include "../vendor/sqlite/sqlite3.h"
 
@@ -2018,6 +2019,97 @@ static int l_romp_get_world_time(lua_State *Ls) {
     return 2;
 }
 
+/* ---------------- API override dunia per-pemain ala SA-MP ----------------
+ * romp.setPlayerTime(pid, hour, minute) -> bool
+ *   ala SA-MP SetPlayerTime: override jam dunia untuk pemain tsb saja.
+ *   Server menyimpan state otoritatif lalu mengirim 0x39 WORLD_SET ke
+ *   pemain itu saja dengan nilai efektif (gravity global + jam override).
+ *   false bila pemain tak valid / hour 0..23 / minute 0..59 tak valid.
+ * romp.getPlayerTime(pid) -> hour, minute, is_override | nil
+ *   jam EFEKTIF pemain (override bila ada, global bila tidak) + flag
+ *   apakah memakai override. nil bila pemain tak valid.
+ * romp.setPlayerWeather(pid, weatherid) -> bool
+ *   ala SA-MP SetPlayerWeather: override cuaca untuk pemain tsb saja.
+ *   Kirim 0x39 WORLD_SET efektif ke pemain itu saja. false bila pemain
+ *   tak valid / weather di luar 0..255.
+ * romp.getPlayerWeather(pid) -> weather, is_override | nil
+ *   cuaca EFEKTIF pemain + flag override. nil bila tak valid.
+ * romp.togglePlayerClock(pid, toggle) -> bool
+ *   ala SA-MP TogglePlayerClock: 1/true = jam berjalan, 0/false =
+ *   dibekukan. Server menyimpan state otoritatif lalu mengirim 0x54
+ *   CLOCK_SET (pid + clock_enabled) ke pemain itu saja. false bila
+ *   pemain tak valid.
+ * romp.isPlayerClockEnabled(pid) -> bool | nil
+ *   1 = jam berjalan, 0 = dibekukan, nil bila pemain tak valid.
+ * Gravity tetap global (SA-MP tak punya override gravity per-pemain).
+ * Pemain baru mengikuti dunia global (ikut override global saat berubah
+ * bila tak punya override sendiri). Tak ada event Lua (setter pasif,
+ * seperti di SA-MP).
+ */
+static int l_romp_set_player_time(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int hour = (int)luaL_checkinteger(Ls, 2);
+    int minute = (int)luaL_checkinteger(Ls, 3);
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && pworld_set_time(c, hour, minute));
+    return 1;
+}
+
+static int l_romp_get_player_time(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(pid);
+    int hour, minute, ov;
+    if (!c || !pworld_get_time(c, &hour, &minute, &ov)) {
+        lua_pushnil(Ls); return 1;
+    }
+    lua_pushinteger(Ls, (lua_Integer)hour);
+    lua_pushinteger(Ls, (lua_Integer)minute);
+    lua_pushboolean(Ls, ov);
+    return 3;
+}
+
+static int l_romp_set_player_weather(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    int weather = (int)luaL_checkinteger(Ls, 2);
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && pworld_set_weather(c, weather));
+    return 1;
+}
+
+static int l_romp_get_player_weather(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(pid);
+    int weather, ov;
+    if (!c || !pworld_get_weather(c, &weather, &ov)) {
+        lua_pushnil(Ls); return 1;
+    }
+    lua_pushinteger(Ls, (lua_Integer)weather);
+    lua_pushboolean(Ls, ov);
+    return 2;
+}
+
+static int l_romp_toggle_player_clock(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    /* Hati-hati: di Lua angka 0 itu truthy, tapi ala SA-MP TogglePlayerClock
+     * memakai 0/1 — jadi angka 0 = false, bukan-0 = true; boolean ikut
+     * apa adanya. */
+    int on;
+    if (lua_isnumber(Ls, 2)) on = lua_tointeger(Ls, 2) != 0;
+    else on = lua_toboolean(Ls, 2);
+    Client *c = client_by_id(pid);
+    lua_pushboolean(Ls, c && pworld_toggle_clock(c, on));
+    return 1;
+}
+
+static int l_romp_is_player_clock_enabled(lua_State *Ls) {
+    int pid = (int)luaL_checkinteger(Ls, 1);
+    Client *c = client_by_id(pid);
+    int st = c ? pworld_get_clock(c) : -1;
+    if (st < 0) { lua_pushnil(Ls); return 1; }
+    lua_pushboolean(Ls, st);
+    return 1;
+}
+
 static int l_romp_give_weapon(lua_State *Ls) {
     int pid = (int)luaL_checkinteger(Ls, 1);
     int wid = (int)luaL_checkinteger(Ls, 2);
@@ -2456,6 +2548,14 @@ static void script_register_api(lua_State *Ls) {
     lua_pushcfunction(Ls, l_romp_get_weather); lua_setfield(Ls, -2, "getWeather");
     lua_pushcfunction(Ls, l_romp_set_world_time); lua_setfield(Ls, -2, "setWorldTime");
     lua_pushcfunction(Ls, l_romp_get_world_time); lua_setfield(Ls, -2, "getWorldTime");
+    /* override dunia per-pemain ala SA-MP (SetPlayerTime/SetPlayerWeather/
+     * TogglePlayerClock) */
+    lua_pushcfunction(Ls, l_romp_set_player_time); lua_setfield(Ls, -2, "setPlayerTime");
+    lua_pushcfunction(Ls, l_romp_get_player_time); lua_setfield(Ls, -2, "getPlayerTime");
+    lua_pushcfunction(Ls, l_romp_set_player_weather); lua_setfield(Ls, -2, "setPlayerWeather");
+    lua_pushcfunction(Ls, l_romp_get_player_weather); lua_setfield(Ls, -2, "getPlayerWeather");
+    lua_pushcfunction(Ls, l_romp_toggle_player_clock); lua_setfield(Ls, -2, "togglePlayerClock");
+    lua_pushcfunction(Ls, l_romp_is_player_clock_enabled); lua_setfield(Ls, -2, "isPlayerClockEnabled");
     /* sentinel rotasi MoveObject "tak berubah" ala SA-MP (-1000.0) */
     lua_pushnumber(Ls, (lua_Number)OBJECT_NO_ROT); lua_setfield(Ls, -2, "OBJECT_NO_ROT");
     /* konstanta attach label: 0=statis, 1=pemain, 2=kendaraan */

@@ -2,11 +2,14 @@
  * RO-MP world settings ala SA-MP (SetGravity/SetWeather/SetWorldTime) — server.
  *
  * State dunia bersifat global (sama untuk semua pemain, seperti di SA-MP)
- * dan otoritatif di server. Setiap perubahan di-broadcast ke semua client,
- * dan dikirim ulang ke pemain yang baru join (resync di do_join).
+ * dan otoritatif di server. Setiap perubahan di-broadcast ke semua client
+ * secara override-aware (lihat romp_pworld.h): pemain yang punya override
+ * waktu/cuaca menerima nilai efektifnya, yang lain menerima nilai global.
+ * Dikirim ulang (efektif) ke pemain yang baru join di do_join.
  *
  * Protokol (server -> client, lihat PROTOCOL.md):
  *   0x39 WORLD_SET: f32 gravity | u8 weather | u8 hour | u8 minute
+ *     (nilai efektif per-pemain: override bila ada, global bila tidak)
  *
  * Default ala GTA:SA/SA-MP: gravity 0.008, weather 10 (Sunny), jam 12:00.
  * Nilai awal bisa dioverride dari server.cfg: `gravity`, `weather`,
@@ -50,7 +53,9 @@ void  world_get_time(int *hour, int *minute);
  * 0 bila client tak valid/NPC/sudah mati. */
 int world_send_to(Client *c);
 
-/* Broadcast state ke semua client (dipanggil otomatis setelah perubahan). */
+/* Broadcast state ke semua client secara override-aware (lihat romp_pworld.h):
+ * pemain dengan override waktu/cuaca menerima 0x39 efektif, yang lain
+ * menerima nilai global baru. */
 void world_broadcast(void);
 
 /* Inisialisasi state dari server.cfg (dipanggil sekali saat startup,
